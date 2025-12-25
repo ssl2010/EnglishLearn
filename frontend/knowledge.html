@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>知识库管理</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
+    .wrap{max-width:980px;margin:0 auto;padding:24px}
+    .card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 8px 24px rgba(0,0,0,.06);margin-bottom:14px}
+    a{color:#0b5fff;text-decoration:none}
+    textarea{width:100%;min-height:220px;font-family:ui-monospace,Menlo,Consolas,monospace}
+    button{border:0;border-radius:10px;padding:10px 14px;background:#111;color:#fff;cursor:pointer}
+    button.secondary{background:#fff;color:#111;border:1px solid #ddd}
+    input,select{padding:8px;border-radius:10px;border:1px solid #ddd}
+    .muted{color:#666;font-size:12px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .row > *{flex:1;min-width:240px}
+    code{background:#f0f1f5;padding:2px 6px;border-radius:6px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h2 style="margin:0 0 6px 0">知识库管理</h2>
+    <div class="muted">推荐使用“文件导入”。导入成功后会自动把 <code>base_id</code> 写入本机浏览器配置（localStorage）。</div>
+    <div style="margin-top:10px"><a href="/">← 返回引导页</a></div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">当前本机配置</h3>
+    <div id="cfgInfo" class="muted"></div>
+    <div id="baseInfo" class="muted" style="margin-top:6px"></div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">从文件导入（推荐）</h3>
+    <div class="muted">
+      支持 JSON 文件：可同时创建资料库并导入全部知识点。建议使用我给你的 <code>EL_KB_V1</code> 格式。
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label class="muted">mode</label>
+        <select id="fileMode">
+          <option value="skip">skip（冲突跳过）</option>
+          <option value="update">update（允许更新）</option>
+        </select>
+      </div>
+      <div>
+        <label class="muted">选择文件</label>
+        <input id="kbFile" type="file" accept=".json,application/json" />
+      </div>
+      <div style="display:flex;gap:10px;align-items:end">
+        <button id="importFileBtn">导入文件</button>
+        <button class="secondary" id="downloadSpecBtn">查看文件格式说明</button>
+      </div>
+    </div>
+    <div id="fileMsg" class="muted" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">粘贴导入（JSON 数组，给高级用户）</h3>
+    <div class="muted">每条元素示例：{"type":"WORD","en_text":"swim","zh_hint":"游泳","unit_code":"Unit 1","difficulty_tag":"write"}</div>
+    <div class="row" style="margin-top:10px">
+      <div style="flex:0.5;min-width:160px">
+        <label class="muted">mode</label>
+        <select id="mode">
+          <option value="skip">skip（冲突跳过）</option>
+          <option value="update">update（允许更新）</option>
+        </select>
+      </div>
+      <div style="flex:1;min-width:260px;display:flex;gap:10px;align-items:end">
+        <button class="secondary" id="sampleBtn">填入样例</button>
+        <button id="importBtn">导入到当前 base_id</button>
+      </div>
+    </div>
+    <textarea id="payload" placeholder="在这里粘贴 JSON 数组"></textarea>
+    <div id="msg" class="muted" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<script>
+function getCfg(){
+  const raw = localStorage.getItem('el_cfg');
+  return raw ? JSON.parse(raw) : {};
+}
+function setCfg(cfg){ localStorage.setItem('el_cfg', JSON.stringify(cfg||{})); }
+
+async function apiJSON(path, opts){
+  const res = await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
+  if(!res.ok){ throw new Error(await res.text()); }
+  return res.json();
+}
+
+function refreshCfgInfo(){
+  const cfg = getCfg();
+  document.getElementById('cfgInfo').innerText =
+    `student_id=${cfg.student_id||'-'} | grade_code=${cfg.grade_code||'-'} | student_name=${cfg.student_name||'-'}`;
+  document.getElementById('baseInfo').innerText =
+    `base_id=${cfg.base_id||'-'}（没有 base_id 也可先用“文件导入”创建）`;
+}
+
+function loadSample(){
+  const sample = [
+    {type:'WORD',en_text:'swim',zh_hint:'游泳',unit_code:'Unit 1',difficulty_tag:'write'},
+    {type:'PHRASE',en_text:'play football',zh_hint:'踢足球',unit_code:'Unit 1',difficulty_tag:'write'},
+    {type:'SENTENCE',en_text:'What can you do?',zh_hint:'你会做什么？',unit_code:'Unit 1',difficulty_tag:'write'}
+  ];
+  document.getElementById('payload').value = JSON.stringify(sample, null, 2);
+}
+
+async function doImportPaste(){
+  const cfg = getCfg();
+  if(!cfg.student_id){
+    alert('请先在引导页完成初始化（创建 student_id）');
+    location.href = '/';
+    return;
+  }
+  if(!cfg.base_id){
+    alert('当前没有 base_id。请先用“文件导入”创建资料库，或在引导页选择一个资料库。');
+    return;
+  }
+
+  let items;
+  try{ items = JSON.parse(document.getElementById('payload').value||'[]'); }
+  catch(e){ alert('JSON 解析失败'); return; }
+
+  const mode = document.getElementById('mode').value;
+  const r = await apiJSON('/api/knowledge-items/import',{
+    method:'POST',
+    body: JSON.stringify({base_id: cfg.base_id, mode, items})
+  });
+  document.getElementById('msg').innerText = `导入完成：${JSON.stringify(r)}`;
+}
+
+async function doImportFile(){
+  const cfg = getCfg();
+  if(!cfg.student_id){
+    alert('请先在引导页完成初始化（创建 student_id）');
+    location.href = '/';
+    return;
+  }
+  const f = document.getElementById('kbFile').files[0];
+  if(!f){ alert('请选择一个 JSON 文件'); return; }
+
+  const mode = document.getElementById('fileMode').value;
+  const msg = document.getElementById('fileMsg');
+  msg.innerText = '上传中...';
+
+  const form = new FormData();
+  form.append('file', f);
+  const res = await fetch(`/api/knowledge-bases/import-file?mode=${encodeURIComponent(mode)}`, {method:'POST', body: form});
+  const txt = await res.text();
+  if(!res.ok){
+    msg.innerText = '导入失败：' + txt;
+    return;
+  }
+  const data = JSON.parse(txt);
+  // If server created a new base, update local cfg.base_id
+  if(data.base_id){
+    cfg.base_id = data.base_id;
+    setCfg(cfg);
+    refreshCfgInfo();
+  }
+  msg.innerText = `导入成功：${JSON.stringify(data)}。已写入本机 base_id（如有）。回到引导页刷新即可看到资料库。`;
+}
+
+function showSpec(){
+  alert(
+`文件格式（EL_KB_V1）示例：
+{
+  "schema_version": "EL_KB_V1",
+  "base": {
+    "name": "四年级上英语（Unit1-6）",
+    "grade_code": "G4"
+  },
+  "items": [
+    {"type":"WORD","unit_code":"Unit 1","en_text":"star","zh_hint":"明星","difficulty_tag":"write"},
+    {"type":"PHRASE","unit_code":"Unit 1","en_text":"play football","zh_hint":"踢足球","difficulty_tag":"write"}
+  ]
+}
+
+说明：
+- 提交到 /api/knowledge-bases/import-file （multipart/form-data）。
+- 若 payload 中包含 base，则会创建新资料库并导入 items；响应会返回 base_id。
+- grade_code 建议与你在引导页选择的年级一致（例如 G4）。`
+  );
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  refreshCfgInfo();
+  document.getElementById('sampleBtn').addEventListener('click', loadSample);
+  document.getElementById('importBtn').addEventListener('click', doImportPaste);
+  document.getElementById('importFileBtn').addEventListener('click', doImportFile);
+  document.getElementById('downloadSpecBtn').addEventListener('click', showSpec);
+});
+</script>
+</body>
+</html>

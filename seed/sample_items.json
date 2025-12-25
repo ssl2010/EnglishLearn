@@ -1,0 +1,6 @@
+[
+  {"unit_code":"U1","type":"WORD","en_text":"can","zh_hint":"能，会（能力）","difficulty_tag":"write"},
+  {"unit_code":"U1","type":"PHRASE","en_text":"play football","zh_hint":"踢足球","difficulty_tag":"write"},
+  {"unit_code":"U1","type":"SENTENCE","en_text":"What can you do?","zh_hint":"你会做什么？","difficulty_tag":"write"},
+  {"unit_code":"U1","type":"SENTENCE","en_text":"I can play football.","zh_hint":"我会踢足球。","difficulty_tag":"write"}
+]

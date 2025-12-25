@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>英语学习系统 · 引导页</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
+    .wrap{max-width:980px;margin:0 auto;padding:24px}
+    .card{background:#fff;border-radius:14px;padding:18px;margin-bottom:16px}
+    h1{margin:0 0 8px}
+    h2{margin:0 0 10px;font-size:16px}
+    .muted{color:#666;font-size:12px}
+    label{font-size:12px;color:#444;display:block;margin:10px 0 6px}
+    input,select,button{width:100%;padding:10px;border-radius:10px;border:1px solid #ddd;font-size:14px}
+    button{cursor:pointer;border:none;background:#111;color:#fff}
+    button.secondary{background:#fff;color:#111;border:1px solid #ddd}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .row > *{flex:1;min-width:220px}
+    .btns a{display:inline-block;padding:10px 12px;border-radius:10px;background:#111;color:#fff;text-decoration:none;margin-right:10px;margin-top:8px}
+    .btns a.secondary{background:#fff;color:#111;border:1px solid #ddd}
+    .kpi{font-size:13px;color:#333}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>英语学习系统</h1>
+      <div class="muted">第一阶段：单设备 / 单孩子 / 无账户体系。通过本地初始化固化 <code>student_id</code> / <code>base_id</code>，从这里进入各子功能。</div>
+    </div>
+
+    <div id="initCard" class="card" style="display:none">
+      <h2>首次初始化（只做一次）</h2>
+      <div class="row">
+        <div>
+          <label>孩子昵称</label>
+          <input id="studentName" placeholder="如：糯米" />
+        </div>
+        <div>
+          <label>年级</label>
+          <select id="gradeCode">
+            <option value="G4">G4（四年级）</option>
+            <option value="G3">G3（三年级）</option>
+            <option value="G5">G5（五年级）</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <button id="bootstrapBtn">完成初始化</button>
+      </div>
+      <div id="initMsg" class="muted" style="margin-top:10px"></div>
+      <div class="muted" style="margin-top:6px">说明：不做账号体系，初始化信息仅保存在本机浏览器。</div>
+    </div>
+
+    <div id="mainCard" class="card" style="display:none">
+      <h2>系统概览</h2>
+      <div class="kpi" id="kpi">加载中...</div>
+
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label>当前资料库（必须选择，才能生成默写单）</label>
+          <select id="baseSel"></select>
+          <div style="margin-top:10px;display:flex;gap:10px">
+            <button class="secondary" id="refreshBtn" style="flex:1">刷新概览</button>
+            <button id="saveBaseBtn" style="flex:1">保存资料库选择</button>
+          </div>
+          <div id="baseMsg" class="muted" style="margin-top:8px"></div>
+        </div>
+        <div>
+          <label>系统参数：掌握阈值（连续正确次数）</label>
+          <input id="mastery" type="number" min="1" max="10" value="2" />
+          <label>每周目标练习天数</label>
+          <input id="weekly" type="number" min="1" max="7" value="4" />
+          <button id="saveSettingsBtn" style="margin-top:10px">保存系统参数</button>
+          <div id="setMsg" class="muted" style="margin-top:8px"></div>
+        </div>
+      </div>
+
+      <div class="btns" style="margin-top:10px">
+        <a href="generate.html">生成默写单</a>
+        <a href="submit.html">提交 / 批改</a>
+        <a href="dashboard.html">家长看板</a>
+        <a class="secondary" href="knowledge.html">知识库管理</a>
+      </div>
+
+      <div style="margin-top:12px">
+        <button class="secondary" id="resetBtn">重置本机配置（慎用）</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+function getCfg(){
+  const raw = localStorage.getItem('el_cfg');
+  return raw ? JSON.parse(raw) : null;
+}
+function setCfg(cfg){ localStorage.setItem('el_cfg', JSON.stringify(cfg)); }
+function clearCfg(){ localStorage.removeItem('el_cfg'); }
+
+async function api(path, opts){
+  const res = await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
+  if(!res.ok){ throw new Error(await res.text()); }
+  return res.json();
+}
+
+async function refreshUI(){
+  const cfg = getCfg();
+  const initCard = document.getElementById('initCard');
+  const mainCard = document.getElementById('mainCard');
+  if(!cfg){
+    initCard.style.display='block';
+    mainCard.style.display='none';
+    return;
+  }
+  initCard.style.display='none';
+  mainCard.style.display='block';
+  await loadOverview();
+}
+
+async function bootstrap(){
+  const out = document.getElementById('initMsg');
+  out.textContent = '初始化中...';
+  const student_name = (document.getElementById('studentName').value||'孩子').trim();
+  const grade_code = document.getElementById('gradeCode').value;
+  try{
+    const r = await api('/api/bootstrap', {method:'POST', body: JSON.stringify({student_name, grade_code})});
+    setCfg({student_id:r.student_id, base_id:r.base_id||null, grade_code, student_name});
+    out.textContent = '初始化完成。请在下方选择资料库后开始使用。';
+    await refreshUI();
+  }catch(e){
+    out.textContent = '初始化失败：' + e.message;
+  }
+}
+
+async function loadOverview(){
+  const cfg = getCfg();
+  if(!cfg) return;
+
+  // bases (first try grade_code filter; if empty, fall back to all)
+  let bases = await api(`/api/knowledge-bases?grade_code=${cfg.grade_code}`);
+  if(!bases.bases || bases.bases.length===0){
+    try{ bases = await api(`/api/knowledge-bases`); }catch(e){}
+  }
+  const sel = document.getElementById('baseSel');
+  sel.innerHTML = '';
+  if(!bases.bases || bases.bases.length===0){
+    const opt = document.createElement('option');
+    opt.value='';
+    opt.textContent='（暂无资料库，请先去“知识库管理”导入/创建）';
+    sel.appendChild(opt);
+  }else{
+    for(const b of bases.bases){
+      const opt = document.createElement('option');
+      opt.value = b.id;
+      opt.textContent = `${b.name} (#${b.id})`;
+      if(cfg.base_id && b.id===cfg.base_id) opt.selected=true;
+      sel.appendChild(opt);
+    }
+  }
+
+  // status
+  let statusTxt = '';
+  if(cfg.base_id){
+    const st = await api(`/api/system/status?student_id=${cfg.student_id}&base_id=${cfg.base_id}`);
+    const latest = st.latest_session ? (`#${st.latest_session.id} ${st.latest_session.status} ${String(st.latest_session.created_at).slice(0,10)}`) : '无';
+    statusTxt = `孩子：${cfg.student_name}（${cfg.grade_code}）｜资料库：#${cfg.base_id}｜最近练习：${latest}｜待批改：${st.pending_correction||0}`;
+  }else{
+    statusTxt = `孩子：${cfg.student_name}（${cfg.grade_code}）｜尚未选择资料库（请先选择）`;
+  }
+  document.getElementById('kpi').textContent = statusTxt;
+
+  // settings
+  try{
+    const s = await api('/api/settings');
+    document.getElementById('mastery').value = s.mastery_threshold;
+    document.getElementById('weekly').value = s.weekly_target_days;
+  }catch(e){
+    // ignore
+  }
+}
+
+async function saveBase(){
+  const cfg = getCfg();
+  const msg = document.getElementById('baseMsg');
+  const v = document.getElementById('baseSel').value;
+  if(!v){ msg.textContent='请先在“知识库管理”创建/导入资料库。'; return; }
+  cfg.base_id = parseInt(v,10);
+  setCfg(cfg);
+  msg.textContent = `已保存 base_id=${cfg.base_id}`;
+  await loadOverview();
+}
+
+async function saveSettings(){
+  const msg = document.getElementById('setMsg');
+  msg.textContent='保存中...';
+  try{
+    const mastery_threshold = parseInt(document.getElementById('mastery').value||'2',10);
+    const weekly_target_days = parseInt(document.getElementById('weekly').value||'4',10);
+    await api('/api/settings', {method:'PUT', body: JSON.stringify({mastery_threshold, weekly_target_days})});
+    msg.textContent='已保存。';
+    await loadOverview();
+  }catch(e){
+    msg.textContent='保存失败：'+e.message;
+  }
+}
+
+function resetLocal(){
+  if(!confirm('确定要重置本机配置吗？（会清空 student_id/base_id）')) return;
+  clearCfg();
+  location.reload();
+}
+
+document.getElementById('bootstrapBtn').addEventListener('click', bootstrap);
+document.getElementById('refreshBtn').addEventListener('click', loadOverview);
+window.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('saveBaseBtn').addEventListener('click', saveBase);
+  document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+  document.getElementById('resetBtn').addEventListener('click', resetLocal);
+  refreshUI();
+});
+</script>
+</body>
+</html>

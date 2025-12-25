@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>家长看板</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
+    .wrap{max-width:960px;margin:0 auto;padding:24px}
+    a{color:#0b5fff;text-decoration:none}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,.06);flex:1;min-width:240px}
+    .muted{color:#666}
+    .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#eef2ff;font-size:12px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;font-size:14px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+    <div>
+      <h1 style="margin:0 0 6px 0">家长看板</h1>
+      <div id="ctx" class="muted"></div>
+    </div>
+    <div>
+      <a href="/">← 返回引导页</a>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:14px">
+    <div class="card"><div class="muted">已学习</div><div style="font-size:28px" id="learned">-</div></div>
+    <div class="card"><div class="muted">已掌握（连续正确≥2）</div><div style="font-size:28px" id="mastered">-</div></div>
+    <div class="card"><div class="muted">近30天练习天数</div><div style="font-size:28px" id="days">-</div></div>
+  </div>
+
+  <div class="row" style="margin-top:12px">
+    <div class="card" style="flex:2">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2 style="margin:0">近期练习</h2>
+        <a href="/submit.html">去提交/批改 →</a>
+      </div>
+      <table id="sessions"><thead><tr><th>时间</th><th>状态</th><th>题数</th><th>链接</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card" style="flex:1">
+      <h2 style="margin:0 0 8px 0">易错 Top 10</h2>
+      <div class="muted" style="font-size:13px;margin-bottom:8px">仅展示英文知识点本体</div>
+      <div id="topwrong"></div>
+    </div>
+  </div>
+</div>
+<script>
+const cfg = JSON.parse(localStorage.getItem('el_cfg')||'null');
+if(!cfg){ location.href = '/'; }
+const api = (p, opt={})=>fetch(p, {...opt, headers:{'Content-Type':'application/json', ...(opt.headers||{})}});
+
+async function load(){
+  document.getElementById('ctx').innerText = `孩子：${cfg.student_name}（${cfg.grade_code}）｜资料库：${cfg.base_name||cfg.base_id}`;
+  const d = await (await api(`/api/dashboard?student_id=${cfg.student_id}&base_id=${cfg.base_id}&days=30`)).json();
+  document.getElementById('learned').innerText = d.learned_count;
+  document.getElementById('mastered').innerText = d.mastered_count;
+  document.getElementById('days').innerText = d.practice_days;
+
+  const tbody = document.querySelector('#sessions tbody');
+  tbody.innerHTML='';
+  (d.recent_sessions||[]).forEach(s=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${(s.created_at||'').slice(0,19).replace('T',' ')}</td><td><span class="pill">${s.status}</span></td><td>${s.item_count}</td>`+
+      `<td>${s.pdf_path?`<a href="${s.pdf_path}" target="_blank">默写单</a> `:''}${s.answer_pdf_path?`<a href="${s.answer_pdf_path}" target="_blank">答案</a>`:''}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  const tw = document.getElementById('topwrong');
+  tw.innerHTML='';
+  (d.top_wrong||[]).forEach(it=>{
+    const div=document.createElement('div');
+    div.style.padding='6px 0';
+    div.innerHTML = `<div><b>${it.en_text}</b></div><div class="muted" style="font-size:12px">错 ${it.wrong_attempts} 次</div>`;
+    tw.appendChild(div);
+  })
+}
+load();
+</script>
+</body>
+</html>

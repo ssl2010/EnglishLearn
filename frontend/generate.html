@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>生成默写单</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
+    .wrap{max-width:980px;margin:0 auto;padding:24px}
+    .card{background:#fff;border-radius:14px;padding:18px;margin-bottom:16px}
+    label{display:block;margin-top:10px;font-size:14px;color:#333}
+    input{width:100%;padding:10px;border:1px solid #ddd;border-radius:10px}
+    button{margin-top:14px;padding:10px 14px;border:0;border-radius:10px;background:#111;color:#fff;cursor:pointer}
+    .muted{color:#666;font-size:13px}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .row > *{flex:1;min-width:220px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p><a href="/">← 返回引导页</a></p>
+    <h1>生成默写单（中文 → 英文）</h1>
+    <div class="card">
+      <p class="muted">MVP：题目严格从已导入的知识库抽取（规则优先）。请先在引导页选择资料库（base_id）。</p>
+
+      <div class="row">
+        <div>
+          <label>题量 total_count</label>
+          <input id="total" type="number" value="29" />
+        </div>
+        <div>
+          <label>Unit 范围（可选，多个用英文或中文逗号（, 或 ，）分隔，例如：U1,U2）</label>
+          <input id="units" placeholder="U1,U2" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>单词数（WORD）</label>
+          <input id="word" type="number" value="15" />
+        </div>
+        <div>
+          <label>短语数（PHRASE）</label>
+          <input id="phrase" type="number" value="8" />
+        </div>
+        <div>
+          <label>句子数（SENTENCE）</label>
+          <input id="sentence" type="number" value="6" />
+        </div>
+      </div>
+
+      <label>标题（可选）</label>
+      <input id="title" value="四年级英语默写单" />
+
+      <button id="go">生成</button>
+      <div id="out" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+<script>
+const cfg = JSON.parse(localStorage.getItem('el_cfg')||'null');
+if(!cfg){ location.href='/'; }
+
+async function postJSON(url, data){
+  const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
+  if(!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
+document.getElementById('go').onclick = async () => {
+  const out = document.getElementById('out');
+  out.innerHTML = '生成中...';
+  const unitsRaw = document.getElementById('units').value.trim();
+  const unit_scope = unitsRaw ? unitsRaw.split(/[,，]+/).map(x=>x.trim()).filter(Boolean) : null;
+  try{
+    if(!cfg.base_id){
+      throw new Error('尚未选择资料库（base_id）。请先回到引导页选择资料库。');
+    }
+    const data = await postJSON('/api/practice-sessions/generate', {
+      student_id: cfg.student_id,
+      base_id: cfg.base_id,
+      total_count: parseInt(document.getElementById('total').value||'29',10),
+      unit_scope,
+      title: document.getElementById('title').value||'四年级英语默写单',
+      mix_ratio: {
+        WORD: parseInt(document.getElementById('word').value||'15',10),
+        PHRASE: parseInt(document.getElementById('phrase').value||'8',10),
+        SENTENCE: parseInt(document.getElementById('sentence').value||'6',10)
+      }
+    });
+    out.innerHTML = `
+      <p>✅ 已生成：Session #${data.session_id}</p>
+      <p><a href="${data.pdf_url}" target="_blank">下载/查看 默写单 PDF</a></p>
+      <p><a href="${data.answer_pdf_url}" target="_blank">下载/查看 答案单 PDF</a></p>
+      <p><a href="/submit.html?session_id=${data.session_id}">去提交/批改 →</a></p>
+    `;
+  }catch(e){
+    out.innerHTML = `<p style="color:#c00">❌ 生成失败：${e.message}</p>`;
+  }
+};
+</script>
+</body>
+</html>

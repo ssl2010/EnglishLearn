@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>提交与批改</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
+    .wrap{max-width:980px;margin:0 auto;padding:24px}
+    .card{background:#fff;border-radius:14px;padding:18px;margin-bottom:16px}
+    a{color:#0b5fff;text-decoration:none}
+    textarea{width:100%;min-height:220px;font-family:ui-monospace,Menlo,Consolas,monospace}
+    button{border:0;border-radius:10px;padding:10px 14px;background:#111;color:#fff;cursor:pointer}
+    select{padding:8px;border-radius:10px;border:1px solid #ddd}
+    input[type=file]{padding:10px;border:1px solid #ddd;border-radius:10px;width:100%}
+    .muted{color:#666;font-size:13px}
+    th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;font-size:14px;vertical-align:top}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h2 style="margin:0 0 6px 0">提交与批改（家长兜底）</h2>
+    <div class="muted">推荐流程：家长按答案在纸质默写单上批改（尽量只标错），拍照上传 → 系统给出逐题建议 → 家长确认 → 入库统计。</div>
+    <div style="margin-top:10px"><a href="/">← 返回引导页</a></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <label class="muted">选择练习单：</label>
+      <select id="sessionSel"></select>
+      <button id="reloadBtn">刷新列表</button>
+    </div>
+    <div id="sessionInfo" class="muted" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">方式 A：上传已批改照片（AI 识别对错）</h3>
+    <input type="file" id="photo" accept="image/*" />
+    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+      <button id="uploadBtn">上传并分析</button>
+      <button id="confirmBtn" style="display:none">确认并入库</button>
+    </div>
+    <div id="photoMsg" class="muted" style="margin-top:8px"></div>
+    <div id="proposedBox" style="margin-top:10px;display:none"></div>
+    <div id="confirmMsg" class="muted" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">方式 B：家长录入答案（兜底）</h3>
+    <div class="muted">每行一个答案，对应题号顺序（第1行=第1题）。</div>
+    <textarea id="answers" placeholder="1) ...\n2) ...\n..."></textarea>
+    <button id="manualBtn">提交并批改</button>
+    <div id="result" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<script>
+function getCfg(){
+  const raw = localStorage.getItem('el_cfg');
+  return raw ? JSON.parse(raw) : null;
+}
+async function api(path, opts){
+  const res = await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
+  if(!res.ok){ throw new Error(await res.text()); }
+  return res.json();
+}
+
+const cfg = getCfg();
+if(!cfg){ location.href='/'; }
+
+async function refreshSessions(){
+  if(!cfg.base_id){
+    document.getElementById('sessionInfo').textContent = '尚未选择资料库（base_id）。请先回引导页选择资料库。';
+    return;
+  }
+  const list = await api(`/api/practice-sessions?student_id=${cfg.student_id}&base_id=${cfg.base_id}&limit=50`);
+  const sel = document.getElementById('sessionSel');
+  sel.innerHTML = '';
+  for(const s of list.sessions){
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = `#${s.id} · ${s.status} · ${(s.created_at||'').slice(0,10)}`;
+    sel.appendChild(opt);
+  }
+  await updateSessionInfo();
+}
+
+async function updateSessionInfo(){
+  const sid = parseInt(document.getElementById('sessionSel').value||'0',10);
+  if(!sid){
+    document.getElementById('sessionInfo').textContent = '暂无练习单，请先去“生成默写单”。';
+    return;
+  }
+  const st = await api(`/api/system/status?student_id=${cfg.student_id}&base_id=${cfg.base_id}`);
+  document.getElementById('sessionInfo').textContent = `当前选择练习单：#${sid}｜待批改：${st.pending_correction||0}`;
+}
+
+async function uploadPhoto(){
+  const msg = document.getElementById('photoMsg');
+  const box = document.getElementById('proposedBox');
+  const confirmBtn = document.getElementById('confirmBtn');
+  const sid = parseInt(document.getElementById('sessionSel').value||'0',10);
+  const f = document.getElementById('photo').files[0];
+  if(!sid){ msg.textContent='请先选择练习单'; return; }
+  if(!f){ msg.textContent='请选择照片'; return; }
+
+  msg.textContent='上传并分析中...（建议只标错）';
+  box.style.display='none';
+  confirmBtn.style.display='none';
+  document.getElementById('confirmMsg').textContent='';
+
+  const fd = new FormData();
+  fd.append('file', f);
+  const res = await fetch(`/api/practice-sessions/${sid}/submit-marked-photo`, {method:'POST', body: fd});
+  if(!res.ok){ msg.textContent='失败：'+(await res.text()); return; }
+  const data = await res.json();
+
+  window._lastSubmissionId = data.submission_id;
+  window._proposed = data.proposed_grading || [];
+
+  msg.textContent = `${data.hint||'分析完成'}（submission #${data.submission_id}）`;
+
+  let html = '<table style="width:100%;border-collapse:collapse">';
+  html += '<tr>'+
+    '<th>题号</th><th>中文提示</th><th>AI建议</th><th>置信度</th><th>学生作答(识别)</th><th>证据/备注</th>'+
+    '</tr>';
+
+  for(const it of window._proposed){
+    const checked = it.proposed_is_correct ? 'checked' : '';
+    const mark = (it.proposed_mark || (it.proposed_is_correct ? 'correct' : 'incorrect')).toLowerCase();
+    const label = (mark==='unknown') ? '不确定' : (it.proposed_is_correct ? '对' : '错');
+    const conf = (it.confidence!=null) ? (Math.round(it.confidence*100)+'%') : '';
+    html += `<tr>
+      <td>${it.position}</td>
+      <td>${it.zh_hint||''}</td>
+      <td>
+        <label><input type="checkbox" data-pos="${it.position}" ${checked} /> ${label}</label>
+        <div class="muted">（勾选=对；不勾选=错）</div>
+      </td>
+      <td>${conf}</td>
+      <td><span class="muted">${(it.student_text||'').replace(/</g,'&lt;')}</span></td>
+      <td><span class="muted">${(it.note||'').replace(/</g,'&lt;')}</span></td>
+    </tr>`;
+  }
+  html += '</table>';
+
+  box.innerHTML = html;
+  box.style.display='block';
+  confirmBtn.style.display='inline-block';
+}
+
+async function confirmMarks(){
+  const msg = document.getElementById('confirmMsg');
+  msg.textContent='提交中...';
+  try{
+    const subId = window._lastSubmissionId;
+    if(!subId) throw new Error('没有可确认的提交，请先上传照片。');
+    const marks = {};
+    document.querySelectorAll('#proposedBox input[type=checkbox]').forEach(cb=>{
+      const pos = cb.getAttribute('data-pos');
+      marks[pos] = cb.checked;
+    });
+    const r = await api(`/api/submissions/${subId}/confirm-marks`, {method:'POST', body: JSON.stringify({marks})});
+    msg.textContent = `已入库：正确 ${r.correct}/${r.total}，正确率 ${(r.accuracy*100).toFixed(1)}%`;
+  }catch(e){
+    msg.textContent='失败：'+e.message;
+  }
+}
+
+async function submitAnswers(){
+  const sid = parseInt(document.getElementById('sessionSel').value||'0',10);
+  if(!sid){ alert('请先选择练习单'); return; }
+
+  const lines = document.getElementById('answers').value.split(/\n/);
+  const answers = {};
+  for(let i=0;i<lines.length;i++){
+    const t = lines[i].trim();
+    if(!t) continue;
+    answers[String(i+1)] = t.replace(/^\d+\)?\s*/, '');
+  }
+  const data = await api(`/api/practice-sessions/${sid}/manual-correct`, {method:'POST', body:JSON.stringify({answers})});
+  const ok = data.summary.correct;
+  const total = data.summary.total;
+  document.getElementById('result').innerHTML = `<div><b>结果</b>：${ok}/${total} 正确（${Math.round(ok*100/Math.max(1,total))}%）</div>`
+    + `<div class="muted">错题：${data.summary.wrong_positions.join(', ') || '无'}</div>`;
+}
+
+// events
+document.getElementById('reloadBtn').addEventListener('click', refreshSessions);
+document.getElementById('sessionSel').addEventListener('change', updateSessionInfo);
+document.getElementById('uploadBtn').addEventListener('click', uploadPhoto);
+document.getElementById('confirmBtn').addEventListener('click', confirmMarks);
+document.getElementById('manualBtn').addEventListener('click', submitAnswers);
+
+refreshSessions();
+</script>
+</body>
+</html>
