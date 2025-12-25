@@ -520,12 +520,14 @@ def correct_session_manually(
 
     correct = sum(1 for r in results if r["is_correct"])
     total = len(results)
+    wrong_positions = [r["position"] for r in results if not r["is_correct"]]
     return {
         "submission_id": submission_id,
         "session_id": session_id,
         "total": total,
         "correct": correct,
         "accuracy": (correct / total) if total else 0.0,
+        "wrong_positions": wrong_positions,
         "results": results,
     }
 
@@ -863,7 +865,18 @@ def confirm_mark_grading(submission_id: int, final_by_pos: Dict[int, bool]) -> D
 
 def manual_correct_session(session_id: int, answers: Dict[str, str]) -> Dict:
     answers_by_pos = {int(k): v for k, v in answers.items()}
-    return correct_session_manually(session_id, answers_by_pos)
+    data = correct_session_manually(session_id, answers_by_pos)
+    return {
+        "submission_id": data["submission_id"],
+        "session_id": data["session_id"],
+        "summary": {
+            "total": data["total"],
+            "correct": data["correct"],
+            "accuracy": data["accuracy"],
+            "wrong_positions": data["wrong_positions"],
+        },
+        "results": data["results"],
+    }
 
 
 def get_system_status(student_id: int, base_id: int) -> Dict:
@@ -912,7 +925,7 @@ def get_dashboard(student_id: int, base_id: int, days: int = 30) -> Dict:
             SELECT COUNT(1) AS c
             FROM student_item_stats sis
             JOIN knowledge_items ki ON ki.id = sis.item_id
-            WHERE sis.student_id=? AND ki.base_id=? AND sis.consecutive_correct >= 2
+            WHERE sis.student_id=? AND ki.base_id=? AND sis.consecutive_correct >= ?
             """,
             (student_id, base_id, get_mastery_threshold()),
         ).fetchone()
@@ -931,10 +944,17 @@ def get_dashboard(student_id: int, base_id: int, days: int = 30) -> Dict:
 
         recent_sessions = conn.execute(
             """
-            SELECT id, status, created_at, corrected_at
-            FROM practice_sessions
-            WHERE student_id=? AND base_id=?
-            ORDER BY id DESC
+            SELECT
+              ps.id,
+              ps.status,
+              ps.created_at,
+              ps.corrected_at,
+              ps.pdf_path,
+              ps.answer_pdf_path,
+              (SELECT COUNT(1) FROM exercise_items ei WHERE ei.session_id = ps.id) AS item_count
+            FROM practice_sessions ps
+            WHERE ps.student_id=? AND ps.base_id=?
+            ORDER BY ps.id DESC
             LIMIT 10
             """,
             (student_id, base_id),
@@ -951,10 +971,23 @@ def get_dashboard(student_id: int, base_id: int, days: int = 30) -> Dict:
             (student_id, base_id, f"-{int(days)} days"),
         ).fetchall()
 
+    cal_rows = [dict(r) for r in cal]
+    practice_days = sum(1 for r in cal_rows if int(r.get("c") or 0) > 0)
+
+    sessions_out: List[Dict[str, Any]] = []
+    for r in recent_sessions:
+        row = dict(r)
+        pdf_path = row.get("pdf_path")
+        ans_path = row.get("answer_pdf_path")
+        row["pdf_url"] = f"/media/{os.path.basename(pdf_path)}" if pdf_path else None
+        row["answer_pdf_url"] = f"/media/{os.path.basename(ans_path)}" if ans_path else None
+        sessions_out.append(row)
+
     return {
         "learned_count": int(learned["c"]) if learned else 0,
         "mastered_count": int(mastered["c"]) if mastered else 0,
-        "wrong_top": [dict(r) for r in wrong_top],
-        "recent_sessions": [dict(r) for r in recent_sessions],
-        "calendar_days": [dict(r) for r in cal],
+        "practice_days": practice_days,
+        "top_wrong": [dict(r) for r in wrong_top],
+        "recent_sessions": sessions_out,
+        "calendar_days": cal_rows,
     }
