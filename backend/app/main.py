@@ -2,10 +2,14 @@ import os
 import json
 from typing import Dict, List, Optional
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+_DOTENV_PATH = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
+load_dotenv(_DOTENV_PATH, override=False)
 
 from .db import init_db
 from .services import (
