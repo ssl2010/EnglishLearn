@@ -17,6 +17,7 @@ backend/app/.venv/
 .env
 .env.*
 *.key
+!.env.example
 
 # DB / runtime data
 *.db
