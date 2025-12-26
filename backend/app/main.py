@@ -187,14 +187,17 @@ async def api_import_base_file(
 
 @app.post("/api/practice-sessions/generate")
 def api_generate(req: GenerateReq):
-    data = generate_practice_session(
-        student_id=req.student_id,
-        base_id=req.base_id,
-        unit_scope=req.unit_scope,
-        total_count=req.total_count,
-        mix_ratio={k.upper(): int(v) for k, v in req.mix_ratio.items()},
-        title=req.title,
-    )
+    try:
+        data = generate_practice_session(
+            student_id=req.student_id,
+            base_id=req.base_id,
+            unit_scope=req.unit_scope,
+            total_count=req.total_count,
+            mix_ratio={k.upper(): int(v) for k, v in req.mix_ratio.items()},
+            title=req.title,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     # Backward-compatible fields: pdf_path / answer_pdf_path already included.
     # Add browser-friendly download URLs under /media.
     import os as _os

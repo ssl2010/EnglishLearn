@@ -343,6 +343,14 @@ def generate_practice_session(
 
     unit_scope = normalize_unit_scope(unit_scope)
 
+    with db() as conn:
+        student = conn.execute("SELECT id FROM students WHERE id=?", (student_id,)).fetchone()
+        if not student:
+            raise ValueError(f"student_id {student_id} 不存在，请先完成初始化/创建学生。")
+        base = conn.execute("SELECT id FROM knowledge_bases WHERE id=?", (base_id,)).fetchone()
+        if not base:
+            raise ValueError(f"base_id {base_id} 不存在，请先导入或创建知识库。")
+
     items = _select_items_for_session(
         student_id=student_id,
         base_id=base_id,
