@@ -111,7 +111,16 @@ function setCfg(cfg){ localStorage.setItem('el_cfg', JSON.stringify(cfg||{})); }
 
 async function apiJSON(path, opts){
   const res = await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
-  if(!res.ok){ throw new Error(await res.text()); }
+  if(!res.ok){
+    let errorMsg;
+    try{
+      const errorData = await res.json();
+      errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData);
+    }catch(e){
+      errorMsg = await res.text();
+    }
+    throw new Error(errorMsg);
+  }
   return res.json();
 }
 
