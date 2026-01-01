@@ -140,8 +140,10 @@ def render_dictation_pdf(
                 c.drawString(margin_x, y, f"{idx}. {row.zh_hint}")
                 y -= 7.5 * mm
                 # answer line
-                c.drawString(margin_x, y, "英文：")
-                x_ans = margin_x + 18 * mm
+                x_ans = margin_x
+                if show_answers:
+                    c.drawString(margin_x, y, "英文：")
+                    x_ans = margin_x + 18 * mm
                 if show_answers:
                     # allow longer sentences: wrap roughly by max width
                     # simple wrapping by character count for MVP

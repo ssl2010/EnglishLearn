@@ -41,3 +41,16 @@ uploads/
 Thumbs.db
 .vscode/
 .idea/
+
+# Debug / Test files
+test_*.py
+test_*.json
+*_debug.json
+*_visualization.jpg
+analyze_*.py
+demo_*.py
+verify_*.sh
+*.tmp
+
+# Claude Code
+.claude/

@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>提交与批改</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>提交与批改 v2.0</title>
   <style>
     body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
     .wrap{max-width:980px;margin:0 auto;padding:24px}
@@ -20,39 +23,38 @@
 <body>
 <div class="wrap">
   <div class="card">
-    <h2 style="margin:0 0 6px 0">提交与批改（家长兜底）</h2>
-    <div class="muted">推荐流程：家长按答案在纸质默写单上批改（尽量只标错），拍照上传 → 系统给出逐题建议 → 家长确认 → 入库统计。</div>
+    <h2 style="margin:0 0 6px 0">提交与批改</h2>
+    <div class="muted">推荐流程：拍照上传 → 系统给出逐题建议 → 家长确认 → 入库统计。</div>
     <div style="margin-top:10px"><a href="/">← 返回引导页</a></div>
   </div>
 
-  <div class="card">
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <label class="muted">选择练习单：</label>
-      <select id="sessionSel"></select>
-      <button id="reloadBtn">刷新列表</button>
-    </div>
-    <div id="sessionInfo" class="muted" style="margin-top:10px"></div>
-  </div>
 
   <div class="card">
-    <h3 style="margin-top:0">方式 A：上传已批改照片（AI 识别对错）</h3>
-    <input type="file" id="photo" accept="image/*" />
+    <h3 style="margin-top:0">上传照片</h3>
+    <div class="muted">AI 识别，请先确认照片内容。</div>
+    <input type="file" id="photo" accept="image/*" multiple />
+    <div style="margin-top:8px;display:flex;gap:10px;flex-wrap:wrap">
+      <button id="addBtn">继续添加</button>
+      <button id="clearBtn">清空选择</button>
+    </div>
+    <div id="thumbs" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"></div>
+    <div id="debugBox" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"></div>
     <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
-      <button id="uploadBtn">上传并分析</button>
+      <button id="analyzeBtn" disabled>开始识别</button>
+      <button id="debugBtn" style="background:#f59e0b">模拟运行（调试）</button>
       <button id="confirmBtn" style="display:none">确认并入库</button>
     </div>
     <div id="photoMsg" class="muted" style="margin-top:8px"></div>
+    <div id="gradedImages" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"></div>
     <div id="proposedBox" style="margin-top:10px;display:none"></div>
     <div id="confirmMsg" class="muted" style="margin-top:8px"></div>
   </div>
 
-  <div class="card">
-    <h3 style="margin-top:0">方式 B：家长录入答案（兜底）</h3>
-    <div class="muted">每行一个答案，对应题号顺序（第1行=第1题）。</div>
-    <textarea id="answers" placeholder="1) ...\n2) ...\n..."></textarea>
-    <button id="manualBtn">提交并批改</button>
-    <div id="result" style="margin-top:12px"></div>
-  </div>
+  <!-- 手工兜底流程已移除 -->
+</div>
+
+<div id="imgModal" style="display:none;position:fixed;inset:0;background:transparent;z-index:9999;cursor:pointer;user-select:none;-webkit-user-select:none">
+  <img id="imgModalPic" src="" alt="preview" style="position:absolute;max-width:90vw;max-height:90vh;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.5);border:3px solid #fff;user-select:none;-webkit-user-select:none;-webkit-user-drag:none;outline:none;cursor:grab" draggable="false" />
 </div>
 
 <script>
@@ -69,78 +71,274 @@ async function api(path, opts){
 const cfg = getCfg();
 if(!cfg){ location.href='/'; }
 
-async function refreshSessions(){
-  if(!cfg.base_id){
-    document.getElementById('sessionInfo').textContent = '尚未选择资料库（base_id）。请先回引导页选择资料库。';
-    return;
-  }
-  const list = await api(`/api/practice-sessions?student_id=${cfg.student_id}&base_id=${cfg.base_id}&limit=50`);
-  const sel = document.getElementById('sessionSel');
-  sel.innerHTML = '';
-  for(const s of list.sessions){
-    const opt = document.createElement('option');
-    opt.value = s.id;
-    opt.textContent = `#${s.id} · ${s.status} · ${(s.created_at||'').slice(0,10)}`;
-    sel.appendChild(opt);
-  }
-  await updateSessionInfo();
+function updateSessionInfo(text){
+  const info = document.getElementById('sessionInfo');
+  info.textContent = text || '';
 }
 
-async function updateSessionInfo(){
-  const sid = parseInt(document.getElementById('sessionSel').value||'0',10);
-  if(!sid){
-    document.getElementById('sessionInfo').textContent = '暂无练习单，请先去“生成默写单”。';
-    return;
-  }
-  const st = await api(`/api/system/status?student_id=${cfg.student_id}&base_id=${cfg.base_id}`);
-  document.getElementById('sessionInfo').textContent = `当前选择练习单：#${sid}｜待批改：${st.pending_correction||0}`;
+let selectedFiles = [];
+
+function renderThumbs(){
+  const thumbs = document.getElementById('thumbs');
+  thumbs.innerHTML = '';
+  selectedFiles.forEach((f, idx)=>{
+    const wrap = document.createElement('div');
+    wrap.style.position = 'relative';
+    wrap.style.width = '120px';
+    wrap.style.height = '120px';
+    wrap.dataset.index = idx;  // Store index for later update
+    const img = document.createElement('img');
+    img.style.width = '120px';
+    img.style.height = '120px';
+    img.style.objectFit = 'cover';
+    img.style.borderRadius = '8px';
+    img.style.border = '1px solid #eee';
+    img.className = 'zoomable';
+    img.dataset.originalSrc = URL.createObjectURL(f);
+    img.src = img.dataset.originalSrc;
+    const del = document.createElement('button');
+    del.textContent = '×';
+    del.style.position = 'absolute';
+    del.style.top = '-6px';
+    del.style.right = '-6px';
+    del.style.width = '22px';
+    del.style.height = '22px';
+    del.style.borderRadius = '50%';
+    del.style.border = '0';
+    del.style.background = '#111';
+    del.style.color = '#fff';
+    del.style.cursor = 'pointer';
+    del.addEventListener('click', ()=>{
+      selectedFiles.splice(idx, 1);
+      renderThumbs();
+    });
+    wrap.appendChild(img);
+    wrap.appendChild(del);
+    thumbs.appendChild(wrap);
+  });
+  document.getElementById('analyzeBtn').disabled = selectedFiles.length === 0;
 }
 
 async function uploadPhoto(){
   const msg = document.getElementById('photoMsg');
   const box = document.getElementById('proposedBox');
   const confirmBtn = document.getElementById('confirmBtn');
-  const sid = parseInt(document.getElementById('sessionSel').value||'0',10);
-  const f = document.getElementById('photo').files[0];
-  if(!sid){ msg.textContent='请先选择练习单'; return; }
-  if(!f){ msg.textContent='请选择照片'; return; }
+  if(!cfg || !cfg.student_id || !cfg.base_id){
+    msg.textContent='缺少学生或资料库信息，请先回引导页配置。';
+    return;
+  }
+  if(!selectedFiles.length){ msg.textContent='请选择照片'; return; }
 
-  msg.textContent='上传并分析中...（建议只标错）';
+  // Save uploaded images for crop thumbnail generation
+  window._uploadedImages = selectedFiles.slice();
+
+  msg.textContent='上传并识别中...';
   box.style.display='none';
   confirmBtn.style.display='none';
   document.getElementById('confirmMsg').textContent='';
 
   const fd = new FormData();
-  fd.append('file', f);
-  const res = await fetch(`/api/practice-sessions/${sid}/submit-marked-photo`, {method:'POST', body: fd});
+  for(const f of selectedFiles){ fd.append('files', f); }
+  const res = await fetch(`/api/ai/grade-photos?student_id=${cfg.student_id}&base_id=${cfg.base_id}`, {method:'POST', body: fd});
   if(!res.ok){ msg.textContent='失败：'+(await res.text()); return; }
   const data = await res.json();
 
-  window._lastSubmissionId = data.submission_id;
-  window._proposed = data.proposed_grading || [];
+  window._extracted = data.items || [];
+  window._gradedImageUrls = data.graded_image_urls || [];
+  const imgCount = data.image_count ? `；图片 ${data.image_count} 张` : '';
+  let dateInfo = '';
+  if (data.extracted_date) {
+    dateInfo = `；试卷日期：${data.extracted_date}`;
+  }
+  msg.textContent = `识别完成${imgCount}${dateInfo}`;
+  if(data.matched_session){
+    const ms = data.matched_session;
+    msg.textContent += `；匹配练习单 #${ms.session_id}（${Math.round(ms.match_ratio*100)}%）`;
+  }else{
+    msg.textContent += '；未匹配到练习单';
+  }
+  if(data.debug_overlay_urls && data.debug_overlay_urls.length){
+    msg.textContent += `（调试图 ${data.debug_overlay_urls.length} 张）`;
+    const debugBox = document.getElementById('debugBox');
+    debugBox.innerHTML = '';
+    for(const u of data.debug_overlay_urls){
+      const img = document.createElement('img');
+      img.src = u;
+      img.className = 'zoomable';
+      img.style.width = '120px';
+      img.style.height = '120px';
+      img.style.objectFit = 'cover';
+      img.style.borderRadius = '8px';
+      img.style.border = '1px dashed #888';
+      debugBox.appendChild(img);
+    }
+  }else{
+    document.getElementById('debugBox').innerHTML = '';
+  }
 
-  msg.textContent = `${data.hint||'分析完成'}（submission #${data.submission_id}）`;
+  // Update thumbnails with graded images (replace original thumbnails)
+  if(data.graded_image_urls && data.graded_image_urls.length){
+    const thumbs = document.getElementById('thumbs');
+    const thumbWraps = thumbs.querySelectorAll('[data-index]');
+
+    data.graded_image_urls.forEach((url, idx) => {
+      if(!url || idx >= thumbWraps.length) return;
+
+      const wrap = thumbWraps[idx];
+      const img = wrap.querySelector('img');
+      if(img){
+        // Store graded URL and update thumbnail
+        img.dataset.gradedSrc = url;
+        img.src = url;
+        // Add green border to indicate graded
+        img.style.border = '2px solid #07a86c';
+      }
+    });
+
+    // Clear the separate graded images area
+    document.getElementById('gradedImages').innerHTML = '';
+  }else{
+    document.getElementById('gradedImages').innerHTML = '';
+  }
+
+  const iconYes = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="9" fill="#07a86c"/><path d="M5 10.5l3 3 7-7" stroke="white" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  const iconNo = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="9" fill="#e5484d"/><path d="M6.2 6.2l7.6 7.6M13.8 6.2l-7.6 7.6" stroke="white" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>');
 
   let html = '<table style="width:100%;border-collapse:collapse">';
   html += '<tr>'+
-    '<th>题号</th><th>中文提示</th><th>AI建议</th><th>置信度</th><th>学生作答(识别)</th><th>证据/备注</th>'+
+    '<th>题号</th><th>题目/提示</th><th>识别结果</th><th>是否正确</th><th>参考答案</th><th>入库</th><th>备注</th><th>识别图片</th>'+
     '</tr>';
 
-  for(const it of window._proposed){
-    const checked = it.proposed_is_correct ? 'checked' : '';
-    const mark = (it.proposed_mark || (it.proposed_is_correct ? 'correct' : 'incorrect')).toLowerCase();
-    const label = (mark==='unknown') ? '不确定' : (it.proposed_is_correct ? '对' : '错');
-    const conf = (it.confidence!=null) ? (Math.round(it.confidence*100)+'%') : '';
-    html += `<tr>
+  for(const it of window._extracted){
+    // Insert section header row if this item has section_title
+    if (it.section_title && it.section_title.trim()) {
+      html += `<tr style="background:#f0f9ff">
+        <td colspan="9" style="padding:12px 8px;font-weight:600;font-size:16px;color:#0369a1;border-top:2px solid #0ea5e9">
+          ${it.section_title.replace(/</g,'&lt;')}
+        </td>
+      </tr>`;
+    }
+
+    const conf = (it.confidence!=null) ? (Math.round(it.confidence*100)+'%') : '缺失';
+    const isCorrectMissing = (it.is_correct === null || it.is_correct === undefined);
+    const isCorrect = isCorrectMissing ? false : (it.is_correct === true);
+    const llmText = (it.llm_text||'').replace(/</g,'&lt;');
+    const ocrText = (it.ocr_text||'').replace(/</g,'&lt;');
+    const refAnswer = (it.matched_en_text||'').replace(/</g,'&lt;');
+
+    // Row background color: based on LLM result only (not OCR/LLM consistency)
+    let rowStyle = '';
+    if (isCorrect) {
+      rowStyle = ' style="background:#e8f5e9"';  // Light green for correct
+    } else {
+      rowStyle = ' style="background:#ffebee"';  // Light red for incorrect
+    }
+
+    // Format LLM text: highlight spelling errors based on note field + comparison
+    let formattedLlmText = llmText;
+    const hasSpellingError = (it.note || '').includes('拼写');
+    const sectionType = it.section_type || '';
+
+    // For phrases/sentences with spelling errors, identify wrong words
+    if (hasSpellingError && !isCorrect && (sectionType === 'PHRASE' || sectionType === 'SENTENCE') && llmText) {
+      const noteText = it.note || '';
+      const wrongWords = new Set();
+
+      // Method 1: Extract wrong words from note patterns like "word1→word2" or "word1->word2"
+      const arrowPattern = /(\w+)\s*(?:→|->)\s*(\w+)/g;
+      let match;
+      while ((match = arrowPattern.exec(noteText)) !== null) {
+        wrongWords.add(match[1].toLowerCase()); // Add the wrong word (before arrow)
+      }
+
+      // Method 2: Compare with reference answer word-by-word (fallback/enhancement)
+      if (refAnswer) {
+        const studentWords = llmText.split(/\s+/);
+        const refWords = refAnswer.split(/\s+/);
+
+        for (let i = 0; i < Math.min(studentWords.length, refWords.length); i++) {
+          const studentWord = studentWords[i] || '';
+          const refWord = refWords[i] || '';
+
+          // Extract alphabetic part for comparison (remove punctuation)
+          const studentWordClean = studentWord.replace(/[^\w]/g, '');
+          const refWordClean = refWord.replace(/[^\w]/g, '');
+
+          if (studentWordClean && refWordClean &&
+              studentWordClean.toLowerCase() !== refWordClean.toLowerCase()) {
+            wrongWords.add(studentWordClean.toLowerCase());
+          }
+        }
+      }
+
+      // Highlight all identified wrong words in red
+      if (wrongWords.size > 0) {
+        let highlighted = llmText;
+        wrongWords.forEach(wrongWord => {
+          // Escape special regex characters in wrongWord
+          const escapedWord = wrongWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          // Use word boundary regex to match whole words (case-insensitive)
+          const regex = new RegExp(`\\b${escapedWord}\\w*\\b`, 'gi');
+          highlighted = highlighted.replace(regex, (matched) => {
+            // Only highlight if the matched word starts with the wrong word
+            if (matched.toLowerCase().startsWith(wrongWord)) {
+              return `<span style="color:#e5484d;font-weight:500">${matched}</span>`;
+            }
+            return matched;
+          });
+        });
+        formattedLlmText = highlighted;
+      }
+    }
+
+    // Build note text: combine LLM note + inconsistency warning
+    let noteText = (it.note||'').replace(/</g,'&lt;');
+    if (it.consistency_ok === false) {
+      if (noteText) {
+        noteText += '；识别不一致，请检查图片';
+      } else {
+        noteText = '识别不一致，请检查图片';
+      }
+    }
+
+    // Generate crop thumbnail if bbox available
+    let cropThumb = '';
+    if (it.crop_url) {
+      // Use server-generated crop image (works for both normal and debug mode)
+      cropThumb = `<img src="${it.crop_url}" alt="crop" class="zoomable" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
+    } else if (it.handwriting_bbox || it.line_bbox) {
+      // Fallback: generate on client side from uploaded images (for immediate preview)
+      const bbox = it.handwriting_bbox || it.line_bbox;
+      const pageIdx = it.page_index || 0;
+      cropThumb = `<img class="crop-thumb" data-pos="${it.position}" data-page="${pageIdx}" data-bbox="${bbox.join(',')}"
+                       src="" alt="crop" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
+    }
+
+    // Add page link only if no crop available (unanswered items)
+    let imageCell = cropThumb;
+    if (!cropThumb) {
+      const pageIdx = it.page_index || 0;
+      if (window._gradedImageUrls && window._gradedImageUrls[pageIdx]) {
+        imageCell = `<a href="#" class="page-link" data-page-url="${window._gradedImageUrls[pageIdx]}"
+                        style="color:#0b5fff;text-decoration:none;font-size:13px"
+                        title="第${pageIdx + 1}页完整图">查看练习单</a>`;
+      }
+    }
+
+    html += `<tr${rowStyle}>
       <td>${it.position}</td>
-      <td>${it.zh_hint||''}</td>
+      <td>${(it.zh_hint||'').replace(/</g,'&lt;')}</td>
+      <td>${formattedLlmText}</td>
       <td>
-        <label><input type="checkbox" data-pos="${it.position}" ${checked} /> ${label}</label>
-        <div class="muted">（勾选=对；不勾选=错）</div>
+        <button type="button" class="markBtn" data-pos="${it.position}" data-correct="${isCorrect ? '1' : '0'}" style="background:transparent;border:0;cursor:pointer">
+          <img src="${isCorrect ? iconYes : iconNo}" alt="${isCorrect ? '正确' : '错误'}" />
+        </button>
+        ${isCorrectMissing ? '<span class="muted" style="color:#c00;margin-left:6px">缺失</span>' : ''}
       </td>
-      <td>${conf}</td>
-      <td><span class="muted">${(it.student_text||'').replace(/</g,'&lt;')}</span></td>
-      <td><span class="muted">${(it.note||'').replace(/</g,'&lt;')}</span></td>
+      <td>${refAnswer}</td>
+      <td><input type="checkbox" data-pos="${it.position}" data-role="include" checked /></td>
+      <td><span class="muted">${noteText}</span></td>
+      <td>${imageCell}</td>
     </tr>`;
   }
   html += '</table>';
@@ -148,52 +346,529 @@ async function uploadPhoto(){
   box.innerHTML = html;
   box.style.display='block';
   confirmBtn.style.display='inline-block';
+
+  // Generate crop thumbnails from original images
+  generateCropThumbnails();
+
+  document.querySelectorAll('.markBtn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const cur = btn.getAttribute('data-correct') === '1';
+      btn.setAttribute('data-correct', cur ? '0' : '1');
+      const img = btn.querySelector('img');
+      img.src = cur ? iconNo : iconYes;
+      img.alt = cur ? '错误' : '正确';
+    });
+  });
+
+  // Add click handlers for crop thumbnails
+  document.querySelectorAll('.crop-thumb').forEach(thumb=>{
+    thumb.addEventListener('click', ()=>{
+      if (thumb.src && thumb.src !== window.location.href) {
+        showImageModal(thumb.src);
+      }
+    });
+  });
+}
+
+function generateCropThumbnails(){
+  // Generate crop thumbnails from uploaded images
+  if (!window._uploadedImages) return;
+
+  document.querySelectorAll('.crop-thumb').forEach(async (thumb) => {
+    const pageIdx = parseInt(thumb.getAttribute('data-page') || '0');
+    const bboxStr = thumb.getAttribute('data-bbox');
+    if (!bboxStr) return;
+
+    const bbox = bboxStr.split(',').map(parseFloat);
+    if (bbox.length !== 4) return;
+
+    const imgFile = window._uploadedImages[pageIdx];
+    if (!imgFile) return;
+
+    try {
+      const img = await loadImage(imgFile);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      // bbox is [x1, y1, x2, y2] in normalized coords (0-1)
+      const x = bbox[0] * img.width;
+      const y = bbox[1] * img.height;
+      const w = (bbox[2] - bbox[0]) * img.width;
+      const h = (bbox[3] - bbox[1]) * img.height;
+
+      // Add padding
+      const padding = 10;
+      const cropX = Math.max(0, x - padding);
+      const cropY = Math.max(0, y - padding);
+      const cropW = Math.min(img.width - cropX, w + padding * 2);
+      const cropH = Math.min(img.height - cropY, h + padding * 2);
+
+      canvas.width = cropW;
+      canvas.height = cropH;
+      ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+      thumb.src = canvas.toDataURL('image/jpeg', 0.8);
+    } catch (err) {
+      console.error('Failed to generate crop thumbnail:', err);
+    }
+  });
+}
+
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function showImageModal(src) {
+  const modal = document.getElementById('imgModal');
+  const modalPic = document.getElementById('imgModalPic');
+  modalPic.src = src;
+  modal.style.display = 'flex';
 }
 
 async function confirmMarks(){
   const msg = document.getElementById('confirmMsg');
   msg.textContent='提交中...';
   try{
-    const subId = window._lastSubmissionId;
-    if(!subId) throw new Error('没有可确认的提交，请先上传照片。');
-    const marks = {};
+    if(!window._extracted || !window._extracted.length) throw new Error('没有可确认的识别结果。');
+    const includeMap = {};
+    const correctMap = {};
     document.querySelectorAll('#proposedBox input[type=checkbox]').forEach(cb=>{
       const pos = cb.getAttribute('data-pos');
-      marks[pos] = cb.checked;
+      const role = cb.getAttribute('data-role');
+      if(role === 'include'){ includeMap[pos] = cb.checked; }
     });
-    const r = await api(`/api/submissions/${subId}/confirm-marks`, {method:'POST', body: JSON.stringify({marks})});
+    document.querySelectorAll('#proposedBox .markBtn').forEach(btn=>{
+      const pos = btn.getAttribute('data-pos');
+      correctMap[pos] = btn.getAttribute('data-correct') === '1';
+    });
+    const items = window._extracted.map(it=>{
+      // Always use LLM text as student text
+      return {
+        position: it.position,
+        zh_hint: it.zh_hint || '',
+        student_text: it.llm_text || '',
+        llm_text: it.llm_text || '',
+        ocr_text: it.ocr_text || '',
+        matched_item_id: it.matched_item_id || null,
+        include: includeMap[it.position] !== false,
+        is_correct: !!correctMap[it.position],
+        source: 'llm'
+      };
+    });
+    const r = await api(`/api/ai/confirm-extracted`, {
+      method:'POST',
+      body: JSON.stringify({student_id: cfg.student_id, base_id: cfg.base_id, items})
+    });
     msg.textContent = `已入库：正确 ${r.correct}/${r.total}，正确率 ${(r.accuracy*100).toFixed(1)}%`;
   }catch(e){
     msg.textContent='失败：'+e.message;
   }
 }
 
-async function submitAnswers(){
-  const sid = parseInt(document.getElementById('sessionSel').value||'0',10);
-  if(!sid){ alert('请先选择练习单'); return; }
-
-  const lines = document.getElementById('answers').value.split(/\n/);
-  const answers = {};
-  for(let i=0;i<lines.length;i++){
-    const t = lines[i].trim();
-    if(!t) continue;
-    answers[String(i+1)] = t.replace(/^\d+\)?\s*/, '');
-  }
-  const data = await api(`/api/practice-sessions/${sid}/manual-correct`, {method:'POST', body:JSON.stringify({answers})});
-  const ok = data.summary.correct;
-  const total = data.summary.total;
-  document.getElementById('result').innerHTML = `<div><b>结果</b>：${ok}/${total} 正确（${Math.round(ok*100/Math.max(1,total))}%）</div>`
-    + `<div class="muted">错题：${data.summary.wrong_positions.join(', ') || '无'}</div>`;
-}
 
 // events
-document.getElementById('reloadBtn').addEventListener('click', refreshSessions);
-document.getElementById('sessionSel').addEventListener('change', updateSessionInfo);
-document.getElementById('uploadBtn').addEventListener('click', uploadPhoto);
-document.getElementById('confirmBtn').addEventListener('click', confirmMarks);
-document.getElementById('manualBtn').addEventListener('click', submitAnswers);
+document.getElementById('photo').addEventListener('change', (e)=>{
+  const files = Array.from(e.target.files || []);
+  if(files.length){
+    selectedFiles = selectedFiles.concat(files);
+    renderThumbs();
+  }
+  e.target.value = '';
+});
+document.getElementById('analyzeBtn').addEventListener('click', uploadPhoto);
+document.getElementById('debugBtn').addEventListener('click', async ()=>{
+  const msg = document.getElementById('photoMsg');
+  const box = document.getElementById('proposedBox');
+  const confirmBtn = document.getElementById('confirmBtn');
+  if(!cfg || !cfg.student_id || !cfg.base_id){
+    msg.textContent='缺少学生或资料库信息，请先回引导页配置。';
+    return;
+  }
 
-refreshSessions();
+  msg.textContent='加载调试数据中...';
+  box.style.display='none';
+  confirmBtn.style.display='none';
+  document.getElementById('confirmMsg').textContent='';
+
+  try {
+    const res = await fetch(`/api/ai/grade-photos-debug?student_id=${cfg.student_id}&base_id=${cfg.base_id}`, {method:'POST'});
+    if(!res.ok){ msg.textContent='失败：'+(await res.text()); return; }
+    const data = await res.json();
+
+    window._extracted = data.items || [];
+    window._gradedImageUrls = data.graded_image_urls || [];
+    const imgCount = data.image_count ? `；图片 ${data.image_count} 张` : '';
+    let dateInfo = '';
+    if (data.extracted_date) {
+      dateInfo = `；试卷日期：${data.extracted_date}`;
+    }
+    msg.textContent = `调试数据加载完成${imgCount}${dateInfo}`;
+    if(data.matched_session){
+      const ms = data.matched_session;
+      msg.textContent += `；匹配练习单 #${ms.session_id}（${Math.round(ms.match_ratio*100)}%）`;
+    }else{
+      msg.textContent += '；未匹配到练习单';
+    }
+
+    // Clear debug overlay box in debug mode (we'll show graded images in thumbs instead)
+    document.getElementById('debugBox').innerHTML = '';
+
+    // In debug mode, always clear and recreate thumbnails with graded images only
+    if(data.graded_image_urls && data.graded_image_urls.length){
+      const thumbs = document.getElementById('thumbs');
+
+      // Clear all existing thumbnails and files (debug mode should only show graded images)
+      thumbs.innerHTML = '';
+      selectedFiles = [];
+
+      // Create thumbnails from graded images
+      data.graded_image_urls.forEach((url, idx) => {
+        if(!url) return;
+
+        const wrap = document.createElement('div');
+        wrap.style.position = 'relative';
+        wrap.style.width = '120px';
+        wrap.style.height = '120px';
+        wrap.dataset.index = idx;
+
+        const img = document.createElement('img');
+        img.style.width = '120px';
+        img.style.height = '120px';
+        img.style.objectFit = 'cover';
+        img.style.borderRadius = '8px';
+        img.style.border = '2px solid #07a86c';
+        img.className = 'zoomable';
+        img.src = url;
+        img.dataset.gradedSrc = url;
+
+        wrap.appendChild(img);
+        thumbs.appendChild(wrap);
+      });
+
+      // Clear the separate graded images area
+      document.getElementById('gradedImages').innerHTML = '';
+    }else{
+      document.getElementById('gradedImages').innerHTML = '';
+    }
+
+    const iconYes = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="9" fill="#07a86c"/><path d="M5 10.5l3 3 7-7" stroke="white" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+    const iconNo = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="9" fill="#e5484d"/><path d="M6.2 6.2l7.6 7.6M13.8 6.2l-7.6 7.6" stroke="white" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>');
+
+    // Render table (same as uploadPhoto)
+    let html = '<table style="width:100%;border-collapse:collapse">';
+    html += '<tr>'+
+      '<th>题号</th><th>题目/提示</th><th>识别结果</th><th>是否正确</th><th>参考答案</th><th>入库</th><th>备注</th><th>识别图片</th>'+
+      '</tr>';
+
+    for(const it of window._extracted){
+      // Same rendering logic as uploadPhoto
+      if (it.section_title && it.section_title.trim()) {
+        html += `<tr style="background:#f0f9ff">
+          <td colspan="9" style="padding:12px 8px;font-weight:600;font-size:16px;color:#0369a1;border-top:2px solid #0ea5e9">
+            ${it.section_title.replace(/</g,'&lt;')}
+          </td>
+        </tr>`;
+      }
+
+      const conf = (it.confidence!=null) ? (Math.round(it.confidence*100)+'%') : '缺失';
+      const isCorrectMissing = (it.is_correct === null || it.is_correct === undefined);
+      const isCorrect = isCorrectMissing ? false : (it.is_correct === true);
+      const llmText = (it.llm_text||'').replace(/</g,'&lt;');
+      const refAnswer = (it.matched_en_text||'').replace(/</g,'&lt;');
+
+      let rowStyle = '';
+      if (isCorrect) {
+        rowStyle = ' style="background:#e8f5e9"';  // Light green for correct
+      } else {
+        rowStyle = ' style="background:#ffebee"';  // Light red for incorrect
+      }
+
+      let formattedLlmText = llmText;
+      const hasSpellingError = (it.note || '').includes('拼写');
+      const sectionType = it.section_type || '';
+
+      // For phrases/sentences with spelling errors, identify wrong words
+      if (hasSpellingError && !isCorrect && (sectionType === 'PHRASE' || sectionType === 'SENTENCE') && llmText) {
+        const noteText = it.note || '';
+        const wrongWords = new Set();
+
+        // Method 1: Extract wrong words from note patterns like "word1→word2" or "word1->word2"
+        const arrowPattern = /(\w+)\s*(?:→|->)\s*(\w+)/g;
+        let match;
+        while ((match = arrowPattern.exec(noteText)) !== null) {
+          wrongWords.add(match[1].toLowerCase()); // Add the wrong word (before arrow)
+        }
+
+        // Method 2: Compare with reference answer word-by-word (fallback/enhancement)
+        if (refAnswer) {
+          const studentWords = llmText.split(/\s+/);
+          const refWords = refAnswer.split(/\s+/);
+
+          for (let i = 0; i < Math.min(studentWords.length, refWords.length); i++) {
+            const studentWord = studentWords[i] || '';
+            const refWord = refWords[i] || '';
+
+            // Extract alphabetic part for comparison (remove punctuation)
+            const studentWordClean = studentWord.replace(/[^\w]/g, '');
+            const refWordClean = refWord.replace(/[^\w]/g, '');
+
+            if (studentWordClean && refWordClean &&
+                studentWordClean.toLowerCase() !== refWordClean.toLowerCase()) {
+              wrongWords.add(studentWordClean.toLowerCase());
+            }
+          }
+        }
+
+        // Highlight all identified wrong words in red
+        if (wrongWords.size > 0) {
+          let highlighted = llmText;
+          wrongWords.forEach(wrongWord => {
+            // Escape special regex characters in wrongWord
+            const escapedWord = wrongWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // Use word boundary regex to match whole words (case-insensitive)
+            const regex = new RegExp(`\\b${escapedWord}\\w*\\b`, 'gi');
+            highlighted = highlighted.replace(regex, (matched) => {
+              // Only highlight if the matched word starts with the wrong word
+              if (matched.toLowerCase().startsWith(wrongWord)) {
+                return `<span style="color:#e5484d;font-weight:500">${matched}</span>`;
+              }
+              return matched;
+            });
+          });
+          formattedLlmText = highlighted;
+        }
+      }
+
+      let noteText = (it.note||'').replace(/</g,'&lt;');
+      if (it.consistency_ok === false) {
+        if (noteText) {
+          noteText += '；识别不一致，请检查图片';
+        } else {
+          noteText = '识别不一致，请检查图片';
+        }
+      }
+
+      let cropThumb = '';
+      if (it.crop_url) {
+        // Use server-generated crop image (works for both normal and debug mode)
+        cropThumb = `<img src="${it.crop_url}" alt="crop" class="zoomable" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
+      } else if (it.handwriting_bbox || it.line_bbox) {
+        // Fallback: generate on client side from uploaded images (for immediate preview)
+        const bbox = it.handwriting_bbox || it.line_bbox;
+        const pageIdx = it.page_index || 0;
+        cropThumb = `<img class="crop-thumb" data-pos="${it.position}" data-page="${pageIdx}" data-bbox="${bbox.join(',')}"
+                         src="" alt="crop" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
+      }
+
+      // Add page link only if no crop available (unanswered items)
+      let imageCell = cropThumb;
+      if (!cropThumb) {
+        const pageIdx = it.page_index || 0;
+        if (window._gradedImageUrls && window._gradedImageUrls[pageIdx]) {
+          imageCell = `<a href="#" class="page-link" data-page-url="${window._gradedImageUrls[pageIdx]}"
+                          style="color:#0b5fff;text-decoration:none;font-size:13px"
+                          title="第${pageIdx + 1}页完整图">查看练习单</a>`;
+        }
+      }
+
+      html += `<tr${rowStyle}>
+        <td>${it.position}</td>
+        <td>${(it.zh_hint||'').replace(/</g,'&lt;')}</td>
+        <td>${formattedLlmText}</td>
+        <td>
+          <button type="button" class="markBtn" data-pos="${it.position}" data-correct="${isCorrect ? '1' : '0'}" style="background:transparent;border:0;cursor:pointer">
+            <img src="${isCorrect ? iconYes : iconNo}" alt="${isCorrect ? '正确' : '错误'}" />
+          </button>
+          ${isCorrectMissing ? '<span class="muted" style="color:#c00;margin-left:6px">缺失</span>' : ''}
+        </td>
+        <td>${refAnswer}</td>
+        <td><input type="checkbox" data-pos="${it.position}" data-role="include" checked /></td>
+        <td><span class="muted">${noteText}</span></td>
+        <td>${imageCell}</td>
+      </tr>`;
+    }
+    html += '</table>';
+
+    box.innerHTML = html;
+    box.style.display='block';
+    confirmBtn.style.display='inline-block';
+
+    // Add event handlers
+    document.querySelectorAll('.markBtn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const cur = btn.getAttribute('data-correct') === '1';
+        btn.setAttribute('data-correct', cur ? '0' : '1');
+        const img = btn.querySelector('img');
+        img.src = cur ? iconNo : iconYes;
+        img.alt = cur ? '错误' : '正确';
+      });
+    });
+
+  } catch(e) {
+    msg.textContent='调试失败：'+e.message;
+  }
+});
+document.getElementById('addBtn').addEventListener('click', ()=>{
+  document.getElementById('photo').click();
+});
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  selectedFiles = [];
+  renderThumbs();
+});
+
+const imgModal = document.getElementById('imgModal');
+const imgModalPic = document.getElementById('imgModalPic');
+document.body.addEventListener('click', (e)=>{
+  const t = e.target;
+
+  // Handle page links
+  if(t && t.classList && t.classList.contains('page-link')){
+    e.preventDefault();
+    const pageUrl = t.getAttribute('data-page-url');
+    if(pageUrl){
+      const mouseX = e.clientX;
+      const mouseY = e.clientY;
+
+      imgModalPic.src = pageUrl;
+      imgModalPic.onload = () => {
+        const imgWidth = imgModalPic.offsetWidth;
+        const imgHeight = imgModalPic.offsetHeight;
+
+        // Position image so it appears at top-left of mouse (image's bottom-right at mouse)
+        let leftPos = mouseX - imgWidth;
+        let topPos = mouseY - imgHeight;
+
+        // Ensure image stays within viewport
+        if (leftPos < 10) {
+          leftPos = 10;
+        }
+        if (topPos < 10) {
+          topPos = 10;
+        }
+
+        imgModalPic.style.left = leftPos + 'px';
+        imgModalPic.style.top = topPos + 'px';
+        imgModalPic.style.right = 'auto';
+        imgModalPic.style.bottom = 'auto';
+        imgModalPic.style.transform = '';
+      };
+      imgModal.style.display = 'block';
+    }
+    return;
+  }
+
+  // Handle zoomable images
+  if(t && t.classList && t.classList.contains('zoomable')){
+    imgModalPic.src = t.src;
+
+    // Position image with top-left corner at mouse position
+    const mouseX = e.clientX;
+    const mouseY = e.clientY;
+
+    // Reset previous positioning and transform
+    imgModalPic.style.left = 'auto';
+    imgModalPic.style.top = 'auto';
+    imgModalPic.style.right = 'auto';
+    imgModalPic.style.bottom = 'auto';
+    imgModalPic.style.transform = '';
+
+    // Calculate position: top-left corner at mouse position
+    imgModalPic.onload = () => {
+      const imgWidth = imgModalPic.offsetWidth;
+      const imgHeight = imgModalPic.offsetHeight;
+
+      // Position image so it appears at top-left of mouse (image's bottom-right at mouse)
+      let leftPos = mouseX - imgWidth;
+      let topPos = mouseY - imgHeight;
+
+      // Ensure image stays within viewport
+      if (leftPos < 10) {
+        leftPos = 10;
+      }
+      if (topPos < 10) {
+        topPos = 10;
+      }
+
+      imgModalPic.style.left = leftPos + 'px';
+      imgModalPic.style.top = topPos + 'px';
+    };
+
+    imgModal.style.display = 'block';
+  }
+});
+
+// Image dragging functionality
+let isDragging = false;
+let dragStartX = 0;
+let dragStartY = 0;
+let imgStartLeft = 0;
+let imgStartTop = 0;
+
+imgModalPic.addEventListener('mousedown', (e)=>{
+  e.preventDefault();
+  e.stopPropagation(); // Prevent modal click event
+  isDragging = true;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+
+  // Get current position
+  const rect = imgModalPic.getBoundingClientRect();
+  imgStartLeft = rect.left;
+  imgStartTop = rect.top;
+
+  imgModalPic.style.cursor = 'grabbing';
+  imgModal.style.cursor = 'grabbing';
+});
+
+document.addEventListener('mousemove', (e)=>{
+  if (!isDragging) return;
+
+  const deltaX = e.clientX - dragStartX;
+  const deltaY = e.clientY - dragStartY;
+
+  const newLeft = imgStartLeft + deltaX;
+  const newTop = imgStartTop + deltaY;
+
+  imgModalPic.style.left = newLeft + 'px';
+  imgModalPic.style.top = newTop + 'px';
+  imgModalPic.style.right = 'auto';
+  imgModalPic.style.bottom = 'auto';
+});
+
+document.addEventListener('mouseup', ()=>{
+  if (isDragging) {
+    isDragging = false;
+    imgModalPic.style.cursor = 'grab';
+    imgModal.style.cursor = 'pointer';
+  }
+});
+
+imgModal.addEventListener('click', (e)=>{
+  // Only close if clicking on modal background (not during drag)
+  if (e.target === imgModal && !isDragging) {
+    imgModal.style.display = 'none';
+    imgModalPic.src = '';
+    imgModalPic.style.transform = '';
+  }
+});
+
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape'){
+    imgModal.style.display = 'none';
+    imgModalPic.src = '';
+    imgModalPic.style.transform = '';
+  }
+});
+document.getElementById('confirmBtn').addEventListener('click', confirmMarks);
+
+if(!cfg || !cfg.base_id){
+  updateSessionInfo('尚未选择资料库（base_id）。请先回引导页选择资料库。');
+}
 </script>
 </body>
 </html>

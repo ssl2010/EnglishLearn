@@ -27,7 +27,11 @@ from .services import (
     confirm_mark_grading,
     get_setting,
     set_setting,
-
+    analyze_ai_photos,
+    analyze_ai_photos_from_debug,
+    confirm_ai_extracted,
+    MEDIA_DIR,
+    ensure_media_dir,
 )
 
 
@@ -93,6 +97,21 @@ class AISuggestReq(BaseModel):
     word_count: int = 15
     phrase_count: int = 8
     sentence_count: int = 6
+
+
+class AIExtractItem(BaseModel):
+    position: int
+    zh_hint: Optional[str] = None
+    student_text: str = ""
+    matched_item_id: Optional[int] = None
+    is_correct: bool = True
+    include: bool = True
+
+
+class AIConfirmReq(BaseModel):
+    student_id: int
+    base_id: int
+    items: List[AIExtractItem]
 
 @app.post("/api/bootstrap")
 def api_bootstrap(req: BootstrapReq):
@@ -224,8 +243,42 @@ def api_submit_image(session_id: int, file: UploadFile = File(...)):
 
 
 @app.post("/api/practice-sessions/{session_id}/submit-marked-photo")
-def api_submit_marked_photo(session_id: int, file: UploadFile = File(...)):
-    return upload_marked_submission_image(session_id, file)
+def api_submit_marked_photo(
+    session_id: int,
+    files: List[UploadFile] = File(...),
+    confirm_mismatch: bool = False,
+    allow_external: bool = False,
+):
+    return upload_marked_submission_image(
+        session_id,
+        files,
+        confirm_mismatch=confirm_mismatch,
+        allow_external=allow_external,
+    )
+
+
+@app.post("/api/ai/grade-photos")
+def api_ai_grade_photos(
+    student_id: int,
+    base_id: int,
+    files: List[UploadFile] = File(...),
+):
+    return analyze_ai_photos(student_id, base_id, files)
+
+
+@app.post("/api/ai/grade-photos-debug")
+def api_ai_grade_photos_debug(
+    student_id: int,
+    base_id: int,
+):
+    """Debug mode: load from debug_last directory instead of calling LLM/OCR."""
+    return analyze_ai_photos_from_debug(student_id, base_id)
+
+
+@app.post("/api/ai/confirm-extracted")
+def api_ai_confirm_extracted(req: AIConfirmReq):
+    items = [it.model_dump() for it in req.items]
+    return confirm_ai_extracted(req.student_id, req.base_id, items)
 
 
 class ConfirmMarksReq(BaseModel):
@@ -298,8 +351,6 @@ def api_ai_suggest(req: AISuggestReq):
 
 
 # Serve generated media (PDFs, uploads)
-from .services import MEDIA_DIR, ensure_media_dir
-
 ensure_media_dir()
 # IMPORTANT: mount /media before '/' frontend mount
 app.mount('/media', StaticFiles(directory=MEDIA_DIR), name='media')

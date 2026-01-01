@@ -1,0 +1,3 @@
+# Tests directory
+# Allow test fixture images (override global *.jpg ignore)
+!fixtures/*.jpg
