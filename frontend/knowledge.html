@@ -22,21 +22,40 @@
 <body>
 <div class="wrap">
   <div class="card">
-    <h2 style="margin:0 0 6px 0">知识库管理</h2>
-    <div class="muted">推荐使用“文件导入”。导入成功后会自动把 <code>base_id</code> 写入本机浏览器配置（localStorage）。</div>
+    <h2 style="margin:0 0 6px 0">学习库管理</h2>
+    <div class="muted">管理学生的学习资料库，包括选择系统课本、创建自定义资料库、设置学习进度等。</div>
     <div style="margin-top:10px"><a href="/">← 返回引导页</a></div>
   </div>
 
   <div class="card">
-    <h3 style="margin-top:0">当前本机配置</h3>
+    <h3 style="margin-top:0">当前学生信息</h3>
     <div id="cfgInfo" class="muted"></div>
-    <div id="baseInfo" class="muted" style="margin-top:6px"></div>
   </div>
 
   <div class="card">
-    <h3 style="margin-top:0">从文件导入（推荐）</h3>
+    <h3 style="margin-top:0">我的学习库</h3>
+    <div class="muted" style="margin-bottom:10px">这些是学生当前正在学习的资料库。可以设置每个资料库的学习进度。</div>
+    <div id="myLearningBases"></div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">添加资料库到学习库</h3>
+    <div class="row" style="margin-bottom:10px">
+      <div>
+        <h4 style="margin:0 0 8px;font-size:13px">系统课本资料库</h4>
+        <div id="systemBases" class="muted">加载中...</div>
+      </div>
+      <div>
+        <h4 style="margin:0 0 8px;font-size:13px">我的自定义资料库</h4>
+        <div id="customBases" class="muted">加载中...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">从文件导入（创建新资料库）</h3>
     <div class="muted">
-      支持 JSON 文件：可同时创建资料库并导入全部知识点。建议使用我给你的 <code>EL_KB_V1</code> 格式。
+      支持 JSON 文件：可同时创建资料库并导入全部知识点。建议使用 <code>EL_KB_V1</code> 格式。
     </div>
     <div class="row" style="margin-top:10px">
       <div>
@@ -63,6 +82,10 @@
     <div class="muted">每条元素示例：{"type":"WORD","en_text":"swim","zh_hint":"游泳","unit_code":"Unit 1","difficulty_tag":"write"}</div>
     <div class="row" style="margin-top:10px">
       <div style="flex:0.5;min-width:160px">
+        <label class="muted">导入到资料库</label>
+        <select id="baseForImport"></select>
+      </div>
+      <div style="flex:0.5;min-width:160px">
         <label class="muted">mode</label>
         <select id="mode">
           <option value="skip">skip（冲突跳过）</option>
@@ -71,7 +94,7 @@
       </div>
       <div style="flex:1;min-width:260px;display:flex;gap:10px;align-items:end">
         <button class="secondary" id="sampleBtn">填入样例</button>
-        <button id="importBtn">导入到当前 base_id</button>
+        <button id="importBtn">导入</button>
       </div>
     </div>
     <textarea id="payload" placeholder="在这里粘贴 JSON 数组"></textarea>
@@ -92,12 +115,154 @@ async function apiJSON(path, opts){
   return res.json();
 }
 
-function refreshCfgInfo(){
+async function loadAll(){
   const cfg = getCfg();
   document.getElementById('cfgInfo').innerText =
-    `student_id=${cfg.student_id||'-'} | grade_code=${cfg.grade_code||'-'} | student_name=${cfg.student_name||'-'}`;
-  document.getElementById('baseInfo').innerText =
-    `base_id=${cfg.base_id||'-'}（没有 base_id 也可先用“文件导入”创建）`;
+    `学生: ${cfg.student_name||'-'} | 年级: ${cfg.grade_code||'-'} | ID: ${cfg.student_id||'-'}`;
+
+  if(!cfg.student_id){
+    document.getElementById('myLearningBases').innerHTML = '<div class="muted">请先在引导页完成初始化</div>';
+    return;
+  }
+
+  // Load learning library
+  await loadLearningLibrary(cfg.student_id);
+
+  // Load all bases (for adding to library)
+  await loadAvailableBases(cfg.student_id);
+
+  // Load bases for import dropdown
+  await loadBasesForImport();
+}
+
+async function loadLearningLibrary(studentId){
+  try{
+    const res = await apiJSON(`/api/students/${studentId}/learning-bases`);
+    const lb = res.learning_bases || [];
+    if(lb.length === 0){
+      document.getElementById('myLearningBases').innerHTML = '<div class="muted">学习库为空。请从下方添加资料库。</div>';
+      return;
+    }
+
+    const html = lb.map(b => {
+      const displayName = b.custom_name || b.base_name;
+      const typeTag = b.base_is_system ? '[系统]' : '[自定义]';
+      const activeStatus = b.is_active ? '启用' : '禁用';
+      return `
+        <div style="padding:12px;background:#f8f9fa;border-radius:8px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
+            <div>
+              <span style="font-weight:500">${displayName}</span>
+              <span class="muted" style="font-size:11px">${typeTag} #${b.base_id}</span>
+            </div>
+            <button class="secondary" onclick="removeLearningBase(${b.id}, ${studentId})" style="padding:4px 10px;font-size:12px">移除</button>
+          </div>
+          <div class="muted" style="font-size:12px">
+            进度: ${b.current_unit || '未设置'} | 状态: ${activeStatus}
+          </div>
+          <div style="margin-top:8px;display:flex;gap:6px">
+            <input type="text" id="progress_${b.id}" placeholder="如: Unit 3 或 __ALL__" value="${b.current_unit||''}" style="flex:1;padding:6px;font-size:12px" />
+            <button onclick="updateProgress(${b.id}, ${studentId})" style="padding:6px 12px;font-size:12px">更新进度</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+    document.getElementById('myLearningBases').innerHTML = html;
+  }catch(e){
+    document.getElementById('myLearningBases').innerHTML = `<div class="muted" style="color:#d00">加载失败: ${e.message}</div>`;
+  }
+}
+
+async function loadAvailableBases(studentId){
+  try{
+    // Load learning library to know which bases are already added
+    const lbRes = await apiJSON(`/api/students/${studentId}/learning-bases`);
+    const addedBaseIds = new Set((lbRes.learning_bases || []).map(b => b.base_id));
+
+    // Load system bases
+    const sysRes = await apiJSON(`/api/knowledge-bases?is_system=true`);
+    const sysBases = (sysRes.bases || []).filter(b => !addedBaseIds.has(b.id));
+    if(sysBases.length === 0){
+      document.getElementById('systemBases').innerHTML = '<div class="muted">所有系统课本已添加到学习库</div>';
+    }else{
+      const html = sysBases.map(b => `
+        <div style="padding:8px;background:#fff;border:1px solid #ddd;border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:13px">${b.name}</span>
+          <button onclick="addToLibrary(${b.id}, ${studentId})" style="padding:4px 10px;font-size:12px">添加</button>
+        </div>
+      `).join('');
+      document.getElementById('systemBases').innerHTML = html;
+    }
+
+    // Load custom bases
+    const custRes = await apiJSON(`/api/knowledge-bases?is_system=false`);
+    const custBases = (custRes.bases || []).filter(b => !addedBaseIds.has(b.id));
+    if(custBases.length === 0){
+      document.getElementById('customBases').innerHTML = '<div class="muted">没有自定义资料库（可通过导入文件创建）</div>';
+    }else{
+      const html = custBases.map(b => `
+        <div style="padding:8px;background:#fff;border:1px solid #ddd;border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:13px">${b.name}</span>
+          <button onclick="addToLibrary(${b.id}, ${studentId})" style="padding:4px 10px;font-size:12px">添加</button>
+        </div>
+      `).join('');
+      document.getElementById('customBases').innerHTML = html;
+    }
+  }catch(e){
+    document.getElementById('systemBases').innerHTML = `<div class="muted" style="color:#d00">${e.message}</div>`;
+  }
+}
+
+async function loadBasesForImport(){
+  try{
+    const res = await apiJSON(`/api/knowledge-bases`);
+    const bases = res.bases || [];
+    const sel = document.getElementById('baseForImport');
+    sel.innerHTML = bases.map(b => {
+      const typeTag = b.is_system ? '[系统]' : '[自定义]';
+      return `<option value="${b.id}">${typeTag} ${b.name}</option>`;
+    }).join('');
+    if(bases.length === 0){
+      sel.innerHTML = '<option value="">（暂无资料库）</option>';
+    }
+  }catch(e){
+    // ignore
+  }
+}
+
+async function addToLibrary(baseId, studentId){
+  try{
+    await apiJSON(`/api/students/${studentId}/learning-bases`, {
+      method: 'POST',
+      body: JSON.stringify({base_id: baseId, current_unit: '__ALL__'})
+    });
+    await loadAll();
+  }catch(e){
+    alert('添加失败：' + e.message);
+  }
+}
+
+async function removeLearningBase(lbId, studentId){
+  if(!confirm('确定要从学习库中移除这个资料库吗？')) return;
+  try{
+    await apiJSON(`/api/students/${studentId}/learning-bases/${lbId}`, {method: 'DELETE'});
+    await loadAll();
+  }catch(e){
+    alert('移除失败：' + e.message);
+  }
+}
+
+async function updateProgress(lbId, studentId){
+  const val = document.getElementById(`progress_${lbId}`).value.trim();
+  try{
+    await apiJSON(`/api/students/${studentId}/learning-bases/${lbId}`, {
+      method: 'PUT',
+      body: JSON.stringify({current_unit: val || null})
+    });
+    await loadAll();
+  }catch(e){
+    alert('更新失败：' + e.message);
+  }
 }
 
 function loadSample(){
@@ -111,13 +276,9 @@ function loadSample(){
 
 async function doImportPaste(){
   const cfg = getCfg();
-  if(!cfg.student_id){
-    alert('请先在引导页完成初始化（创建 student_id）');
-    location.href = '/';
-    return;
-  }
-  if(!cfg.base_id){
-    alert('当前没有 base_id。请先用“文件导入”创建资料库，或在引导页选择一个资料库。');
+  const baseId = parseInt(document.getElementById('baseForImport').value, 10);
+  if(!baseId){
+    alert('请选择一个资料库');
     return;
   }
 
@@ -128,7 +289,7 @@ async function doImportPaste(){
   const mode = document.getElementById('mode').value;
   const r = await apiJSON('/api/knowledge-items/import',{
     method:'POST',
-    body: JSON.stringify({base_id: cfg.base_id, mode, items})
+    body: JSON.stringify({base_id: baseId, mode, items})
   });
   document.getElementById('msg').innerText = `导入完成：${JSON.stringify(r)}`;
 }
@@ -156,13 +317,8 @@ async function doImportFile(){
     return;
   }
   const data = JSON.parse(txt);
-  // If server created a new base, update local cfg.base_id
-  if(data.base_id){
-    cfg.base_id = data.base_id;
-    setCfg(cfg);
-    refreshCfgInfo();
-  }
-  msg.innerText = `导入成功：${JSON.stringify(data)}。已写入本机 base_id（如有）。回到引导页刷新即可看到资料库。`;
+  msg.innerText = `导入成功：${JSON.stringify(data)}。资料库已创建，可在上方"添加资料库到学习库"中找到它。`;
+  await loadAll();
 }
 
 function showSpec(){
@@ -183,12 +339,12 @@ function showSpec(){
 说明：
 - 提交到 /api/knowledge-bases/import-file （multipart/form-data）。
 - 若 payload 中包含 base，则会创建新资料库并导入 items；响应会返回 base_id。
-- grade_code 建议与你在引导页选择的年级一致（例如 G4）。`
+- 新创建的资料库会显示在"我的自定义资料库"列表中，可手动添加到学习库。`
   );
 }
 
 window.addEventListener('DOMContentLoaded', ()=>{
-  refreshCfgInfo();
+  loadAll();
   document.getElementById('sampleBtn').addEventListener('click', loadSample);
   document.getElementById('importBtn').addEventListener('click', doImportPaste);
   document.getElementById('importFileBtn').addEventListener('click', doImportFile);
