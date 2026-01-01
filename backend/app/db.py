@@ -29,6 +29,13 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+def init_db() -> None:
+    """初始化数据库（空函数 - 数据库由 init_db.py 脚本初始化）"""
+    # Database is initialized separately using init_db.py script
+    # This function is kept for compatibility with startup hooks
+    pass
+
+
 @contextmanager
 def db() -> Iterable[sqlite3.Connection]:
     """数据库上下文管理器"""

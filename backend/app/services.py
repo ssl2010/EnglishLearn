@@ -220,51 +220,41 @@ def _attach_kb_matches(conn, base_id: int, items: List[Dict]) -> List[Dict]:
         norm = normalize_answer(cleaned_student) if cleaned_student else ""
         row = None
         if norm or zh_hint:
+            # Updated to use new 'items' table with new field names
             row = conn.execute(
                 """
-                SELECT * FROM knowledge_items
+                SELECT * FROM items
                 WHERE base_id=?
                   AND (
-                    (normalized_answer=? AND ?<>'')
-                    OR (lower(en_text)=? AND ?<>'')
-                    OR (trim(zh_hint)=? AND ?<>'')
+                    (LOWER(en_text)=? AND ?<>'')
+                    OR (zh_text=? AND ?<>'')
                   )
                 LIMIT 1
                 """,
                 (
                     base_id,
-                    norm,
-                    norm,
                     cleaned_student.lower(),
                     cleaned_student,
                     zh_hint,
                     zh_hint,
                 ),
             ).fetchone()
+        # Fuzzy matching if no exact match
         if not row and norm and len(norm) >= 6:
             row = conn.execute(
                 """
-                SELECT * FROM knowledge_items
-                WHERE base_id=? AND normalized_answer LIKE ?
+                SELECT * FROM items
+                WHERE base_id=? AND LOWER(en_text) LIKE ?
                 LIMIT 1
                 """,
-                (base_id, f"%{norm}%"),
-            ).fetchone()
-        if not row and norm and len(norm) >= 6:
-            row = conn.execute(
-                """
-                SELECT * FROM knowledge_items
-                WHERE base_id=? AND ? LIKE '%' || normalized_answer || '%'
-                LIMIT 1
-                """,
-                (base_id, norm),
+                (base_id, f"%{norm.lower()}%"),
             ).fetchone()
         hit = dict(row) if row else None
         item = dict(it)
         item["kb_hit"] = bool(hit)
         item["matched_item_id"] = int(hit["id"]) if hit else None
         item["matched_en_text"] = hit["en_text"] if hit else ""
-        item["matched_type"] = hit["type"] if hit else ""
+        item["matched_type"] = hit["item_type"] if hit else ""
         out.append(item)
     return out
 
@@ -1864,49 +1854,43 @@ def bootstrap_single_child(student_name: str, grade_code: str) -> Dict[str, int]
 
     返回：student_id, base_id
     """
+    from . import db as db_module
+
     with db() as conn:
-        # create student
-        cur = conn.execute(
-            "INSERT INTO students(name, grade_code, created_at) VALUES(?,?,?)",
-            (student_name, grade_code, utcnow_iso()),
-        )
-        student_id = cur.lastrowid
+        # create student using new db.py function
+        student_id = db_module.create_student(conn, student_name, grade=grade_code)
 
-        # create default base
+        # create default base using new db.py function
         base_name = f"Default ({grade_code})"
-        cur = conn.execute(
-            "INSERT INTO knowledge_bases(name, grade_code, is_system, created_at) VALUES(?,?,0,?)",
-            (base_name, grade_code, utcnow_iso()),
-        )
-        base_id = cur.lastrowid
+        base_id = db_module.create_base(conn, base_name, description=f"Default base for {grade_code}", is_system=False)
 
-        conn.execute(
-            "INSERT OR REPLACE INTO student_base_progress(student_id, base_id, current_unit_code) VALUES(?,?,NULL)",
-            (student_id, base_id),
-        )
+        # add base to student's learning library
+        db_module.add_learning_base(conn, student_id, base_id, custom_name=None, current_unit="__ALL__")
 
     return {"student_id": student_id, "base_id": base_id}
 
 
 def list_bases(grade_code: Optional[str] = None) -> List[Dict]:
+    """List bases. Note: grade_code parameter is deprecated in new schema but kept for API compatibility."""
+    from . import db as db_module
+
     with db() as conn:
-        if grade_code:
-            rows = conn.execute(
-                "SELECT * FROM knowledge_bases WHERE grade_code=? ORDER BY id DESC",
-                (grade_code,),
-            ).fetchall()
-        else:
-            rows = conn.execute("SELECT * FROM knowledge_bases ORDER BY id DESC").fetchall()
-    return [dict(r) for r in rows]
+        # New schema doesn't have grade_code on bases
+        # Return all bases (can filter by is_system if needed)
+        bases = db_module.get_bases(conn, is_system=None)
+        return bases
 
 
 def create_base(name: str, grade_code: str, is_system: bool = False) -> int:
+    """Create base. Note: grade_code parameter is deprecated in new schema but kept for API compatibility."""
+    from . import db as db_module
+
     with db() as conn:
-        cur = conn.execute(
-            "INSERT INTO knowledge_bases(name, grade_code, is_system, created_at) VALUES(?,?,?,?)",
-            (name, grade_code, 1 if is_system else 0, utcnow_iso()),
-        )
-        return int(cur.lastrowid)
+        # New schema doesn't use grade_code on bases
+        # Store grade_code in description if needed
+        description = f"Grade: {grade_code}" if grade_code else None
+        base_id = db_module.create_base(conn, name, description=description, is_system=is_system)
+        return base_id
 
 
 def upsert_items(base_id: int, items: List[Dict], mode: str = "skip") -> Dict[str, int]:
@@ -1914,71 +1898,58 @@ def upsert_items(base_id: int, items: List[Dict], mode: str = "skip") -> Dict[st
 
     mode:
       - skip: 若唯一键冲突则跳过（文档默认）
-      - update: 允许更新 zh_hint / difficulty_tag / normalized_answer
+      - update: 允许更新
 
-    注意：MVP 不做 silent overwrite，update 仍会保留 updated_at 供追溯。
+    注意：新schema字段映射:
+      - unit_code -> unit (使用 "__ALL__" 代替 None)
+      - type -> item_type
+      - zh_hint -> zh_text (中文提示)
+      - difficulty_tag, normalized_answer, is_enabled, source 等字段在新schema中不存在
     """
+    from . import db as db_module
+
     inserted = 0
     skipped = 0
     updated = 0
 
     with db() as conn:
+        # Get existing items to check for duplicates
+        existing_items = db_module.get_base_items(conn, base_id)
+        existing_map = {(item['unit'], item['en_text']): item for item in existing_items}
+
         for it in items:
+            # Map old fields to new schema
             unit_code = it.get("unit_code")
-            typ = it["type"].upper()
+            unit = unit_code if unit_code else "__ALL__"  # Use "__ALL__" instead of NULL
+            item_type = it["type"].upper() if "type" in it else "WORD"
             en_text = it["en_text"].strip()
-            zh_hint = it.get("zh_hint")
-            difficulty_tag = it.get("difficulty_tag", "write").lower()
-            if difficulty_tag not in ("write", "recognize"):
-                difficulty_tag = "write"
+            zh_text = it.get("zh_hint", "")  # Map zh_hint -> zh_text
 
-            normalized = it.get("normalized_answer") or normalize_answer(en_text)
-
-            try:
-                conn.execute(
-                    """
-                    INSERT INTO knowledge_items(
-                      base_id, unit_code, type, en_text, zh_hint, difficulty_tag,
-                      normalized_answer, is_enabled, source, created_at, updated_at
-                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?)
-                    """,
-                    (
-                        base_id,
-                        unit_code,
-                        typ,
-                        en_text,
-                        zh_hint,
-                        difficulty_tag,
-                        normalized,
-                        1,
-                        it.get("source", "IMPORT"),
-                        utcnow_iso(),
-                        utcnow_iso(),
-                    ),
-                )
-                inserted += 1
-            except Exception:
-                # unique constraint likely
+            # Check if item already exists
+            key = (unit, en_text)
+            if key in existing_map:
                 if mode == "update":
-                    conn.execute(
-                        """
-                        UPDATE knowledge_items
-                        SET zh_hint=?, difficulty_tag=?, normalized_answer=?, updated_at=?
-                        WHERE base_id=? AND unit_code IS ? AND type=? AND en_text=?
-                        """,
-                        (
-                            zh_hint,
-                            difficulty_tag,
-                            normalized,
-                            utcnow_iso(),
-                            base_id,
-                            unit_code,
-                            typ,
-                            en_text,
-                        ),
-                    )
+                    # Update existing item
+                    existing_id = existing_map[key]['id']
+                    db_module.update_item(conn, existing_id, zh_text=zh_text, item_type=item_type)
                     updated += 1
                 else:
+                    skipped += 1
+            else:
+                # Insert new item (position will be auto-calculated)
+                try:
+                    db_module.create_item(
+                        conn,
+                        base_id=base_id,
+                        zh_text=zh_text,
+                        en_text=en_text,
+                        unit=unit,
+                        position=None,  # Auto-calculate
+                        item_type=item_type
+                    )
+                    inserted += 1
+                except Exception:
+                    # Unique constraint or other error
                     skipped += 1
 
     return {"inserted": inserted, "updated": updated, "skipped": skipped}

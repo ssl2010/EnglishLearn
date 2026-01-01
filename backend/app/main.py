@@ -118,20 +118,164 @@ def api_bootstrap(req: BootstrapReq):
     return bootstrap_single_child(req.student_name, req.grade_code)
 
 
+# ============================================================
+# Student API Endpoints
+# ============================================================
+
+@app.get("/api/students")
+def api_get_students():
+    """Get all students"""
+    from .db import db, get_students
+    with db() as conn:
+        students = get_students(conn)
+    return {"students": students}
+
+
+@app.get("/api/students/{student_id}")
+def api_get_student(student_id: int):
+    """Get single student"""
+    from .db import db, get_student
+    with db() as conn:
+        student = get_student(conn, student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    return student
+
+
+class CreateStudentReq(BaseModel):
+    name: str
+    grade: Optional[str] = None
+
+
+@app.post("/api/students")
+def api_create_student(req: CreateStudentReq):
+    """Create new student"""
+    from .db import db, create_student
+    with db() as conn:
+        student_id = create_student(conn, req.name, req.grade)
+    return {"student_id": student_id}
+
+
+class UpdateStudentReq(BaseModel):
+    name: Optional[str] = None
+    grade: Optional[str] = None
+
+
+@app.put("/api/students/{student_id}")
+def api_update_student(student_id: int, req: UpdateStudentReq):
+    """Update student info"""
+    from .db import db, update_student, get_student
+    with db() as conn:
+        update_student(conn, student_id, req.name, req.grade)
+        student = get_student(conn, student_id)
+    return student
+
+
 @app.get("/api/system/status")
 def api_status(student_id: int, base_id: int):
     return get_system_status(student_id, base_id)
 
 
 @app.get("/api/knowledge-bases")
-def api_list_bases(grade_code: Optional[str] = None):
-    return {"bases": list_bases(grade_code)}
+def api_list_bases(grade_code: Optional[str] = None, is_system: Optional[bool] = None):
+    """List bases with optional filters"""
+    from .db import db, get_bases
+    with db() as conn:
+        bases = get_bases(conn, is_system=is_system)
+    return {"bases": bases}
 
 
 @app.post("/api/knowledge-bases")
 def api_create_base(req: CreateBaseReq):
     base_id = create_base(req.name, req.grade_code, req.is_system)
     return {"base_id": base_id}
+
+
+class UpdateBaseReq(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+@app.put("/api/knowledge-bases/{base_id}")
+def api_update_base(base_id: int, req: UpdateBaseReq):
+    """Update base (custom bases only)"""
+    from .db import db, update_base, get_base
+    with db() as conn:
+        update_base(conn, base_id, req.name, req.description)
+        base = get_base(conn, base_id)
+    return base
+
+
+@app.delete("/api/knowledge-bases/{base_id}")
+def api_delete_base(base_id: int):
+    """Delete base (custom bases only)"""
+    from .db import db, delete_base
+    with db() as conn:
+        delete_base(conn, base_id)
+    return {"success": True}
+
+
+@app.get("/api/knowledge-bases/{base_id}/items")
+def api_get_base_items(base_id: int, unit: Optional[str] = None):
+    """Get items for a base"""
+    from .db import db, get_base_items
+    with db() as conn:
+        items = get_base_items(conn, base_id, unit=unit)
+    return {"items": items}
+
+
+# ============================================================
+# Learning Library API Endpoints
+# ============================================================
+
+@app.get("/api/students/{student_id}/learning-bases")
+def api_get_learning_bases(student_id: int, is_active: Optional[bool] = None):
+    """Get student's learning library"""
+    from .db import db, get_student_learning_bases
+    with db() as conn:
+        learning_bases = get_student_learning_bases(conn, student_id, is_active=is_active)
+    return {"learning_bases": learning_bases}
+
+
+class AddLearningBaseReq(BaseModel):
+    base_id: int
+    custom_name: Optional[str] = None
+    current_unit: Optional[str] = None
+
+
+@app.post("/api/students/{student_id}/learning-bases")
+def api_add_learning_base(student_id: int, req: AddLearningBaseReq):
+    """Add base to student's learning library"""
+    from .db import db, add_learning_base
+    with db() as conn:
+        lb_id = add_learning_base(conn, student_id, req.base_id, req.custom_name, req.current_unit)
+    return {"id": lb_id}
+
+
+class UpdateLearningBaseReq(BaseModel):
+    custom_name: Optional[str] = None
+    current_unit: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+@app.put("/api/students/{student_id}/learning-bases/{lb_id}")
+def api_update_learning_base(student_id: int, lb_id: int, req: UpdateLearningBaseReq):
+    """Update learning base configuration"""
+    from .db import db, update_learning_base, get_student_learning_bases
+    with db() as conn:
+        update_learning_base(conn, lb_id, req.custom_name, req.current_unit, req.is_active)
+        # Return updated learning bases list
+        learning_bases = get_student_learning_bases(conn, student_id)
+    return {"learning_bases": learning_bases}
+
+
+@app.delete("/api/students/{student_id}/learning-bases/{lb_id}")
+def api_remove_learning_base(student_id: int, lb_id: int):
+    """Remove base from student's learning library"""
+    from .db import db, remove_learning_base
+    with db() as conn:
+        remove_learning_base(conn, lb_id)
+    return {"success": True}
 
 
 @app.post("/api/knowledge-items/import")
