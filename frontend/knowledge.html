@@ -153,10 +153,31 @@ async function loadLearningLibrary(studentId){
       return;
     }
 
-    const html = lb.map(b => {
+    // Load units for each base
+    const basesWithUnits = await Promise.all(lb.map(async (b) => {
+      try{
+        const itemsRes = await apiJSON(`/api/knowledge-bases/${b.base_id}/items`);
+        const items = itemsRes.items || [];
+        // Extract unique units
+        const units = [...new Set(items.map(item => item.unit).filter(u => u && u !== '__ALL__'))].sort();
+        return {...b, units};
+      }catch(e){
+        return {...b, units: []};
+      }
+    }));
+
+    const html = basesWithUnits.map(b => {
       const displayName = b.custom_name || b.base_name;
       const typeTag = b.base_is_system ? '[系统]' : '[自定义]';
       const activeStatus = b.is_active ? '启用' : '禁用';
+
+      // Generate unit options
+      let unitOptions = '<option value="">未设置</option>';
+      unitOptions += '<option value="__ALL__"' + (b.current_unit === '__ALL__' ? ' selected' : '') + '>全部/不分单元</option>';
+      b.units.forEach(unit => {
+        unitOptions += `<option value="${unit}"${b.current_unit === unit ? ' selected' : ''}>${unit}</option>`;
+      });
+
       return `
         <div style="padding:12px;background:#f8f9fa;border-radius:8px;margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
@@ -167,10 +188,12 @@ async function loadLearningLibrary(studentId){
             <button class="secondary" onclick="removeLearningBase(${b.id}, ${studentId})" style="padding:4px 10px;font-size:12px">移除</button>
           </div>
           <div class="muted" style="font-size:12px">
-            进度: ${b.current_unit || '未设置'} | 状态: ${activeStatus}
+            当前进度: ${b.current_unit || '未设置'} | 状态: ${activeStatus}
           </div>
           <div style="margin-top:8px;display:flex;gap:6px">
-            <input type="text" id="progress_${b.id}" placeholder="如: Unit 3 或 __ALL__" value="${b.current_unit||''}" style="flex:1;padding:6px;font-size:12px" />
+            <select id="progress_${b.id}" style="flex:1;padding:6px;font-size:12px;border:1px solid #ddd;border-radius:6px">
+              ${unitOptions}
+            </select>
             <button onclick="updateProgress(${b.id}, ${studentId})" style="padding:6px 12px;font-size:12px">更新进度</button>
           </div>
         </div>
@@ -262,7 +285,7 @@ async function removeLearningBase(lbId, studentId){
 }
 
 async function updateProgress(lbId, studentId){
-  const val = document.getElementById(`progress_${lbId}`).value.trim();
+  const val = document.getElementById(`progress_${lbId}`).value;
   try{
     await apiJSON(`/api/students/${studentId}/learning-bases/${lbId}`, {
       method: 'PUT',
