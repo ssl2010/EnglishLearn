@@ -9,7 +9,7 @@
     .wrap{max-width:980px;margin:0 auto;padding:24px}
     .card{background:#fff;border-radius:14px;padding:18px;margin-bottom:16px}
     label{display:block;margin-top:10px;font-size:14px;color:#333}
-    input{width:100%;padding:10px;border:1px solid #ddd;border-radius:10px}
+    input,select{width:100%;padding:10px;border:1px solid #ddd;border-radius:10px}
     button{margin-top:14px;padding:10px 14px;border:0;border-radius:10px;background:#111;color:#fff;cursor:pointer}
     .muted{color:#666;font-size:13px}
     .row{display:flex;gap:12px;flex-wrap:wrap}
@@ -21,16 +21,34 @@
     <p><a href="/">← 返回引导页</a></p>
     <h1>生成默写单（中文 → 英文）</h1>
     <div class="card">
-      <p class="muted">MVP：题目严格从已导入的知识库抽取（规则优先）。请先在引导页选择资料库（base_id）。</p>
+      <p class="muted">从学习库中选择资料库和范围，系统将根据学习进度智能选题。</p>
+
+      <div class="row">
+        <div>
+          <label>选择资料库（从学习库）</label>
+          <select id="baseSelect">
+            <option value="">加载中...</option>
+          </select>
+        </div>
+        <div>
+          <label>选择范围</label>
+          <select id="scopeSelect">
+            <option value="progress">学习进度内（推荐）</option>
+            <option value="all">全部单元</option>
+            <option value="custom">自定义单元</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="customUnitsDiv" style="display:none">
+        <label>Unit 范围（多个用逗号分隔，例如：Unit 1,Unit 2）</label>
+        <input id="units" placeholder="Unit 1,Unit 2" />
+      </div>
 
       <div class="row">
         <div>
           <label>题量 total_count</label>
           <input id="total" type="number" value="29" />
-        </div>
-        <div>
-          <label>Unit 范围（可选，多个用英文或中文逗号（, 或 ，）分隔，例如：U1,U2）</label>
-          <input id="units" placeholder="U1,U2" />
         </div>
       </div>
 
@@ -50,7 +68,7 @@
       </div>
 
       <label>标题（可选）</label>
-      <input id="title" value="四年级英语默写单" />
+      <input id="title" value="英语默写单" />
 
       <button id="go">生成</button>
       <div id="out" style="margin-top:12px"></div>
@@ -61,32 +79,105 @@
 const cfg = JSON.parse(localStorage.getItem('el_cfg')||'null');
 if(!cfg){ location.href='/'; }
 
-async function postJSON(url, data){
-  const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
-  if(!res.ok) throw new Error(await res.text());
-  return await res.json();
+let learningBases = [];
+let selectedBase = null;
+
+async function api(path, opts){
+  const res = await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
+  if(!res.ok){ throw new Error(await res.text()); }
+  return res.json();
 }
+
+async function loadLearningBases(){
+  try{
+    const res = await api(`/api/students/${cfg.student_id}/learning-bases?is_active=true`);
+    learningBases = res.learning_bases || [];
+
+    const sel = document.getElementById('baseSelect');
+    if(learningBases.length === 0){
+      sel.innerHTML = '<option value="">学习库为空，请先添加资料库</option>';
+      return;
+    }
+
+    sel.innerHTML = learningBases.map(b => {
+      const displayName = b.custom_name || b.base_name;
+      const typeTag = b.base_is_system ? '[系统]' : '[自定义]';
+      const progress = b.current_unit || '未设置';
+      return `<option value="${b.base_id}" data-progress="${b.current_unit||''}">${typeTag} ${displayName} (进度: ${progress})</option>`;
+    }).join('');
+
+    // Auto-select first base
+    if(learningBases.length > 0){
+      selectedBase = learningBases[0];
+    }
+  }catch(e){
+    document.getElementById('baseSelect').innerHTML = `<option value="">加载失败: ${e.message}</option>`;
+  }
+}
+
+document.getElementById('scopeSelect').addEventListener('change', (e) => {
+  const customDiv = document.getElementById('customUnitsDiv');
+  if(e.target.value === 'custom'){
+    customDiv.style.display = 'block';
+  }else{
+    customDiv.style.display = 'none';
+  }
+});
+
+document.getElementById('baseSelect').addEventListener('change', (e) => {
+  const baseId = parseInt(e.target.value, 10);
+  selectedBase = learningBases.find(b => b.base_id === baseId);
+});
 
 document.getElementById('go').onclick = async () => {
   const out = document.getElementById('out');
   out.innerHTML = '生成中...';
-  const unitsRaw = document.getElementById('units').value.trim();
-  const unit_scope = unitsRaw ? unitsRaw.split(/[,，]+/).map(x=>x.trim()).filter(Boolean) : null;
-  try{
-    if(!cfg.base_id){
-      throw new Error('尚未选择资料库（base_id）。请先回到引导页选择资料库。');
-    }
-    const data = await postJSON('/api/practice-sessions/generate', {
-      student_id: cfg.student_id,
-      base_id: cfg.base_id,
-      total_count: parseInt(document.getElementById('total').value||'29',10),
-      unit_scope,
-      title: document.getElementById('title').value||'四年级英语默写单',
-      mix_ratio: {
-        WORD: parseInt(document.getElementById('word').value||'15',10),
-        PHRASE: parseInt(document.getElementById('phrase').value||'8',10),
-        SENTENCE: parseInt(document.getElementById('sentence').value||'6',10)
+
+  const baseId = parseInt(document.getElementById('baseSelect').value, 10);
+  if(!baseId){
+    out.innerHTML = '<p style="color:#c00">❌ 请选择资料库</p>';
+    return;
+  }
+
+  const scope = document.getElementById('scopeSelect').value;
+  let unit_scope = null;
+
+  if(scope === 'progress'){
+    // Use learning progress
+    const base = learningBases.find(b => b.base_id === baseId);
+    if(base && base.current_unit && base.current_unit !== '__ALL__'){
+      // Extract unit number and generate scope
+      // e.g., "Unit 3" -> ["Unit 1", "Unit 2", "Unit 3"]
+      const match = base.current_unit.match(/Unit\s+(\d+)/i);
+      if(match){
+        const unitNum = parseInt(match[1], 10);
+        unit_scope = [];
+        for(let i = 1; i <= unitNum; i++){
+          unit_scope.push(`Unit ${i}`);
+        }
       }
+    }
+  }else if(scope === 'custom'){
+    const unitsRaw = document.getElementById('units').value.trim();
+    unit_scope = unitsRaw ? unitsRaw.split(/[,，]+/).map(x=>x.trim()).filter(Boolean) : null;
+  }
+  // scope === 'all' means unit_scope = null (all units)
+
+  try{
+    const data = await api('/api/practice-sessions/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        student_id: cfg.student_id,
+        base_id: baseId,
+        total_count: parseInt(document.getElementById('total').value||'29',10),
+        unit_scope,
+        title: document.getElementById('title').value||'英语默写单',
+        mix_ratio: {
+          WORD: parseInt(document.getElementById('word').value||'15',10),
+          PHRASE: parseInt(document.getElementById('phrase').value||'8',10),
+          SENTENCE: parseInt(document.getElementById('sentence').value||'6',10)
+        }
+      })
     });
     out.innerHTML = `
       <p>✅ 已生成：Session #${data.session_id}</p>
@@ -98,6 +189,9 @@ document.getElementById('go').onclick = async () => {
     out.innerHTML = `<p style="color:#c00">❌ 生成失败：${e.message}</p>`;
   }
 };
+
+// Load learning bases on page load
+window.addEventListener('DOMContentLoaded', loadLearningBases);
 </script>
 </body>
 </html>

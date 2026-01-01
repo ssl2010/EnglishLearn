@@ -247,9 +247,15 @@ class AddLearningBaseReq(BaseModel):
 def api_add_learning_base(student_id: int, req: AddLearningBaseReq):
     """Add base to student's learning library"""
     from .db import db, add_learning_base
-    with db() as conn:
-        lb_id = add_learning_base(conn, student_id, req.base_id, req.custom_name, req.current_unit)
-    return {"id": lb_id}
+    try:
+        with db() as conn:
+            lb_id = add_learning_base(conn, student_id, req.base_id, req.custom_name, req.current_unit)
+        return {"id": lb_id}
+    except Exception as e:
+        error_msg = str(e)
+        if "UNIQUE constraint failed" in error_msg:
+            raise HTTPException(status_code=400, detail="该资料库已在学习库中")
+        raise HTTPException(status_code=500, detail=f"添加失败: {error_msg}")
 
 
 class UpdateLearningBaseReq(BaseModel):
