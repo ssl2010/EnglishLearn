@@ -4,6 +4,7 @@
 
 ```
 EnglishLearn/
+├── ai_config.json             # AI提示词和OCR配置
 ├── backend/                    # 后端服务
 │   ├── app/
 │   │   ├── __init__.py
@@ -12,10 +13,10 @@ EnglishLearn/
 │   │   ├── services.py        # 业务逻辑（含AI批改）
 │   │   ├── openai_vision.py   # OpenAI/ARK Vision API集成
 │   │   ├── baidu_ocr.py       # 百度OCR集成
-│   │   ├── ai_config.json     # AI提示词和OCR配置
 │   │   ├── pdf_gen.py         # PDF生成
 │   │   ├── normalize.py       # 答案标准化
 │   │   └── mark_detect.py     # 标记检测
+│   ├── migrate_*.py           # 数据库迁移脚本
 │   ├── requirements.txt       # Python依赖
 │   └── media/                 # 运行时生成的媒体文件（gitignore）
 │
@@ -23,8 +24,16 @@ EnglishLearn/
 │   ├── index.html             # 引导页
 │   ├── generate.html          # 练习单生成
 │   ├── submit.html            # 提交与AI批改
+│   ├── practice.html          # 练习单管理
+│   ├── practice-view.html     # 练习单查看
+│   ├── knowledge.html         # 学习库管理
+│   ├── library.html           # 资料库列表
+│   ├── library-edit.html      # 资料库编辑
+│   ├── library-items.html     # 知识点管理
+│   ├── profile.html           # 学生信息
 │   ├── dashboard.html         # 统计面板
-│   └── knowledge.html         # 知识库管理
+│   ├── grading_shared.js      # 批改页面共享组件
+│   └── unit_tabs_shared.js    # 单元切换共享组件
 │
 ├── docs/                       # 文档
 │   ├── SPEC.md                # 功能规格说明
@@ -44,12 +53,18 @@ EnglishLearn/
 │   └── test_ai_grading.py    # AI批改功能测试
 │
 ├── seed/                       # 初始化数据
-│   └── sample_items.json
+│   ├── README.md
+│   ├── sample_items.json
+│   ├── template_example.json
+│   ├── complete_example.json
+│   └── 4年级上学期英语系统资料.json
 │
 ├── .env.example               # 环境变量模板
 ├── .gitignore                 # Git忽略配置
 ├── CLAUDE.md                  # Claude Code项目指南
 ├── CHANGELOG.md               # 变更日志
+├── FEATURES.md                # 功能要点清单
+├── UUID_DUPLICATE_DETECTION.md# UUID重复检测说明
 ├── PROJECT_STRUCTURE.md       # 本文件
 └── README.md                  # 项目说明
 ```
@@ -59,7 +74,7 @@ EnglishLearn/
 ### AI自动批改 (`backend/app/`)
 - **openai_vision.py**: Vision模型调用，识别试卷题目和答案
 - **baidu_ocr.py**: OCR文字识别，辅助答案定位
-- **ai_config.json**: AI提示词配置和OCR参数
+- **ai_config.json**: AI提示词配置和OCR参数（位于仓库根目录）
 - **services.py**: 
   - `analyze_ai_photos()`: 主流程，并行调用LLM和OCR
   - `confirm_ai_extracted()`: 确认并入库识别结果
@@ -103,9 +118,17 @@ DATABASE_URL=sqlite:///./backend/el.db
 
 # 调试开关
 EL_AI_DEBUG_SAVE=1
+
+# AI配置文件
+EL_AI_CONFIG_PATH=./ai_config.json
+
+# 自动清理任务
+EL_CLEANUP_TIME=03:00
+EL_CLEANUP_INTERVAL_DAYS=1
+EL_CLEANUP_UNDOWNLOADED_DAYS=14
 ```
 
-### `backend/app/ai_config.json`
+### `ai_config.json`（仓库根目录）
 ```json
 {
   "llm": {

@@ -1,0 +1,57 @@
+{
+  "format": "EL_KB_V1_UNITMETA",
+  "base": {
+    "name": "资料库名称（必填）",
+    "education_stage": "小学",
+    "grade": "4年级",
+    "term": "上学期",
+    "version": "2025年秋",
+    "publisher": "出版社名称",
+    "editor": "主编姓名",
+    "description": "资料库描述信息（可选）"
+  },
+  "unit_meta": [
+    {
+      "unit_code": "U1",
+      "unit_name": "单元名称",
+      "unit_index": 1,
+      "descriptions": []
+    },
+    {
+      "unit_code": "U2",
+      "unit_name": "第二单元",
+      "unit_index": 2,
+      "descriptions": []
+    }
+  ],
+  "items": [
+    {
+      "unit_code": "U1",
+      "type": "WORD",
+      "en_text": "hello",
+      "zh_hint": "你好",
+      "difficulty_tag": "write"
+    },
+    {
+      "unit_code": "U1",
+      "type": "PHRASE",
+      "en_text": "good morning",
+      "zh_hint": "早上好",
+      "difficulty_tag": "write"
+    },
+    {
+      "unit_code": "U1",
+      "type": "SENTENCE",
+      "en_text": "How are you?",
+      "zh_hint": "你好吗？",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "unit_code": "U2",
+      "type": "WORD",
+      "en_text": "apple",
+      "zh_hint": "苹果",
+      "difficulty_tag": "write"
+    }
+  ]
+}

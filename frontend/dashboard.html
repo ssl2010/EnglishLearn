@@ -63,9 +63,10 @@ async function load(){
 
   const tbody = document.querySelector('#sessions tbody');
   tbody.innerHTML='';
+  const statusLabel = (status)=> status === 'CORRECTED' ? '已入库' : '待提交';
   (d.recent_sessions||[]).forEach(s=>{
     const tr=document.createElement('tr');
-    tr.innerHTML = `<td>${(s.created_at||'').slice(0,19).replace('T',' ')}</td><td><span class="pill">${s.status}</span></td><td>${s.item_count||'-'}</td>`+
+    tr.innerHTML = `<td>${(s.created_at||'').slice(0,19).replace('T',' ')}</td><td><span class="pill">${statusLabel(s.status)}</span></td><td>${s.item_count||'-'}</td>`+
       `<td>${s.pdf_url?`<a href="${s.pdf_url}" target="_blank">默写单</a> `:''}${s.answer_pdf_url?`<a href="${s.answer_pdf_url}" target="_blank">答案</a>`:''}</td>`;
     tbody.appendChild(tr);
   });

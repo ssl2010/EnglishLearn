@@ -6,71 +6,695 @@
   <title>生成默写单</title>
   <style>
     body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
-    .wrap{max-width:980px;margin:0 auto;padding:24px}
-    .card{background:#fff;border-radius:14px;padding:18px;margin-bottom:16px}
-    label{display:block;margin-top:10px;font-size:14px;color:#333}
-    input,select{width:100%;padding:10px;border:1px solid #ddd;border-radius:10px}
-    button{margin-top:14px;padding:10px 14px;border:0;border-radius:10px;background:#111;color:#fff;cursor:pointer}
+    .wrap{max-width:1080px;margin:0 auto;padding:24px}
+    .card{background:#fff;border-radius:14px;padding:20px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,0.04)}
+    label{display:block;margin-top:10px;font-size:14px;color:#333;font-weight:500}
+    input[type="number"],input[type="text"]{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box}
+    button{margin-top:14px;padding:12px 24px;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer;font-weight:500;font-size:14px}
+    button:hover{background:#333}
     .muted{color:#666;font-size:13px}
-    .row{display:flex;gap:12px;flex-wrap:wrap}
-    .row > *{flex:1;min-width:220px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}
+    .row > *{flex:1 1 0;min-width:0}
+    @media (min-width: 640px) {
+      .row > * {
+        min-width:180px;
+      }
+    }
+
+    /* Base item styling */
+    .base-item{
+      background:#fff;
+      border:1px solid #e5e7eb;
+      border-radius:12px;
+      padding:18px;
+      margin-bottom:16px;
+      transition:all 0.2s ease
+    }
+    .base-item:hover{
+      border-color:#d1d5db;
+      box-shadow:0 4px 12px rgba(0,0,0,0.06)
+    }
+
+    /* Base header */
+    .base-header{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin-bottom:14px;
+      padding-bottom:12px;
+      border-bottom:1px solid #f3f4f6
+    }
+    .base-checkbox{
+      cursor:pointer;
+      width:18px;
+      height:18px;
+      margin:0;
+      accent-color:#0b5fff
+    }
+    .base-name{
+      font-weight:600;
+      font-size:15px;
+      flex:1;
+      color:#111
+    }
+    .base-tag{
+      font-size:11px;
+      font-weight:500;
+      color:#6b7280;
+      padding:3px 8px;
+      background:#f3f4f6;
+      border-radius:4px;
+      text-transform:uppercase;
+      letter-spacing:0.3px
+    }
+    .base-tag.system{color:#059669;background:#d1fae5}
+    .base-tag.custom{color:#0b5fff;background:#dbeafe}
+    .base-progress{
+      font-size:12px;
+      color:#6b7280;
+      display:flex;
+      align-items:center;
+      gap:4px
+    }
+    .base-progress::before{
+      content:"📚";
+      font-size:14px
+    }
+
+    /* Units container - horizontal layout */
+    .units-container{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:4px
+    }
+    .units-container.empty{
+      justify-content:center;
+      padding:20px
+    }
+
+    /* Unit chip/card */
+    .unit-chip{
+      position:relative;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      padding:8px 14px;
+      background:#f9fafb;
+      border:2px solid #e5e7eb;
+      border-radius:8px;
+      cursor:pointer;
+      transition:all 0.15s ease;
+      user-select:none;
+      font-size:13px;
+      font-weight:500;
+      color:#374151
+    }
+    .unit-chip:hover{
+      border-color:#d1d5db;
+      background:#f3f4f6;
+      transform:translateY(-1px);
+      box-shadow:0 2px 4px rgba(0,0,0,0.05)
+    }
+    .unit-chip input[type="checkbox"]{
+      cursor:pointer;
+      width:16px;
+      height:16px;
+      margin:0;
+      accent-color:#0b5fff
+    }
+    .unit-chip.checked{
+      background:#dbeafe;
+      border-color:#0b5fff;
+      color:#0b5fff
+    }
+    .unit-chip.checked:hover{
+      background:#bfdbfe;
+      border-color:#0284c7
+    }
+    .unit-chip.current{
+      position:relative
+    }
+    .unit-chip.current::after{
+      content:"";
+      position:absolute;
+      top:-3px;
+      right:-3px;
+      width:8px;
+      height:8px;
+      background:#10b981;
+      border:2px solid #fff;
+      border-radius:50%;
+      box-shadow:0 0 0 1px #10b981
+    }
+    .unit-chip.current .unit-label::after{
+      content:" •";
+      color:#10b981;
+      margin-left:2px
+    }
+
+    /* Select all / deselect all buttons */
+    .quick-actions{
+      margin-top:8px;
+      padding-top:12px;
+      border-top:1px solid #f3f4f6;
+      display:flex;
+      gap:8px;
+      align-items:center
+    }
+    .quick-btn{
+      padding:5px 10px;
+      font-size:12px;
+      background:#fff;
+      border:1px solid #d1d5db;
+      border-radius:6px;
+      cursor:pointer;
+      color:#6b7280;
+      font-weight:500;
+      transition:all 0.15s
+    }
+    .quick-btn:hover{
+      background:#f9fafb;
+      border-color:#9ca3af;
+      color:#374151
+    }
+    .selection-summary{
+      font-size:12px;
+      color:#6b7280;
+      margin-left:auto
+    }
+
+    /* Page header */
+    .page-header{
+      margin-bottom:24px
+    }
+    .page-header h1{
+      margin:0 0 8px 0;
+      font-size:26px;
+      font-weight:700;
+      color:#111
+    }
+    .page-header .subtitle{
+      color:#6b7280;
+      font-size:14px;
+      margin:0
+    }
+    .back-link{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      color:#6b7280;
+      text-decoration:none;
+      font-size:14px;
+      margin-bottom:16px;
+      transition:color 0.15s
+    }
+    .back-link:hover{
+      color:#111
+    }
+
+    /* Params section - compact collapsible design */
+    .params-section{
+      background:#f9fafb;
+      border-radius:10px;
+      padding:16px;
+      margin-top:20px
+    }
+    .params-header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:0;
+      cursor:pointer;
+      user-select:none
+    }
+    .params-header h3{
+      margin:0;
+      font-size:14px;
+      font-weight:600;
+      color:#374151;
+      text-transform:uppercase;
+      letter-spacing:0.5px
+    }
+    .params-toggle{
+      padding:6px 12px;
+      font-size:12px;
+      background:#fff;
+      border:1px solid #d1d5db;
+      border-radius:6px;
+      cursor:pointer;
+      color:#6b7280;
+      font-weight:500;
+      transition:all 0.15s
+    }
+    .params-toggle:hover{
+      background:#f9fafb;
+      border-color:#9ca3af;
+      color:#374151
+    }
+    .params-summary{
+      margin-top:12px;
+      padding:12px;
+      background:#fff;
+      border-radius:8px;
+      border:1px solid #e5e7eb;
+      font-size:13px;
+      color:#374151;
+      line-height:1.8
+    }
+    .params-summary-label{
+      color:#6b7280;
+      font-weight:500;
+      margin-right:8px
+    }
+    .params-detail{
+      display:none;
+      margin-top:12px
+    }
+    .params-detail.active{
+      display:block
+    }
+    .params-section h3{
+      margin:0 0 12px 0;
+      font-size:14px;
+      font-weight:600;
+      color:#374151;
+      text-transform:uppercase;
+      letter-spacing:0.5px
+    }
+    .param-group{
+      background:#fff;
+      border-radius:8px;
+      padding:14px;
+      margin-bottom:12px;
+      border:1px solid #e5e7eb
+    }
+    .param-group-title{
+      font-size:13px;
+      font-weight:600;
+      color:#6b7280;
+      margin:0 0 10px 0;
+      display:flex;
+      align-items:center;
+      gap:6px
+    }
+    .param-group-title::before{
+      content:"";
+      width:3px;
+      height:14px;
+      background:#0b5fff;
+      border-radius:2px
+    }
+    .checkbox-group{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap
+    }
+    .checkbox-label{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 14px;
+      background:#f9fafb;
+      border:2px solid #e5e7eb;
+      border-radius:8px;
+      cursor:pointer;
+      transition:all 0.15s ease;
+      user-select:none;
+      font-size:14px;
+      font-weight:500;
+      color:#374151
+    }
+    .checkbox-label:hover{
+      border-color:#d1d5db;
+      background:#f3f4f6
+    }
+    .checkbox-label input[type="checkbox"]{
+      cursor:pointer;
+      width:18px;
+      height:18px;
+      margin:0;
+      accent-color:#0b5fff
+    }
+    .checkbox-label.checked{
+      background:#dbeafe;
+      border-color:#0b5fff;
+      color:#0b5fff
+    }
+    .checkbox-label.checked:hover{
+      background:#bfdbfe;
+      border-color:#0284c7
+    }
+    /* Preview section */
+    .preview-section{
+      background:#f9fafb;
+      border:1px solid #e5e7eb;
+      border-radius:10px;
+      padding:20px;
+      margin-top:16px;
+      display:none
+    }
+    .preview-section.show{
+      display:block
+    }
+    .preview-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:16px;
+      padding-bottom:12px;
+      border-bottom:2px solid #e5e7eb
+    }
+    .preview-title{
+      font-size:16px;
+      font-weight:600;
+      color:#111
+    }
+    .preview-stats{
+      font-size:13px;
+      color:#6b7280
+    }
+    .items-grid{
+      display:block;
+      margin-bottom:16px
+    }
+    .item-card{
+      background:#fff;
+      border:1px solid #e5e7eb;
+      border-radius:8px;
+      padding:12px;
+      transition:all 0.15s
+    }
+    .item-card:hover{
+      border-color:#d1d5db;
+      box-shadow:0 2px 4px rgba(0,0,0,0.05)
+    }
+    .item-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:8px
+    }
+    .item-position{
+      font-size:12px;
+      font-weight:600;
+      color:#6b7280;
+      background:#f3f4f6;
+      padding:2px 8px;
+      border-radius:4px
+    }
+    .item-type{
+      font-size:11px;
+      font-weight:500;
+      padding:2px 6px;
+      border-radius:4px
+    }
+    .item-type.WORD{background:#dbeafe;color:#0b5fff}
+    .item-type.PHRASE{background:#fef3c7;color:#d97706}
+    .item-type.SENTENCE{background:#d1fae5;color:#059669}
+    .item-zh{
+      font-size:14px;
+      color:#111;
+      margin-bottom:4px
+    }
+    .item-en{
+      font-size:12px;
+      color:#9ca3af;
+      font-style:italic
+    }
+    .preview-actions{
+      display:flex;
+      gap:12px;
+      padding-top:16px;
+      border-top:1px solid #e5e7eb
+    }
+    .preview-actions button{
+      flex:1;
+      margin:0
+    }
+    .btn-confirm{
+      background:#10b981;
+      color:#fff
+    }
+    .btn-confirm:hover{
+      background:#059669
+    }
+    .btn-regenerate{
+      background:#fff;
+      color:#111;
+      border:1px solid #d1d5db
+    }
+    .btn-regenerate:hover{
+      background:#f9fafb
+    }
+    .btn-adjust{
+      background:#fff;
+      color:#0b5fff;
+      border:1px solid #0b5fff
+    }
+    .btn-adjust:hover{
+      background:#f0f9ff
+    }
+    /* Top action buttons (duplicated next to "生成练习单") */
+    #topActions button{
+      padding:10px 16px;
+      font-size:14px;
+      font-weight:500;
+      border-radius:8px;
+      cursor:pointer;
+      transition:all 0.15s;
+      white-space:nowrap
+    }
+    #topActions .btn-confirm{
+      background:#10b981;
+      color:#fff;
+      border:none
+    }
+    #topActions .btn-confirm:hover{
+      background:#059669
+    }
+    #topActions .btn-regenerate{
+      background:#f3f4f6;
+      color:#111;
+      border:1px solid #d1d5db
+    }
+    #topActions .btn-regenerate:hover{
+      background:#e5e7eb;
+      border-color:#9ca3af
+    }
+    #topActions .btn-adjust{
+      background:#f0f9ff;
+      color:#0b5fff;
+      border:1px solid #0b5fff
+    }
+    #topActions .btn-adjust:hover{
+      background:#dbeafe;
+      border-color:#0284c7
+    }
+    /* Section-based preview (exam format) */
+    .section-group{
+      margin-bottom:24px;
+      page-break-inside:avoid
+    }
+    .section-header{
+      font-size:15px;
+      font-weight:700;
+      color:#111;
+      margin-bottom:12px;
+      padding-bottom:8px;
+      border-bottom:1px solid #ddd;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      flex-wrap:wrap
+    }
+    .shortage-warning{
+      font-size:13px;
+      font-weight:600;
+      color:#dc2626;
+      background:#fee2e2;
+      padding:4px 12px;
+      border-radius:6px;
+      border:1px solid #fca5a5;
+      display:inline-flex;
+      align-items:center;
+      gap:4px
+    }
+    .section-items{
+      line-height:2.5;
+      margin-bottom:8px
+    }
+    /* 单词：3列布局 */
+    .section-items-word{
+      display:grid;
+      grid-template-columns:repeat(3, 1fr);
+      gap:12px 20px;
+      align-items:start
+    }
+    /* 短语：2列 */
+    .section-items-phrase{
+      display:grid;
+      grid-template-columns:repeat(2, 1fr);
+      gap:12px 20px;
+      align-items:start
+    }
+    /* 句子：每行一题 */
+    .section-items-sentence{
+      display:flex;
+      flex-direction:column;
+      gap:16px
+    }
+    .preview-item{
+      display:flex;
+      gap:8px;
+      align-items:baseline;
+      padding:8px 0;
+      border-bottom:1px dotted #e5e7eb
+    }
+    /* 句子类型：序号和英文同一行，中文提示另起一行 */
+    .section-items-sentence .preview-item{
+      display:block;
+      border-bottom:1px solid #ddd;
+      padding:8px 0;
+      line-height:1.8
+    }
+    .section-items-sentence .item-number{
+      display:inline;
+      margin-right:6px
+    }
+    .section-items-sentence .item-answer{
+      display:inline
+    }
+    .section-items-sentence .item-hint{
+      display:block;
+      padding-left:28px;
+      margin-top:2px
+    }
+    .item-number{
+      font-size:14px;
+      font-weight:600;
+      color:#666;
+      flex-shrink:0
+    }
+    .item-hint{
+      font-size:14px;
+      color:#888;
+      margin-left:6px
+    }
+    .item-answer{
+      font-size:17px;
+      color:#111;
+      font-weight:500
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <p><a href="/">← 返回引导页</a></p>
-    <h1>生成默写单（中文 → 英文）</h1>
+    <a href="/" class="back-link">← 返回引导页</a>
+
+    <div class="page-header">
+      <h1>生成默写单</h1>
+      <p class="subtitle">从学习库中选择资料库和单元范围，系统将根据学习进度和掌握情况智能选题</p>
+    </div>
+
     <div class="card">
-      <p class="muted">从学习库中选择资料库和范围，系统将根据学习进度智能选题。</p>
+      <h3 style="margin:0 0 16px 0;font-size:15px;font-weight:600;color:#374151">选择出题范围</h3>
+      <div id="basesContainer">
+        <div class="muted">加载中...</div>
+      </div>
+    </div>
 
-      <div class="row">
-        <div>
-          <label>选择资料库（从学习库）</label>
-          <select id="baseSelect">
-            <option value="">加载中...</option>
-          </select>
+    <div class="card">
+      <div class="params-section">
+        <div class="params-header" onclick="toggleParams()">
+          <h3>生成参数</h3>
+          <button type="button" class="params-toggle" id="paramsToggle">修改</button>
         </div>
-        <div>
-          <label>选择范围</label>
-          <select id="scopeSelect">
-            <option value="progress">学习进度内（推荐）</option>
-            <option value="all">全部单元</option>
-            <option value="custom">自定义单元</option>
-          </select>
+
+        <!-- Compact summary view -->
+        <div class="params-summary" id="paramsSummary">
+          <div><span class="params-summary-label">标题:</span><span id="summaryTitle">英语默写单</span></div>
+          <div><span class="params-summary-label">题量:</span><span id="summaryMix">单词 15 | 短语 8 | 句子 6</span> (总计 <span id="summaryTotal">29</span>)</div>
+          <div><span class="params-summary-label">要求:</span><span id="summaryDifficulty">会写 + 会认</span></div>
+        </div>
+
+        <!-- Detailed edit view (hidden by default) -->
+        <div class="params-detail" id="paramsDetail">
+          <!-- 基础配置 -->
+          <div class="param-group">
+            <div class="param-group-title">基础配置</div>
+            <div style="margin-bottom:12px">
+              <label style="margin-top:0">标题</label>
+              <input type="text" id="title" value="英语默写单" onchange="updateParamsSummary()" oninput="updateParamsSummary()" />
+            </div>
+            <div>
+              <label style="margin-top:0">总题量 <span class="muted" style="font-weight:400">(自动计算)</span></label>
+              <input type="number" id="total" value="29" min="1" max="100" readonly style="background:#f3f4f6;cursor:not-allowed" />
+            </div>
+          </div>
+
+          <!-- 题型分布 -->
+          <div class="param-group">
+            <div class="param-group-title">题型分布</div>
+            <div class="row">
+              <div>
+                <label style="margin-top:0">单词</label>
+                <input type="number" id="word" value="15" min="0" max="50" onchange="updateTotal();updateParamsSummary()" oninput="updateTotal();updateParamsSummary()" />
+              </div>
+              <div>
+                <label style="margin-top:0">短语</label>
+                <input type="number" id="phrase" value="8" min="0" max="30" onchange="updateTotal();updateParamsSummary()" oninput="updateTotal();updateParamsSummary()" />
+              </div>
+              <div>
+                <label style="margin-top:0">句子</label>
+                <input type="number" id="sentence" value="6" min="0" max="20" onchange="updateTotal();updateParamsSummary()" oninput="updateTotal();updateParamsSummary()" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 要求筛选 -->
+          <div class="param-group">
+            <div class="param-group-title">要求筛选</div>
+            <div class="checkbox-group">
+              <label class="checkbox-label" id="writeLabel" onclick="toggleDifficultyCheckbox('write')">
+                <input type="checkbox" id="difficultyWrite" checked onchange="updateDifficultyLabels();updateParamsSummary()" onclick="event.stopPropagation()">
+                <span>会写</span>
+              </label>
+              <label class="checkbox-label checked" id="readLabel" onclick="toggleDifficultyCheckbox('read')">
+                <input type="checkbox" id="difficultyRead" checked onchange="updateDifficultyLabels();updateParamsSummary()" onclick="event.stopPropagation()">
+                <span>会认</span>
+              </label>
+            </div>
+            <div class="muted" style="margin-top:8px;font-size:12px">根据教材"要求"标注筛选出题范围，至少选择一项</div>
+          </div>
         </div>
       </div>
 
-      <div id="customUnitsDiv" style="display:none">
-        <label>Unit 范围（多个用逗号分隔，例如：Unit 1,Unit 2）</label>
-        <input id="units" placeholder="Unit 1,Unit 2" />
-      </div>
-
-      <div class="row">
-        <div>
-          <label>题量 total_count</label>
-          <input id="total" type="number" value="29" />
+      <!-- Action buttons container -->
+      <div style="display:flex;gap:12px;align-items:center;margin-top:16px;flex-wrap:wrap">
+        <button id="go">生成练习单</button>
+        <div id="topActions" style="display:none;flex:1;gap:8px;flex-wrap:wrap">
+          <button class="btn-confirm" id="confirmBtnTop">✓ 确认生成 PDF</button>
+          <button class="btn-regenerate" id="regenerateBtnTop">↻ 重新生成</button>
+          <button class="btn-adjust" id="adjustBtnTop">← 调整范围</button>
         </div>
       </div>
 
-      <div class="row">
-        <div>
-          <label>单词数（WORD）</label>
-          <input id="word" type="number" value="15" />
+      <!-- Preview Section -->
+      <div id="previewSection" class="preview-section">
+        <div class="preview-header">
+          <div class="preview-title">练习单预览</div>
+          <div class="preview-stats" id="previewStats"></div>
         </div>
-        <div>
-          <label>短语数（PHRASE）</label>
-          <input id="phrase" type="number" value="8" />
-        </div>
-        <div>
-          <label>句子数（SENTENCE）</label>
-          <input id="sentence" type="number" value="6" />
+        <div id="itemsGrid" class="items-grid"></div>
+        <div class="preview-actions">
+          <button class="btn-confirm" id="confirmBtn">✓ 确认生成 PDF</button>
+          <button class="btn-regenerate" id="regenerateBtn">↻ 重新生成</button>
+          <button class="btn-adjust" id="adjustBtn">← 调整范围</button>
         </div>
       </div>
 
-      <label>标题（可选）</label>
-      <input id="title" value="英语默写单" />
-
-      <button id="go">生成</button>
+      <!-- Result section (moved below preview for better UX) -->
       <div id="out" style="margin-top:12px"></div>
     </div>
   </div>
@@ -80,21 +704,137 @@ const cfg = JSON.parse(localStorage.getItem('el_cfg')||'null');
 if(!cfg){ location.href='/'; }
 
 let learningBases = [];
-let selectedBase = null;
+let currentSessionData = null; // Store current session data for preview
+
+// Toggle params section
+function toggleParams(){
+  const detail = document.getElementById('paramsDetail');
+  const toggle = document.getElementById('paramsToggle');
+  const summary = document.getElementById('paramsSummary');
+
+  if(detail.classList.contains('active')){
+    // Collapse
+    detail.classList.remove('active');
+    toggle.textContent = '修改';
+    summary.style.display = 'block';
+  }else{
+    // Expand
+    detail.classList.add('active');
+    toggle.textContent = '收起';
+    summary.style.display = 'none';
+  }
+}
+
+// Update params summary
+function updateParamsSummary(){
+  const title = document.getElementById('title').value || '英语默写单';
+  const word = parseInt(document.getElementById('word').value || '0', 10);
+  const phrase = parseInt(document.getElementById('phrase').value || '0', 10);
+  const sentence = parseInt(document.getElementById('sentence').value || '0', 10);
+  const total = word + phrase + sentence;
+
+  const writeChecked = document.getElementById('difficultyWrite').checked;
+  const readChecked = document.getElementById('difficultyRead').checked;
+
+  let difficultyText = '';
+  if(writeChecked && readChecked){
+    difficultyText = '会写 + 会认';
+  }else if(writeChecked){
+    difficultyText = '会写';
+  }else if(readChecked){
+    difficultyText = '会认';
+  }
+
+  document.getElementById('summaryTitle').textContent = title;
+  document.getElementById('summaryMix').textContent = `单词 ${word} | 短语 ${phrase} | 句子 ${sentence}`;
+  document.getElementById('summaryTotal').textContent = total;
+  document.getElementById('summaryDifficulty').textContent = difficultyText;
+}
+
+// Auto-calculate total count
+function updateTotal(){
+  const word = parseInt(document.getElementById('word').value || '0', 10);
+  const phrase = parseInt(document.getElementById('phrase').value || '0', 10);
+  const sentence = parseInt(document.getElementById('sentence').value || '0', 10);
+  const total = word + phrase + sentence;
+  document.getElementById('total').value = total;
+}
+
+// Toggle difficulty checkbox and update UI
+function toggleDifficultyCheckbox(type){
+  const checkbox = document.getElementById(`difficulty${type === 'write' ? 'Write' : 'Read'}`);
+  checkbox.checked = !checkbox.checked;
+  updateDifficultyLabels();
+}
+
+// Update difficulty label styles based on checkbox state
+function updateDifficultyLabels(){
+  const writeCheckbox = document.getElementById('difficultyWrite');
+  const readCheckbox = document.getElementById('difficultyRead');
+  const writeLabel = document.getElementById('writeLabel');
+  const readLabel = document.getElementById('readLabel');
+
+  // Prevent unchecking both (at least one must be selected)
+  if(!writeCheckbox.checked && !readCheckbox.checked){
+    // Re-check the one that was just unchecked
+    if(event && event.target){
+      event.target.checked = true;
+    }
+    return;
+  }
+
+  // Update label styles
+  if(writeCheckbox.checked){
+    writeLabel.classList.add('checked');
+  }else{
+    writeLabel.classList.remove('checked');
+  }
+
+  if(readCheckbox.checked){
+    readLabel.classList.add('checked');
+  }else{
+    readLabel.classList.remove('checked');
+  }
+}
+
+// Get difficulty filter based on checkbox states
+function getDifficultyFilter(){
+  const writeChecked = document.getElementById('difficultyWrite').checked;
+  const readChecked = document.getElementById('difficultyRead').checked;
+
+  if(writeChecked && readChecked){
+    return null; // Both selected = all
+  }else if(writeChecked){
+    return 'write';
+  }else if(readChecked){
+    return 'read';
+  }
+  return null;
+}
 
 async function api(path, opts){
   const res = await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
+
+  // Read response body as text first (can only be read once)
+  const text = await res.text();
+
   if(!res.ok){
     let errorMsg;
     try{
-      const errorData = await res.json();
+      const errorData = JSON.parse(text);
       errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData);
     }catch(e){
-      errorMsg = await res.text();
+      errorMsg = text || res.statusText;
     }
     throw new Error(errorMsg);
   }
-  return res.json();
+
+  // Parse successful response
+  try{
+    return JSON.parse(text);
+  }catch(e){
+    throw new Error('Invalid JSON response');
+  }
 }
 
 async function loadLearningBases(){
@@ -102,85 +842,398 @@ async function loadLearningBases(){
     const res = await api(`/api/students/${cfg.student_id}/learning-bases?is_active=true`);
     learningBases = res.learning_bases || [];
 
-    const sel = document.getElementById('baseSelect');
     if(learningBases.length === 0){
-      sel.innerHTML = '<option value="">学习库为空，请先添加资料库</option>';
+      document.getElementById('basesContainer').innerHTML = '<div class="muted">学习库为空，请先在"管理学习库"中添加资料库。</div>';
       return;
     }
 
-    sel.innerHTML = learningBases.map(b => {
-      const displayName = b.custom_name || b.base_name;
-      const typeTag = b.base_is_system ? '[系统]' : '[自定义]';
-      const progress = b.current_unit || '未设置';
-      return `<option value="${b.base_id}" data-progress="${b.current_unit||''}">${typeTag} ${displayName} (进度: ${progress})</option>`;
-    }).join('');
+    // Load units and unit metadata for each base
+    const basesWithUnits = await Promise.all(learningBases.map(async (b) => {
+      try{
+        // Fetch unit metadata (already sorted by unit_index from backend)
+        const unitsRes = await api(`/api/knowledge-bases/${b.base_id}/units`);
+        const unitsMeta = unitsRes.units || [];
 
-    // Auto-select first base
-    if(learningBases.length > 0){
-      selectedBase = learningBases[0];
-    }
+        // Use unit_code from metadata in the order provided by backend (sorted by unit_index)
+        const units = unitsMeta.map(u => u.unit_code);
+
+        // Create mapping: unit_code -> unit_name
+        const unitNames = {};
+        unitsMeta.forEach(u => {
+          unitNames[u.unit_code] = u.unit_name;
+        });
+
+        return {...b, units, unitNames};
+      }catch(e){
+        return {...b, units: [], unitNames: {}};
+      }
+    }));
+
+    // Update learningBases to include units
+    learningBases = basesWithUnits;
+
+    renderBases(basesWithUnits);
   }catch(e){
-    document.getElementById('baseSelect').innerHTML = `<option value="">加载失败: ${e.message}</option>`;
+    document.getElementById('basesContainer').innerHTML = `<div class="muted" style="color:#d00">加载失败: ${e.message}</div>`;
   }
 }
 
-document.getElementById('scopeSelect').addEventListener('change', (e) => {
-  const customDiv = document.getElementById('customUnitsDiv');
-  if(e.target.value === 'custom'){
-    customDiv.style.display = 'block';
+function renderBases(basesWithUnits){
+  const container = document.getElementById('basesContainer');
+
+  const html = basesWithUnits.map(base => {
+    const displayName = base.custom_name || base.base_name;
+    const typeTag = base.base_is_system ? 'system' : 'custom';
+    const typeLabel = base.base_is_system ? '系统' : '自定义';
+    const progress = base.current_unit || '未设置';
+    const baseId = base.base_id;
+
+    // Generate unit chips
+    let unitChips = '';
+    if(base.units.length > 0){
+      unitChips = base.units.map(unit => {
+        const isCurrent = unit === base.current_unit;
+        const unitName = base.unitNames && base.unitNames[unit] ? base.unitNames[unit] : '';
+        const displayText = unitName ? `${unit} - ${unitName}` : unit;
+        return `
+          <div class="unit-chip ${isCurrent ? 'current' : ''}" id="chip_${baseId}_${unit}" onclick="toggleUnit(${baseId}, '${unit}')">
+            <input type="checkbox" id="unit_${baseId}_${unit}" data-base="${baseId}" data-unit="${unit}" onchange="onUnitChange(${baseId})" onclick="event.stopPropagation()">
+            <span class="unit-label">${displayText}</span>
+          </div>
+        `;
+      }).join('');
+    }else{
+      unitChips = '<div class="muted" style="padding:10px 0">该资料库没有单元划分</div>';
+    }
+
+    return `
+      <div class="base-item" data-base-id="${baseId}">
+        <div class="base-header">
+          <input type="checkbox" class="base-checkbox" id="base_${baseId}" data-base="${baseId}" onchange="onBaseChange(${baseId})">
+          <div class="base-name">${displayName}</div>
+          <span class="base-tag ${typeTag}">${typeLabel}</span>
+          <span class="base-progress">${progress}</span>
+        </div>
+        <div class="units-container ${base.units.length === 0 ? 'empty' : ''}" id="units_${baseId}">
+          ${unitChips}
+        </div>
+        ${base.units.length > 0 ? `
+          <div class="quick-actions">
+            <span class="selection-summary" id="summary_${baseId}"></span>
+            <span class="muted" style="font-size:11px;margin-left:auto">提示：点击资料库复选框可在"全选/全不选/学习进度"之间切换</span>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = html;
+
+  // Set default selections and update UI
+  basesWithUnits.forEach(base => {
+    setDefaultSelection(base);
+    updateSelectionSummary(base.base_id);
+  });
+}
+
+function toggleUnit(baseId, unit){
+  const checkbox = document.getElementById(`unit_${baseId}_${unit}`);
+  checkbox.checked = !checkbox.checked;
+  onUnitChange(baseId);
+}
+
+function selectAllUnits(baseId){
+  const base = learningBases.find(b => b.base_id === baseId);
+  base.units.forEach(unit => {
+    const checkbox = document.getElementById(`unit_${baseId}_${unit}`);
+    if(checkbox) checkbox.checked = true;
+  });
+  onUnitChange(baseId);
+}
+
+function deselectAllUnits(baseId){
+  const base = learningBases.find(b => b.base_id === baseId);
+  base.units.forEach(unit => {
+    const checkbox = document.getElementById(`unit_${baseId}_${unit}`);
+    if(checkbox) checkbox.checked = false;
+  });
+  onUnitChange(baseId);
+}
+
+function setDefaultSelection(base){
+  const baseId = base.base_id;
+  const currentUnit = base.current_unit;
+
+  if(!currentUnit || currentUnit === '__ALL__'){
+    // If no progress or ALL, select all units
+    base.units.forEach(unit => {
+      const checkbox = document.getElementById(`unit_${baseId}_${unit}`);
+      if(checkbox) checkbox.checked = true;
+    });
   }else{
-    customDiv.style.display = 'none';
+    // Select Unit 1 to current_unit
+    // Support multiple formats: "Unit 3", "U3", "unit 3", etc.
+    const match = currentUnit.match(/(?:Unit|U)\s*(\d+)/i);
+    if(match){
+      const currentNum = parseInt(match[1], 10);
+      base.units.forEach(unit => {
+        const unitMatch = unit.match(/(?:Unit|U)\s*(\d+)/i);
+        if(unitMatch){
+          const unitNum = parseInt(unitMatch[1], 10);
+          if(unitNum <= currentNum){
+            const checkbox = document.getElementById(`unit_${baseId}_${unit}`);
+            if(checkbox) checkbox.checked = true;
+          }
+        }
+      });
+    }else{
+      // If current_unit format is not recognized, select all units
+      base.units.forEach(unit => {
+        const checkbox = document.getElementById(`unit_${baseId}_${unit}`);
+        if(checkbox) checkbox.checked = true;
+      });
+    }
   }
-});
 
-document.getElementById('baseSelect').addEventListener('change', (e) => {
-  const baseId = parseInt(e.target.value, 10);
-  selectedBase = learningBases.find(b => b.base_id === baseId);
-});
+  // Update UI
+  updateBaseCheckbox(baseId);
+  updateUnitChipsUI(baseId);
+}
 
-document.getElementById('go').onclick = async () => {
-  const out = document.getElementById('out');
-  out.innerHTML = '生成中...';
+function onBaseChange(baseId){
+  const base = learningBases.find(b => b.base_id === baseId);
+  if(!base) return;
 
-  const baseId = parseInt(document.getElementById('baseSelect').value, 10);
-  if(!baseId){
-    out.innerHTML = '<p style="color:#c00">❌ 请选择资料库</p>';
+  // Determine current selection state
+  const state = getSelectionState(baseId, base);
+
+  // Cycle through states: all -> none -> progress -> all
+  switch(state){
+    case 'all':
+      // 全选 -> 全不选
+      deselectAllUnits(baseId);
+      break;
+    case 'none':
+      // 全不选 -> 当前进度
+      selectToProgress(baseId);
+      break;
+    case 'progress':
+    case 'partial':
+      // 当前进度/部分选择 -> 全选
+      selectAllUnits(baseId);
+      break;
+  }
+}
+
+function getSelectionState(baseId, base){
+  const allUnits = base.units;
+  const selectedUnits = [];
+
+  allUnits.forEach(unit => {
+    const cb = document.getElementById(`unit_${baseId}_${unit}`);
+    if(cb && cb.checked){
+      selectedUnits.push(unit);
+    }
+  });
+
+  if(selectedUnits.length === 0){
+    return 'none';
+  } else if(selectedUnits.length === allUnits.length){
+    return 'all';
+  } else {
+    // Check if it matches progress selection
+    const progressUnits = getProgressUnits(base);
+    if(progressUnits && arraysEqual(selectedUnits, progressUnits)){
+      return 'progress';
+    } else {
+      return 'partial';
+    }
+  }
+}
+
+function getProgressUnits(base){
+  const currentUnit = base.current_unit;
+  if(!currentUnit || currentUnit === '__ALL__'){
+    return base.units; // All units
+  }
+
+  // Support multiple unit naming formats: "Unit 3", "U3", "unit 3", etc.
+  const match = currentUnit.match(/(?:Unit|U)\s*(\d+)/i);
+  if(!match) return null;
+
+  const currentNum = parseInt(match[1], 10);
+  const progressUnits = [];
+
+  base.units.forEach(unit => {
+    // Support multiple formats for unit comparison
+    const unitMatch = unit.match(/(?:Unit|U)\s*(\d+)/i);
+    if(unitMatch){
+      const unitNum = parseInt(unitMatch[1], 10);
+      if(unitNum <= currentNum){
+        progressUnits.push(unit);
+      }
+    }
+  });
+
+  return progressUnits.length > 0 ? progressUnits : null;
+}
+
+function arraysEqual(arr1, arr2){
+  if(arr1.length !== arr2.length) return false;
+  const sorted1 = [...arr1].sort();
+  const sorted2 = [...arr2].sort();
+  return sorted1.every((val, idx) => val === sorted2[idx]);
+}
+
+function selectToProgress(baseId){
+  const base = learningBases.find(b => b.base_id === baseId);
+  if(!base) return;
+
+  const progressUnits = getProgressUnits(base);
+  if(!progressUnits) {
+    selectAllUnits(baseId);
     return;
   }
 
-  const scope = document.getElementById('scopeSelect').value;
-  let unit_scope = null;
+  // Deselect all first
+  base.units.forEach(unit => {
+    const checkbox = document.getElementById(`unit_${baseId}_${unit}`);
+    if(checkbox) checkbox.checked = false;
+  });
 
-  if(scope === 'progress'){
-    // Use learning progress
-    const base = learningBases.find(b => b.base_id === baseId);
-    if(base && base.current_unit && base.current_unit !== '__ALL__'){
-      // Extract unit number and generate scope
-      // e.g., "Unit 3" -> ["Unit 1", "Unit 2", "Unit 3"]
-      const match = base.current_unit.match(/Unit\s+(\d+)/i);
-      if(match){
-        const unitNum = parseInt(match[1], 10);
-        unit_scope = [];
-        for(let i = 1; i <= unitNum; i++){
-          unit_scope.push(`Unit ${i}`);
-        }
+  // Select progress units
+  progressUnits.forEach(unit => {
+    const checkbox = document.getElementById(`unit_${baseId}_${unit}`);
+    if(checkbox) checkbox.checked = true;
+  });
+
+  updateBaseCheckbox(baseId);
+  updateUnitChipsUI(baseId);
+  updateSelectionSummary(baseId);
+}
+
+function onUnitChange(baseId){
+  updateBaseCheckbox(baseId);
+  updateUnitChipsUI(baseId);
+  updateSelectionSummary(baseId);
+}
+
+function updateBaseCheckbox(baseId){
+  const base = learningBases.find(b => b.base_id === baseId);
+  const checkedCount = base.units.filter(unit => {
+    const cb = document.getElementById(`unit_${baseId}_${unit}`);
+    return cb && cb.checked;
+  }).length;
+
+  const baseCheckbox = document.getElementById(`base_${baseId}`);
+
+  if(checkedCount === 0){
+    baseCheckbox.checked = false;
+    baseCheckbox.indeterminate = false;
+  }else if(checkedCount === base.units.length){
+    baseCheckbox.checked = true;
+    baseCheckbox.indeterminate = false;
+  }else{
+    baseCheckbox.checked = false;
+    baseCheckbox.indeterminate = true;
+  }
+}
+
+function updateUnitChipsUI(baseId){
+  const base = learningBases.find(b => b.base_id === baseId);
+  base.units.forEach(unit => {
+    const checkbox = document.getElementById(`unit_${baseId}_${unit}`);
+    const chip = document.getElementById(`chip_${baseId}_${unit}`);
+    if(checkbox && chip){
+      if(checkbox.checked){
+        chip.classList.add('checked');
+      }else{
+        chip.classList.remove('checked');
       }
     }
-  }else if(scope === 'custom'){
-    const unitsRaw = document.getElementById('units').value.trim();
-    unit_scope = unitsRaw ? unitsRaw.split(/[,，]+/).map(x=>x.trim()).filter(Boolean) : null;
+  });
+}
+
+function updateSelectionSummary(baseId){
+  const base = learningBases.find(b => b.base_id === baseId);
+  const checkedCount = base.units.filter(unit => {
+    const cb = document.getElementById(`unit_${baseId}_${unit}`);
+    return cb && cb.checked;
+  }).length;
+
+  const summary = document.getElementById(`summary_${baseId}`);
+  if(summary){
+    const state = getSelectionState(baseId, base);
+    let stateText = '';
+
+    switch(state){
+      case 'all':
+        stateText = '全选';
+        break;
+      case 'none':
+        stateText = '全不选';
+        break;
+      case 'progress':
+        stateText = '学习进度';
+        break;
+      case 'partial':
+        stateText = '自定义';
+        break;
+    }
+
+    summary.innerHTML = `已选 <strong>${checkedCount}</strong> / ${base.units.length} 个单元 <span style="color:#0b5fff">[${stateText}]</span>`;
   }
-  // scope === 'all' means unit_scope = null (all units)
+}
+
+function getSelectedBaseUnits(){
+  const result = {};
+
+  learningBases.forEach(base => {
+    const baseId = base.base_id;
+    const selectedUnits = [];
+
+    base.units.forEach(unit => {
+      const checkbox = document.getElementById(`unit_${baseId}_${unit}`);
+      if(checkbox && checkbox.checked){
+        selectedUnits.push(unit);
+      }
+    });
+
+    if(selectedUnits.length > 0){
+      result[baseId] = selectedUnits;
+    }
+  });
+
+  return result;
+}
+
+document.getElementById('go').onclick = async () => {
+  const out = document.getElementById('out');
+  const previewSection = document.getElementById('previewSection');
+  const topActions = document.getElementById('topActions');
+
+  out.innerHTML = '生成中...';
+  previewSection.classList.remove('show');
+  topActions.style.display = 'none'; // Hide top action buttons
+
+  const baseUnits = getSelectedBaseUnits();
+
+  if(Object.keys(baseUnits).length === 0){
+    out.innerHTML = '<p style="color:#c00">❌ 请至少选择一个资料库的一个单元</p>';
+    return;
+  }
+
+  const difficultyFilter = getDifficultyFilter();
 
   try{
     const data = await api('/api/practice-sessions/generate', {
       method: 'POST',
       body: JSON.stringify({
         student_id: cfg.student_id,
-        base_id: baseId,
+        base_units: baseUnits,
         total_count: parseInt(document.getElementById('total').value||'29',10),
-        unit_scope,
         title: document.getElementById('title').value||'英语默写单',
+        difficulty_filter: difficultyFilter,
         mix_ratio: {
           WORD: parseInt(document.getElementById('word').value||'15',10),
           PHRASE: parseInt(document.getElementById('phrase').value||'8',10),
@@ -188,19 +1241,146 @@ document.getElementById('go').onclick = async () => {
         }
       })
     });
-    out.innerHTML = `
-      <p>✅ 已生成：Session #${data.session_id}</p>
-      <p><a href="${data.pdf_url}" target="_blank">下载/查看 默写单 PDF</a></p>
-      <p><a href="${data.answer_pdf_url}" target="_blank">下载/查看 答案单 PDF</a></p>
-      <p><a href="/submit.html?session_id=${data.session_id}">去提交/批改 →</a></p>
-    `;
+
+    // Store session data
+    currentSessionData = data;
+
+    // Show preview
+    showPreview(data);
+    out.innerHTML = '';
   }catch(e){
     out.innerHTML = `<p style="color:#c00">❌ 生成失败：${e.message}</p>`;
   }
 };
 
+function showPreview(data){
+  const previewSection = document.getElementById('previewSection');
+  const itemsGrid = document.getElementById('itemsGrid');
+  const stats = document.getElementById('previewStats');
+
+  // Calculate stats
+  const items = data.items || [];
+  const wordCount = items.filter(it => it.type === 'WORD').length;
+  const phraseCount = items.filter(it => it.type === 'PHRASE').length;
+  const sentenceCount = items.filter(it => it.type === 'SENTENCE').length;
+
+  stats.innerHTML = `共 ${items.length} 题 | 单词 ${wordCount} | 短语 ${phraseCount} | 句子 ${sentenceCount}`;
+
+  // Get expected counts from input fields
+  const expectedCounts = {
+    'WORD': parseInt(document.getElementById('word').value || '0', 10),
+    'PHRASE': parseInt(document.getElementById('phrase').value || '0', 10),
+    'SENTENCE': parseInt(document.getElementById('sentence').value || '0', 10)
+  };
+
+  // Group items by type
+  const sections = {
+    'WORD': { title: '一、单词默写', items: [], expected: expectedCounts['WORD'] },
+    'PHRASE': { title: '二、短语默写', items: [], expected: expectedCounts['PHRASE'] },
+    'SENTENCE': { title: '三、句子默写', items: [], expected: expectedCounts['SENTENCE'] }
+  };
+
+  items.forEach(item => {
+    if(sections[item.type]){
+      sections[item.type].items.push(item);
+    }
+  });
+
+  // Render sections
+  let html = '';
+  Object.keys(sections).forEach(type => {
+    const section = sections[type];
+    if(section.expected > 0){  // Only show sections with expected items
+      const actualCount = section.items.length;
+      const isShortage = actualCount < section.expected;
+
+      html += `
+        <div class="section-group">
+          <div class="section-header">
+            ${section.title}（${actualCount}个）
+            ${isShortage ? `<span class="shortage-warning">⚠️ 不足：仅找到 ${actualCount} 个，设置为 ${section.expected} 个</span>` : ''}
+          </div>
+          <div class="section-items section-items-${type.toLowerCase()}">
+            ${section.items.map((item, idx) => `
+              <div class="preview-item">
+                <span class="item-number">${idx + 1}.</span>
+                <span class="item-answer">${item.en_text}</span>
+                <span class="item-hint">${item.zh_hint || '(无提示)'}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+  });
+
+  itemsGrid.innerHTML = html;
+  previewSection.classList.add('show');
+  topActions.style.display = 'flex'; // Show top action buttons
+
+  // Scroll to put action buttons at top of viewport
+  setTimeout(() => {
+    const topActionsElement = document.getElementById('topActions');
+    topActionsElement.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }, 100);
+}
+
+// Confirm button - show PDF links
+document.getElementById('confirmBtn').onclick = () => {
+  const out = document.getElementById('out');
+  const data = currentSessionData;
+
+  out.innerHTML = `
+    <div style="background:#d1fae5;border:1px solid #10b981;border-radius:8px;padding:16px;margin-top:12px">
+      <p style="color:#059669;font-weight:600;margin:0 0 12px 0">✅ 练习单已生成：Session #${data.session_id}</p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <a href="${data.pdf_url}" target="_blank" style="flex:1;min-width:200px;display:inline-block;padding:10px 16px;background:#fff;color:#0b5fff;text-decoration:none;border-radius:6px;font-weight:500;text-align:center;border:1px solid #0b5fff">📄 下载默写单 PDF</a>
+        <a href="${data.answer_pdf_url}" target="_blank" style="flex:1;min-width:200px;display:inline-block;padding:10px 16px;background:#fff;color:#0b5fff;text-decoration:none;border-radius:6px;font-weight:500;text-align:center;border:1px solid #0b5fff">📋 下载答案单 PDF</a>
+        <a href="/submit.html?session_id=${data.session_id}" style="flex:1;min-width:200px;display:inline-block;padding:10px 16px;background:#10b981;color:#fff;text-decoration:none;border-radius:6px;font-weight:500;text-align:center">→ 去提交/批改</a>
+      </div>
+    </div>
+  `;
+
+  // Scroll to result
+  setTimeout(() => {
+    out.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }, 100);
+};
+
+// Regenerate button
+document.getElementById('regenerateBtn').onclick = () => {
+  document.getElementById('go').click();
+};
+
+// Adjust button
+document.getElementById('adjustBtn').onclick = () => {
+  const previewSection = document.getElementById('previewSection');
+  const topActions = document.getElementById('topActions');
+  previewSection.classList.remove('show');
+  topActions.style.display = 'none'; // Hide top action buttons
+  window.scrollTo({top: 0, behavior: 'smooth'});
+};
+
+// Top action buttons (duplicated controls)
+document.getElementById('confirmBtnTop').onclick = () => {
+  document.getElementById('confirmBtn').click(); // Reuse existing logic
+};
+
+document.getElementById('regenerateBtnTop').onclick = () => {
+  document.getElementById('regenerateBtn').click(); // Reuse existing logic
+};
+
+document.getElementById('adjustBtnTop').onclick = () => {
+  document.getElementById('adjustBtn').click(); // Reuse existing logic
+};
+
 // Load learning bases on page load
-window.addEventListener('DOMContentLoaded', loadLearningBases);
+window.addEventListener('DOMContentLoaded', () => {
+  loadLearningBases();
+  updateTotal(); // Initialize total count
+  updateDifficultyLabels(); // Initialize difficulty checkbox styles
+  updateParamsSummary(); // Initialize params summary
+});
 </script>
 </body>
 </html>

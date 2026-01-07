@@ -42,11 +42,17 @@ python3 init_db.py --force --no-seed
 |------|------|
 | `students` | 学生信息 |
 | `bases` | 资料库（系统课本 + 自定义） |
+| `units` | 单元元数据 |
 | `items` | 词条（单词/短语/句子） |
 | `student_learning_bases` | 学生学习库配置 |
-| `sessions` | 练习单 |
-| `session_items` | 练习单词条关联 |
-| `submissions` | 提交记录（批改结果） |
+| `practice_sessions` | 练习单会话（生成/状态/PDF） |
+| `exercise_items` | 练习单题目明细 |
+| `submissions` | 提交记录（批改结果/手动录入） |
+| `practice_results` | 批改入库结果 |
+| `student_item_stats` | 学生词条练习统计 |
+| `system_settings` | 系统配置（掌握阈值等） |
+| `sessions` | 旧版练习单（兼容保留） |
+| `session_items` | 旧版练习单关联（兼容保留） |
 
 ### 重要字段说明
 
@@ -64,21 +70,16 @@ python3 init_db.py --force --no-seed
 - `"Unit 3"`: 学到Unit 3（可出题范围: Unit 1-3）
 - `NULL`: 未设置进度
 
+#### `practice_sessions.status`
+- `DRAFT`: 已生成未提交
+- `CORRECTED`: 已批改并入库
+- 其他历史状态保留用于兼容
+
 ## 数据导入导出
 
-### 导出资料库
-
-```bash
-# TODO: 待实现
-python3 export_base.py --base-id 1 --output textbook.json
-```
-
 ### 导入资料库
-
-```bash
-# TODO: 待实现
-python3 import_base.py --file textbook.json --system
-```
+- **界面**：`/library.html` -> 从文件导入
+- **API**：`POST /api/knowledge-bases/import-file`（支持 `mode=skip|update`）
 
 ## 种子数据
 

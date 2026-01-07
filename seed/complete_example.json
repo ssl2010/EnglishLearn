@@ -1,0 +1,57 @@
+{
+  "format": "EL_KB_V1_UNITMETA",
+  "base": {
+    "name": "剑桥Join in 四年级上册",
+    "education_stage": "小学",
+    "grade": "四年级",
+    "term": "上学期",
+    "version": "2024年版",
+    "publisher": "剑桥大学出版社",
+    "editor": "刘兆义",
+    "description": "剑桥小学英语Join in系列教材，适合小学四年级学生使用"
+  },
+  "unit_meta": [
+    {
+      "unit_code": "U1",
+      "unit_name": "My body",
+      "unit_index": 1,
+      "description": "第一单元：我的身体"
+    },
+    {
+      "unit_code": "U2",
+      "unit_name": "Friends",
+      "unit_index": 2,
+      "description": "第二单元：朋友"
+    }
+  ],
+  "items": [
+    {
+      "unit_code": "U1",
+      "type": "WORD",
+      "en_text": "body",
+      "zh_hint": "身体",
+      "difficulty_tag": "write"
+    },
+    {
+      "unit_code": "U1",
+      "type": "WORD",
+      "en_text": "head",
+      "zh_hint": "头",
+      "difficulty_tag": "write"
+    },
+    {
+      "unit_code": "U1",
+      "type": "PHRASE",
+      "en_text": "my body",
+      "zh_hint": "我的身体",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "unit_code": "U2",
+      "type": "WORD",
+      "en_text": "friend",
+      "zh_hint": "朋友",
+      "difficulty_tag": "write"
+    }
+  ]
+}

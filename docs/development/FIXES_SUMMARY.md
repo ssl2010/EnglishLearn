@@ -58,7 +58,7 @@ uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 
 ## 提示词检查
 
-格式化后的提示词在 `backend/app/ai_config.json`:
+格式化后的提示词在 `ai_config.json`:
 - 数组格式，每行一个元素
 - 包含JSON示例
 - 详细的字段说明

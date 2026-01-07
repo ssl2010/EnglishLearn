@@ -60,7 +60,9 @@ def _client() -> OpenAI:
 
 
 def _load_ai_config() -> Dict[str, Any]:
-    path = os.environ.get("EL_AI_CONFIG_PATH") or os.path.join(os.path.dirname(__file__), "ai_config.json")
+    path = os.environ.get("EL_AI_CONFIG_PATH") or os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "ai_config.json")
+    )
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -371,7 +373,7 @@ def analyze_freeform_sheet(image_bytes_list: List[bytes], return_raw: bool = Fal
 
     client = _client()
 
-    def _do_request(max_tokens: int, strict_json: bool, use_response_format: bool = True, extra_note: str = "") -> Any:
+    def _do_request(max_tokens: int, strict_json: bool, use_response_format: bool = True, extra_note: str = "", retry_count: int = 0) -> Any:
         text_prompt = prompt
         if strict_json:
             text_prompt = prompt + "\n\n仅允许输出 JSON，不要输出 Markdown、说明文字或任何多余内容。"
@@ -391,10 +393,32 @@ def analyze_freeform_sheet(image_bytes_list: List[bytes], return_raw: bool = Fal
             req_kwargs["response_format"] = {"type": "json_object"}
         if ark_mode:
             req_kwargs["reasoning_effort"] = os.environ.get("EL_ARK_REASONING_EFFORT") or "medium"
-        logger.info("openai_vision calling API with max_tokens=%s...", max_tokens)
-        result = client.chat.completions.create(**req_kwargs)
-        logger.info("openai_vision API call completed")
-        return result
+
+        logger.info("openai_vision calling API with max_tokens=%s, images=%d, retry=%d...",
+                   max_tokens, len(data_urls), retry_count)
+
+        # Retry logic for connection errors
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                result = client.chat.completions.create(**req_kwargs)
+                logger.info("openai_vision API call completed successfully")
+                return result
+            except Exception as e:
+                error_msg = str(e)
+                is_connection_error = "Connection error" in error_msg or "ConnectionError" in str(type(e).__name__)
+                is_timeout_error = "timeout" in error_msg.lower() or "Timeout" in str(type(e).__name__)
+
+                if (is_connection_error or is_timeout_error) and attempt < max_retries:
+                    wait_time = (attempt + 1) * 2  # 2s, 4s
+                    logger.warning(f"openai_vision API call failed (attempt {attempt+1}/{max_retries+1}): {error_msg}. Retrying in {wait_time}s...")
+                    import time
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    # Last attempt or non-retryable error
+                    logger.error(f"openai_vision API call failed after {attempt+1} attempts: {type(e).__name__}: {error_msg}")
+                    raise
 
     max_tokens = _env_int("EL_AI_MAX_TOKENS", 2000)
     max_tokens_retry = _env_int("EL_AI_MAX_TOKENS_RETRY", 4000)

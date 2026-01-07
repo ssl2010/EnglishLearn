@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>练习单查看</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
+    .wrap{max-width:1280px;margin:0 auto;padding:24px}
+    a{color:#0b5fff;text-decoration:none}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+    .card-title{font-weight:600;margin:0 0 10px 0}
+    .muted{color:#666;font-size:13px}
+    .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#eef2ff;font-size:12px}
+    .pill.ok{background:#dcfce7;color:#15803d}
+    .pill.warn{background:#fef3c7;color:#a16207}
+    .pill.err{background:#fee2e2;color:#b91c1c}
+    tr.row-correct{background:#e8f5e9}
+    tr.row-incorrect{background:#ffebee}
+    tr.row-uncertain{background:#fff7e6}
+    .note-warning{color:#dc2626;font-weight:600}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;font-size:13px;vertical-align:top}
+    th{background:#fafafa}
+    .table-wrap{max-height:460px;overflow:auto;border:1px solid #f1f1f1;border-radius:10px}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    button{padding:10px 16px;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer;font-weight:500;font-size:14px}
+    button.secondary{background:#e5e7eb;color:#111}
+    button.ghost{background:#fff;border:1px solid #d1d5db;color:#111}
+    .meta{display:flex;gap:12px;flex-wrap:wrap}
+    .meta .item{background:#f9fafb;border-radius:8px;padding:8px 10px;font-size:13px}
+    .grid{display:flex;gap:10px;flex-wrap:wrap}
+    .thumb{width:140px;height:140px;border-radius:8px;border:1px solid #ddd;object-fit:cover;cursor:pointer}
+    .img-thumb{width:80px;height:40px;border-radius:4px;border:1px solid #ddd;object-fit:contain;cursor:pointer}
+
+    .preview-section{background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:20px;margin-top:12px;display:none}
+    .preview-section.show{display:block}
+    .preview-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #e5e7eb}
+    .preview-title{font-size:16px;font-weight:600;color:#111}
+    .preview-stats{font-size:13px;color:#6b7280}
+    .items-grid{display:block}
+    .section-group{margin-bottom:24px;page-break-inside:avoid}
+    .section-header{font-size:15px;font-weight:700;color:#111;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #ddd;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .section-items{line-height:2.5;margin-bottom:8px}
+    .section-items-word{display:grid;grid-template-columns:repeat(3, 1fr);gap:12px 20px;align-items:start}
+    .section-items-phrase{display:grid;grid-template-columns:repeat(2, 1fr);gap:12px 20px;align-items:start}
+    .section-items-sentence{display:flex;flex-direction:column;gap:16px}
+    .preview-item{display:flex;gap:8px;align-items:baseline;padding:8px 0;border-bottom:1px dotted #e5e7eb}
+    .section-items-sentence .preview-item{display:block;border-bottom:1px solid #ddd;padding:8px 0;line-height:1.8}
+    .section-items-sentence .item-number{display:inline;margin-right:6px}
+    .section-items-sentence .item-answer{display:inline}
+    .section-items-sentence .item-hint{display:block;padding-left:28px;margin-top:2px}
+    .item-number{font-size:14px;font-weight:600;color:#666;flex-shrink:0}
+    .item-hint{font-size:14px;color:#888;margin-left:6px}
+    .item-answer{font-size:17px;color:#111;font-weight:500}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+    <div>
+      <h1 style="margin:0 0 6px 0">练习单查看</h1>
+      <div class="muted" id="ctx"></div>
+    </div>
+    <div>
+      <a href="practice.html">← 返回练习单列表</a>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="card-title">基本信息</div>
+    <div class="meta" id="detailMeta"></div>
+    <div class="actions" id="detailActions"></div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <div class="card-title" style="margin:0">练习单预览</div>
+      <button id="previewToggle" class="ghost" style="display:none">展开预览</button>
+    </div>
+    <div id="previewSection" class="preview-section">
+      <div class="preview-header">
+        <div class="preview-title">练习单预览</div>
+        <div class="preview-stats" id="previewStats"></div>
+      </div>
+      <div id="itemsGrid" class="items-grid"></div>
+    </div>
+    <div id="previewEmpty" class="muted" style="margin-top:10px">加载中...</div>
+  </div>
+
+  <div class="card" id="gradingSection" style="margin-top:12px;display:none">
+    <div class="card-title">批改详情</div>
+    <div class="muted" id="gradingSummary"></div>
+
+    <div id="gradedSection" style="margin-top:12px;display:none">
+      <div class="card-title" style="font-size:14px">批改后图片</div>
+      <div class="muted" style="margin-bottom:6px">点击缩略图可放大查看</div>
+      <div id="gradedGrid" class="grid"></div>
+    </div>
+
+    <div style="margin-top:10px">
+      <table id="itemsTable">
+        <thead>
+          <tr>
+            <th>题号</th>
+            <th>题目/提示</th>
+            <th>识别结果</th>
+            <th>是否正确</th>
+            <th>参考答案</th>
+            <th>备注</th>
+            <th>识别图片</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="imgModal" style="display:none;position:fixed;inset:0;background:transparent;z-index:9999;cursor:pointer;user-select:none;-webkit-user-select:none">
+  <img id="imgModalPic" src="" alt="preview" style="position:absolute;max-width:90vw;max-height:90vh;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.5);border:3px solid #fff;user-select:none;-webkit-user-select:none;-webkit-user-drag:none;outline:none;cursor:grab" draggable="false" />
+</div>
+
+<script src="grading_shared.js"></script>
+<script>
+function getCfg(){
+  const raw = localStorage.getItem('el_cfg');
+  return raw ? JSON.parse(raw) : null;
+}
+async function api(path, opts){
+  const res = await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
+  if(!res.ok){
+    let msg = await res.text();
+    throw new Error(msg || '请求失败');
+  }
+  return res.json();
+}
+
+function statusPill(status){
+  if(status === 'CORRECTED'){ return '<span class="pill ok">已入库</span>'; }
+  return '<span class="pill warn">待提交</span>';
+}
+
+function formatDate(s){
+  if(!s) return '-';
+  return s.replace('T',' ').slice(0,16);
+}
+
+function formatDateOnly(s){
+  if(!s) return '-';
+  if(s === '未知') return s;
+  return s.slice(0, 10);
+}
+const {iconYes, iconNo, iconWarn} = ELGrading.getMarkIcons();
+
+ELGrading.initImageModal();
+
+function buildPreview(items){
+  const itemsGrid = document.getElementById('itemsGrid');
+  const stats = document.getElementById('previewStats');
+  const previewSection = document.getElementById('previewSection');
+  const previewEmpty = document.getElementById('previewEmpty');
+
+  if(!items || !items.length){
+    previewEmpty.textContent = '暂无题目';
+    return;
+  }
+
+  const wordCount = items.filter(it => it.type === 'WORD').length;
+  const phraseCount = items.filter(it => it.type === 'PHRASE').length;
+  const sentenceCount = items.filter(it => it.type === 'SENTENCE').length;
+  stats.innerHTML = `共 ${items.length} 题 | 单词 ${wordCount} | 短语 ${phraseCount} | 句子 ${sentenceCount}`;
+
+  const sections = {
+    'WORD': { title: '一、单词默写', items: [] },
+    'PHRASE': { title: '二、短语默写', items: [] },
+    'SENTENCE': { title: '三、句子默写', items: [] }
+  };
+  items.forEach(item => {
+    if(sections[item.type]){
+      sections[item.type].items.push(item);
+    }
+  });
+
+  let html = '';
+  Object.keys(sections).forEach(type => {
+    const section = sections[type];
+    if(!section.items.length) return;
+    html += `
+      <div class="section-group">
+        <div class="section-header">${section.title}</div>
+        <div class="section-items section-items-${type.toLowerCase()}">
+          ${section.items.map(item => `
+            <div class="preview-item">
+              <div class="item-number">${item.position || ''}.</div>
+              <div class="item-answer">${(item.en_text || '').replace(/</g,'&lt;')}</div>
+              <div class="item-hint">${(item.zh_hint || '').replace(/</g,'&lt;')}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  });
+
+  itemsGrid.innerHTML = html;
+  previewEmpty.style.display = 'none';
+  previewSection.classList.add('show');
+}
+
+function renderResults(items, resultsByItem, rawItems, bundleMeta){
+  const itemsBody = document.querySelector('#itemsTable tbody');
+  itemsBody.innerHTML = '';
+  const rawByPos = {};
+  (rawItems || []).forEach(it=>{
+    if(it && (it.position || it.position === 0)){
+      rawByPos[String(it.position)] = it;
+    }
+  });
+  const gradedUrls = (bundleMeta && bundleMeta.graded_image_urls) ? bundleMeta.graded_image_urls : [];
+  (items || []).forEach(it=>{
+    const result = resultsByItem[String(it.id)] || resultsByItem[it.id] || null;
+    const isCorrect = result ? (result.is_correct === 1 || result.is_correct === true) : null;
+    const rowClass = isCorrect === true ? 'row-correct' : (isCorrect === false ? 'row-incorrect' : 'row-uncertain');
+    const markIcon = isCorrect === true ? iconYes : (isCorrect === false ? iconNo : iconWarn);
+    const markAlt = isCorrect === true ? '正确' : (isCorrect === false ? '错误' : '待确认');
+    const raw = rawByPos[String(it.position)] || null;
+    if(raw && raw.section_title && raw.section_title.trim()){
+      const trHeader = document.createElement('tr');
+      trHeader.innerHTML = `<td colspan="7" style="background:#f0f9ff;font-weight:600;color:#0369a1">${raw.section_title.replace(/</g,'&lt;')}</td>`;
+      itemsBody.appendChild(trHeader);
+    }
+    const llmTextRaw = raw?.llm_text || result?.answer_raw || '';
+    const refAnswer = it.en_text || raw?.matched_en_text || '';
+    const noteText = ELGrading.buildNoteText(raw?.note || '', raw?.consistency_ok, false);
+    const formattedLlmText = ELGrading.formatLlmText(
+      llmTextRaw,
+      refAnswer,
+      raw?.note || '',
+      raw?.section_type || '',
+      isCorrect
+    );
+    let imageCell = '';
+    if(raw && raw.crop_url){
+      imageCell = `<img src="${raw.crop_url}" alt="crop" class="img-thumb zoomable" />`;
+    }else if(gradedUrls.length){
+      const pageIdx = raw?.page_index || 0;
+      const pageUrl = gradedUrls[pageIdx] || gradedUrls[0];
+      if(pageUrl){
+        imageCell = `<a href="#" class="page-link" data-page-url="${pageUrl}" style="color:#0b5fff;text-decoration:none;font-size:13px">查看练习单</a>`;
+      }
+    }
+    const displayPos = (raw && (raw.q || raw.q === 0)) ? raw.q : (it.position || '-');
+    const tr = document.createElement('tr');
+    tr.className = rowClass;
+    tr.innerHTML = `
+      <td>${displayPos}</td>
+      <td>${(it.zh_hint || '').replace(/</g,'&lt;')}</td>
+      <td>${formattedLlmText}</td>
+      <td><img src="${markIcon}" alt="${markAlt}" /></td>
+      <td>${String(refAnswer).replace(/</g,'&lt;')}</td>
+      <td><span class="muted">${noteText}</span></td>
+      <td>${imageCell}</td>
+    `;
+    itemsBody.appendChild(tr);
+  });
+}
+
+function renderGradedImages(bundleMeta){
+  const gradedSection = document.getElementById('gradedSection');
+  const gradedGrid = document.getElementById('gradedGrid');
+  gradedGrid.innerHTML = '';
+  if(!bundleMeta){
+    gradedSection.style.display = 'none';
+    return;
+  }
+  const gradedUrls = (bundleMeta.graded_image_urls || []).filter(Boolean);
+  if(!gradedUrls.length){
+    gradedSection.style.display = 'none';
+    return;
+  }
+  gradedSection.style.display = 'block';
+  gradedUrls.forEach(url=>{
+    const img = document.createElement('img');
+    img.src = url;
+    img.className = 'thumb zoomable';
+    img.alt = '批改图';
+    gradedGrid.appendChild(img);
+  });
+}
+
+async function loadDetail(){
+  const params = new URLSearchParams(location.search);
+  const sessionId = params.get('session_id');
+  const previewEmpty = document.getElementById('previewEmpty');
+  if(!sessionId){
+    previewEmpty.textContent = '缺少 session_id 参数';
+    return;
+  }
+
+  const cfg = getCfg();
+  if(!cfg){ location.href = '/'; }
+
+  previewEmpty.textContent = '加载中...';
+  const data = await api(`/api/practice-sessions/${sessionId}/detail`);
+
+  const session = data.session || {};
+  document.getElementById('ctx').textContent = `孩子：${cfg.student_name || cfg.student_id}｜资料库：${session.base_display || session.base_name || session.base_id || '-'}`;
+
+  const meta = document.getElementById('detailMeta');
+  meta.innerHTML = '';
+  const createdDateText = session.created_date_display || session.created_date || (session.created_at || '').slice(0,10) || '-';
+  const createdTimeText = formatDateOnly(session.created_time_display || session.created_at || '-');
+  const metaItems = [
+    `编号：${session.practice_uuid || '-'}`,
+    `日期：${createdDateText}`,
+    `状态：${session.status === 'CORRECTED' ? '已入库' : '待提交'}`,
+    `生成时间：${createdTimeText}`,
+    `入库时间：${session.corrected_at ? formatDateOnly(session.corrected_at) : '-'}`,
+  ];
+  metaItems.forEach(txt=>{
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.textContent = txt;
+    meta.appendChild(div);
+  });
+
+  const actions = document.getElementById('detailActions');
+  actions.innerHTML = '';
+  if(session.pdf_url){
+    const a = document.createElement('a');
+    a.href = session.pdf_url;
+    a.target = '_blank';
+    a.textContent = '下载默写单 PDF';
+    a.className = 'ghost';
+    a.style.padding = '10px 16px';
+    a.style.borderRadius = '8px';
+    a.style.border = '1px solid #d1d5db';
+    actions.appendChild(a);
+  }
+  if(session.answer_pdf_url){
+    const a = document.createElement('a');
+    a.href = session.answer_pdf_url;
+    a.target = '_blank';
+    a.textContent = '下载答案 PDF';
+    a.className = 'ghost';
+    a.style.padding = '10px 16px';
+    a.style.borderRadius = '8px';
+    a.style.border = '1px solid #d1d5db';
+    actions.appendChild(a);
+  }
+  const regenBtn = document.createElement('button');
+  regenBtn.textContent = '重新生成 PDF';
+  regenBtn.className = 'secondary';
+  regenBtn.addEventListener('click', async ()=>{
+    regenBtn.disabled = true;
+    try{
+      await api(`/api/practice-sessions/${sessionId}/regenerate-pdf`, {method:'POST'});
+      const refreshed = await api(`/api/practice-sessions/${sessionId}/detail`);
+      session.pdf_url = refreshed.session.pdf_url;
+      session.answer_pdf_url = refreshed.session.answer_pdf_url;
+      loadDetail();
+    }catch(e){
+      alert('重新生成失败：' + e.message);
+    }finally{
+      regenBtn.disabled = false;
+    }
+  });
+  actions.appendChild(regenBtn);
+
+  buildPreview(data.items || []);
+
+  const summary = data.summary || {total:0, correct:0};
+  const isCorrected = summary.total > 0 || session.status === 'CORRECTED';
+  const previewToggle = document.getElementById('previewToggle');
+  const previewSection = document.getElementById('previewSection');
+  if(isCorrected){
+    previewToggle.style.display = 'inline-block';
+    previewSection.classList.remove('show');
+    previewToggle.textContent = '展开预览';
+    previewToggle.onclick = ()=>{
+      const show = !previewSection.classList.contains('show');
+      previewSection.classList.toggle('show', show);
+      previewToggle.textContent = show ? '收起预览' : '展开预览';
+    };
+  }else{
+    previewToggle.style.display = 'none';
+  }
+
+  const gradingSection = document.getElementById('gradingSection');
+  if(isCorrected){
+    gradingSection.style.display = 'block';
+    document.getElementById('gradingSummary').textContent = `共 ${summary.total || 0} 题，正确 ${summary.correct || 0} 题`;
+    renderResults(data.items || [], data.results_by_item || {}, data.raw_items || [], data.bundle_meta || null);
+    renderGradedImages(data.bundle_meta || null);
+  }else{
+    gradingSection.style.display = 'none';
+  }
+}
+
+loadDetail();
+</script>
+</body>
+</html>

@@ -6,6 +6,7 @@ import uuid
 import difflib
 import time
 import logging
+import random
 from typing import Any, Dict, List, Optional, Tuple
 
 from .db import db, utcnow_iso
@@ -37,10 +38,21 @@ def _extract_date_from_ocr(ocr_raw: Dict[str, Any]) -> Optional[str]:
     # Collect all OCR text from all pages
     for page in pages:
         raw = page.get("raw") or {}
-        words = raw.get("words_result") or raw.get("data") or []
+        # Prefer 'results' (detailed) over 'words_result' (simplified)
+        words = raw.get("results") or raw.get("words_result") or raw.get("data") or []
         for word in words:
             if isinstance(word, dict):
-                text = word.get("words") or ""
+                # Handle both formats
+                words_obj = word.get("words", {})
+                if isinstance(words_obj, dict):
+                    # Detailed format: word.words.word
+                    text = words_obj.get("word") or ""
+                elif isinstance(words_obj, str):
+                    # Simplified format: word.words
+                    text = words_obj
+                else:
+                    continue
+
                 if text:
                     all_text.append(str(text))
 
@@ -61,6 +73,217 @@ def _extract_date_from_ocr(ocr_raw: Dict[str, Any]) -> Optional[str]:
             return match.group(1)
 
     return None
+
+
+def _extract_uuid_from_ocr(ocr_raw: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Extract worksheet UUID from OCR results with multi-page consistency check.
+
+    UUID format: ES-XXXX-XXXXXX (e.g., ES-0055-CF12D2)
+    - First part: ES-XXXX (barcode, easier to recognize)
+    - Second part: XXXXXX (alphanumeric characters, harder to recognize)
+
+    Returns:
+        {
+            "uuid": str or None,  # Final adopted UUID
+            "page_uuids": List[Dict],  # Per-page UUID results with confidence
+            "consistent": bool,  # Whether all pages have the same UUID
+            "confidence": float,  # Overall confidence (0-1)
+            "warning": str or None  # Warning message if inconsistent
+        }
+    """
+    import re
+    import logging
+
+    logger = logging.getLogger("uvicorn.error")
+    pages = ocr_raw.get("pages") or []
+
+    # UUID pattern: ES-XXXX-XXXXXX
+    uuid_pattern = r'ES-(\d{4})-([A-Z0-9]{6})'
+    barcode_pattern = r'ES-(\d{4})'
+    suffix_pattern = r'([A-Z0-9]{6})'
+
+    page_results = []
+
+    for page_idx, page in enumerate(pages):
+        raw = page.get("raw") or {}
+        # Prefer 'results' (detailed with confidence) over 'words_result' (simplified)
+        words = raw.get("results") or raw.get("words_result") or raw.get("data") or []
+
+        page_uuid = None
+        page_confidence = 0.0
+        barcode_part = None
+        suffix_part = None
+        barcode_conf = 0.0
+        suffix_conf = 0.0
+
+        for word in words:
+            if not isinstance(word, dict):
+                continue
+
+            # Handle both OCR data formats:
+            # 1. results format: word.words.word (dict with confidence)
+            # 2. words_result format: word.words (string, no confidence)
+            words_obj = word.get("words", {})
+            if isinstance(words_obj, dict):
+                # Detailed format (results): has word, line_probability
+                text = str(words_obj.get("word") or "")
+                probability = words_obj.get("line_probability", {})
+            elif isinstance(words_obj, str):
+                # Simplified format (words_result): direct string
+                text = str(words_obj)
+                probability = {}
+            else:
+                # Unknown format, skip
+                continue
+
+            # Get confidence (百度OCR返回的是字典，包含average/min等)
+            if isinstance(probability, dict):
+                conf = float(probability.get("average", 0) or 0)
+            else:
+                conf = float(probability or 0) if probability else 0.0
+
+            # Try to match full UUID first
+            full_match = re.search(uuid_pattern, text)
+            if full_match:
+                matched_uuid = f"ES-{full_match.group(1)}-{full_match.group(2)}"
+                if conf > page_confidence:
+                    page_uuid = matched_uuid
+                    page_confidence = conf
+                    barcode_part = f"ES-{full_match.group(1)}"
+                    suffix_part = full_match.group(2)
+                    barcode_conf = conf
+                    suffix_conf = conf
+                continue
+
+            # Try barcode part (higher confidence, easier to recognize)
+            barcode_match = re.search(barcode_pattern, text)
+            if barcode_match and conf > barcode_conf:
+                barcode_part = f"ES-{barcode_match.group(1)}"
+                barcode_conf = conf
+
+            # Try suffix part (lower confidence, harder to recognize)
+            if len(text) == 6 and re.match(suffix_pattern, text):
+                if conf > suffix_conf:
+                    suffix_part = text
+                    suffix_conf = conf
+
+        # Combine barcode and suffix if we have both
+        if not page_uuid and barcode_part and suffix_part:
+            page_uuid = f"{barcode_part}-{suffix_part}"
+            # Weight barcode more heavily (80% barcode, 20% suffix)
+            page_confidence = barcode_conf * 0.8 + suffix_conf * 0.2
+
+        page_results.append({
+            "page": page_idx,
+            "uuid": page_uuid,
+            "confidence": page_confidence,
+            "barcode_part": barcode_part,
+            "suffix_part": suffix_part,
+            "barcode_confidence": barcode_conf,
+            "suffix_confidence": suffix_conf
+        })
+
+        logger.info(f"[UUID EXTRACT] Page {page_idx}: {page_uuid} (conf={page_confidence:.2f})")
+
+    # Check consistency across pages
+    valid_uuids = [p["uuid"] for p in page_results if p["uuid"]]
+
+    if not valid_uuids:
+        return {
+            "uuid": None,
+            "page_uuids": page_results,
+            "consistent": True,
+            "confidence": 0.0,
+            "warning": "未识别到试卷编号"
+        }
+
+    # Check if all pages have the same UUID
+    unique_uuids = set(valid_uuids)
+    consistent = len(unique_uuids) == 1
+
+    if consistent:
+        # All pages have same UUID, use the one with highest confidence
+        best_page = max(page_results, key=lambda p: p["confidence"])
+        return {
+            "uuid": best_page["uuid"],
+            "page_uuids": page_results,
+            "consistent": True,
+            "confidence": best_page["confidence"],
+            "warning": None
+        }
+    else:
+        # Inconsistent UUIDs across pages
+        # Use majority vote with confidence weighting
+        uuid_scores = {}
+        for p in page_results:
+            if p["uuid"]:
+                uuid_scores[p["uuid"]] = uuid_scores.get(p["uuid"], 0) + p["confidence"]
+
+        best_uuid = max(uuid_scores.items(), key=lambda x: x[1])[0] if uuid_scores else None
+        avg_confidence = sum(p["confidence"] for p in page_results) / len(page_results)
+
+        warning = f"⚠️ 多页试卷编号不一致！识别到: {', '.join(unique_uuids)}。请检查是否上传了不同试卷的照片。"
+        logger.warning(f"[UUID EXTRACT] Inconsistent UUIDs: {unique_uuids}")
+
+        return {
+            "uuid": best_uuid,
+            "page_uuids": page_results,
+            "consistent": False,
+            "confidence": avg_confidence,
+            "warning": warning
+        }
+
+
+def _normalize_ocr_words(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Normalize OCR data to simplified words_result format for matching.
+
+    Supports both formats:
+    - words_result: {words: str, location: {...}, words_type: str}
+    - results: {words: {word: str, words_location: {...}}, words_type: str}
+
+    Returns: List of dicts in simplified format
+    """
+    # Try simplified format first (faster)
+    words_result = raw.get("words_result")
+    if words_result and isinstance(words_result, list):
+        return words_result
+
+    # Convert detailed format to simplified format
+    results = raw.get("results") or raw.get("data") or []
+    if not results:
+        return []
+
+    normalized = []
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+
+        words_obj = item.get("words", {})
+        if isinstance(words_obj, dict):
+            # Detailed format: convert to simplified
+            text = words_obj.get("word") or ""
+            location = words_obj.get("words_location") or {}
+        elif isinstance(words_obj, str):
+            # Already simplified (shouldn't happen in results)
+            text = words_obj
+            location = item.get("location") or {}
+        else:
+            continue
+
+        normalized.append({
+            "words": text,
+            "location": {
+                "left": location.get("left", 0),
+                "top": location.get("top", 0),
+                "width": location.get("width", 0),
+                "height": location.get("height", 0),
+            },
+            "words_type": item.get("words_type", ""),
+        })
+
+    return normalized
 
 
 def apply_white_balance(img_bytes: bytes) -> bytes:
@@ -111,6 +334,32 @@ def apply_white_balance(img_bytes: bytes) -> bytes:
     except Exception as e:
         logging.getLogger("uvicorn.error").warning(f"White balance failed: {e}, using original image")
         return img_bytes
+
+
+def _normalize_upload_image(img_bytes: bytes, filename: str) -> Tuple[bytes, str]:
+    max_long_side = int(os.environ.get("EL_AI_MAX_LONG_SIDE", "3508") or 3508)
+    jpeg_quality = int(os.environ.get("EL_AI_JPEG_QUALITY", "85") or 85)
+    try:
+        img = Image.open(io.BytesIO(img_bytes))
+    except Exception:
+        ext = os.path.splitext(filename or "")[1].lower() or ".jpg"
+        return img_bytes, ext
+
+    img = ImageOps.exif_transpose(img)
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    if max_long_side > 0:
+        w, h = img.size
+        max_dim = max(w, h)
+        if max_dim > max_long_side:
+            scale = max_long_side / max_dim
+            new_w = max(1, int(w * scale))
+            new_h = max(1, int(h * scale))
+            img = img.resize((new_w, new_h), Image.LANCZOS)
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=jpeg_quality, optimize=True)
+    return buf.getvalue(), ".jpg"
 
 
 def _extract_question_number(text: str) -> Optional[int]:
@@ -210,8 +459,38 @@ def _merge_words_to_lines(words: List[Dict], merge_threshold: float = 0.4) -> Li
     return lines
 
 
-def _attach_kb_matches(conn, base_id: int, items: List[Dict]) -> List[Dict]:
-    """Attach knowledge base match info to AI-extracted items."""
+def _get_active_base_ids(conn, student_id: int) -> List[int]:
+    """Get all active knowledge base IDs for a student.
+
+    Args:
+        conn: Database connection
+        student_id: Student ID
+
+    Returns:
+        List of base_ids from active learning bases
+    """
+    rows = conn.execute(
+        """
+        SELECT base_id FROM student_learning_bases
+        WHERE student_id = ? AND is_active = 1
+        ORDER BY id
+        """,
+        (student_id,)
+    ).fetchall()
+    return [row[0] for row in rows] if rows else []
+
+
+def _attach_kb_matches(conn, base_ids: List[int], items: List[Dict]) -> List[Dict]:
+    """Attach knowledge base match info to AI-extracted items.
+
+    Args:
+        conn: Database connection
+        base_ids: List of knowledge base IDs to search in (from student's active learning bases)
+        items: Items to match
+
+    Returns:
+        Items with matched_en_text, matched_item_id, etc. populated
+    """
     out: List[Dict] = []
     for it in items:
         student_text = str(it.get("student_text") or "").strip()
@@ -219,35 +498,36 @@ def _attach_kb_matches(conn, base_id: int, items: List[Dict]) -> List[Dict]:
         cleaned_student = re.sub(r"^\s*(英文[:：]?\s*)", "", student_text)
         norm = normalize_answer(cleaned_student) if cleaned_student else ""
         row = None
+
         if norm or zh_hint:
-            # Updated to use new 'items' table with new field names
-            row = conn.execute(
-                """
+            # Search across all active knowledge bases
+            placeholders = ','.join('?' * len(base_ids))
+            query = f"""
                 SELECT * FROM items
-                WHERE base_id=?
+                WHERE base_id IN ({placeholders})
                   AND (
                     (LOWER(en_text)=? AND ?<>'')
                     OR (zh_text=? AND ?<>'')
                   )
                 LIMIT 1
-                """,
-                (
-                    base_id,
-                    cleaned_student.lower(),
-                    cleaned_student,
-                    zh_hint,
-                    zh_hint,
-                ),
+            """
+            row = conn.execute(
+                query,
+                (*base_ids, cleaned_student.lower(), cleaned_student, zh_hint, zh_hint)
             ).fetchone()
+
         # Fuzzy matching if no exact match
         if not row and norm and len(norm) >= 6:
-            row = conn.execute(
-                """
+            placeholders = ','.join('?' * len(base_ids))
+            query = f"""
                 SELECT * FROM items
-                WHERE base_id=? AND LOWER(en_text) LIKE ?
+                WHERE base_id IN ({placeholders})
+                  AND LOWER(en_text) LIKE ?
                 LIMIT 1
-                """,
-                (base_id, f"%{norm.lower()}%"),
+            """
+            row = conn.execute(
+                query,
+                (*base_ids, f"%{norm.lower()}%")
             ).fetchone()
         hit = dict(row) if row else None
         item = dict(it)
@@ -260,7 +540,9 @@ def _attach_kb_matches(conn, base_id: int, items: List[Dict]) -> List[Dict]:
 
 
 def _load_ai_config() -> Dict[str, Any]:
-    path = os.environ.get("EL_AI_CONFIG_PATH") or os.path.join(os.path.dirname(__file__), "ai_config.json")
+    path = os.environ.get("EL_AI_CONFIG_PATH") or os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "ai_config.json")
+    )
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -404,6 +686,67 @@ def _save_debug_bundle(images: List[bytes], llm_result: Dict[str, Any], ocr_resu
 
     with open(os.path.join(debug_dir, "meta.json"), "w", encoding="utf-8") as f:
         json.dump({"saved_at": utcnow_iso(), "image_count": len(images)}, f, ensure_ascii=False, indent=2)
+
+
+def _extract_llm_raw(llm_result: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(llm_result, dict):
+        return {}
+    raw = llm_result.get("raw_llm")
+    if isinstance(raw, dict):
+        return raw
+    return llm_result
+
+
+def _extract_ocr_raw(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
+    ocr_raw = {"pages": []}
+    if isinstance(ocr_result, dict) and "pages" in ocr_result:
+        for page in ocr_result["pages"]:
+            if isinstance(page, dict) and "raw" in page:
+                ocr_raw["pages"].append({
+                    "page_index": page.get("page_index", 0),
+                    "raw": page["raw"],
+                })
+    return ocr_raw
+
+
+def _save_ai_bundle(
+    bundle_id: str,
+    llm_result: Dict[str, Any],
+    ocr_result: Dict[str, Any],
+    image_urls: List[str],
+    graded_image_urls: List[str],
+) -> None:
+    base_dir = os.path.join(MEDIA_DIR, "uploads", "ai_bundles", bundle_id)
+    os.makedirs(base_dir, exist_ok=True)
+    with open(os.path.join(base_dir, "llm_raw.json"), "w", encoding="utf-8") as f:
+        json.dump(_extract_llm_raw(llm_result), f, ensure_ascii=False, indent=2)
+    with open(os.path.join(base_dir, "ocr_raw.json"), "w", encoding="utf-8") as f:
+        json.dump(_extract_ocr_raw(ocr_result), f, ensure_ascii=False, indent=2)
+    with open(os.path.join(base_dir, "meta.json"), "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "saved_at": utcnow_iso(),
+                "image_urls": image_urls or [],
+                "graded_image_urls": graded_image_urls or [],
+            },
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+
+def _load_ai_bundle_meta(bundle_id: str) -> Optional[Dict[str, Any]]:
+    if not bundle_id:
+        return None
+    base_dir = os.path.join(MEDIA_DIR, "uploads", "ai_bundles", bundle_id)
+    meta_path = os.path.join(base_dir, "meta.json")
+    if not os.path.exists(meta_path):
+        return None
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
 
 
 def _bbox_top_norm(it: Dict) -> float:
@@ -604,36 +947,6 @@ def _save_crop_images(image_bytes_list: List[bytes], items: List[Dict]) -> None:
             crop = img.crop((left, top, right, bottom))
         except Exception:
             continue
-        # tighten crop to actual ink area when possible
-        try:
-            gray = crop.convert("L")
-            mask = gray.point(lambda p: 255 if p < 230 else 0)
-            bbox2 = mask.getbbox()
-            if bbox2:
-                pad = 6
-                l2, t2, r2, b2 = bbox2
-                l2 = max(0, l2 - pad)
-                t2 = max(0, t2 - pad)
-                r2 = min(crop.width, r2 + pad)
-                b2 = min(crop.height, b2 + pad)
-                crop = crop.crop((l2, t2, r2, b2))
-                # Remove underline-like horizontal strokes near bottom.
-                mask2 = mask.crop((l2, t2, r2, b2))
-                w2, h2 = mask2.size
-                pixels = mask2.load()
-                underline_y = None
-                for y in range(h2 - 1, int(h2 * 0.4), -1):
-                    dark = 0
-                    for x in range(w2):
-                        if pixels[x, y] != 0:
-                            dark += 1
-                    if dark / max(1, w2) > 0.75:
-                        underline_y = y
-                        break
-                if underline_y is not None and underline_y > 3:
-                    crop = crop.crop((0, 0, w2, max(1, underline_y - 2)))
-        except Exception:
-            pass
         fname = f"crop_{uuid.uuid4().hex}.jpg"
         out_path = os.path.join(crop_dir, fname)
         try:
@@ -808,12 +1121,14 @@ def analyze_ai_photos_from_debug(student_id: int, base_id: int) -> Dict:
 
     # Load images
     img_bytes_list: List[bytes] = []
+    image_urls: List[str] = []
     image_count = meta.get("image_count", 0)
     for i in range(1, image_count + 1):
         img_path = os.path.join(debug_dir, f"input_{i}.jpg")
         if os.path.exists(img_path):
             with open(img_path, "rb") as f:
                 img_bytes_list.append(f.read())
+            image_urls.append(f"/media/uploads/debug_last/input_{i}.jpg")
 
     # Apply white balance for grading/cropping (same as normal mode)
     logger.info("[AI GRADING DEBUG] Applying white balance...")
@@ -866,12 +1181,14 @@ def analyze_ai_photos_from_debug(student_id: int, base_id: int) -> Dict:
         zh_hint = it.get("zh_hint") or ""
         if _is_header_hint(str(zh_hint)):
             continue
-        # Use LLM's question number, fallback to large number to sort at end
-        position = int(it.get("q") or 9000 + idx)
+        # FIXED: Use global sequential index as position to avoid duplicates across sections
+        # Store original question number in 'q' field for display purposes
+        position = idx
         conf_val = it.get("confidence")
         items.append(
             {
                 "position": position,
+                "q": it.get("q"),  # Original question number within section
                 "section_type": it.get("section_type") or "",
                 "section_title": it.get("section_title") or "",
                 "zh_hint": zh_hint,
@@ -905,8 +1222,8 @@ def analyze_ai_photos_from_debug(student_id: int, base_id: int) -> Dict:
     for p in ocr_pages:
         idx = int(p.get("page_index") or 0)
         raw = p.get("raw") or {}
-        words = raw.get("words_result") or raw.get("data") or []
-        if isinstance(words, list):
+        words = _normalize_ocr_words(raw)
+        if words:
             ocr_by_page[idx] = words
 
     # OCR matching (same as analyze_ai_photos)
@@ -950,10 +1267,82 @@ def analyze_ai_photos_from_debug(student_id: int, base_id: int) -> Dict:
         ]
 
     ocr_match_thr = float(os.environ.get("EL_OCR_MATCH_THRESHOLD", "0.6"))
-    question_positions_by_page: Dict[int, Dict[int, float]] = {}
+
+    def _detect_section_key(text: str) -> Optional[str]:
+        if "单词默写" in text:
+            return "WORD"
+        if "短语默写" in text:
+            return "PHRASE"
+        if "句子默写" in text:
+            return "SENTENCE"
+        return None
+
+    def _group_handwriting_by_question(words: List[Dict[str, Any]]) -> Dict[Tuple[str, int], List[Dict[str, Any]]]:
+        groups: Dict[Tuple[str, int], List[Dict[str, Any]]] = {}
+        current_q: Optional[int] = None
+        current_section: Optional[str] = None
+        for w in words:
+            wt = w.get("words_type")
+            text = str(w.get("words") or "")
+            if wt != "handwriting":
+                section_key = _detect_section_key(text)
+                if section_key:
+                    current_section = section_key
+                    current_q = None
+                q_num = _extract_question_number(text)
+                if q_num is not None:
+                    current_q = q_num
+                continue
+            if current_q is None:
+                continue
+            key = ((current_section or ""), current_q)
+            groups.setdefault(key, []).append(w)
+        return groups
+
+    handwriting_groups_by_page: Dict[int, Dict[Tuple[str, int], List[Dict[str, Any]]]] = {
+        page_idx: _group_handwriting_by_question(words)
+        for page_idx, words in ocr_by_page.items()
+    }
+    section_keys_by_page: Dict[int, set] = {}
     for page_idx, words in ocr_by_page.items():
-        questions = _extract_question_positions(words)
-        question_positions_by_page[page_idx] = {q["q_num"]: q["top"] for q in questions}
+        keys = set()
+        for w in words:
+            if w.get("words_type") == "handwriting":
+                continue
+            sec = _detect_section_key(str(w.get("words") or ""))
+            if sec:
+                keys.add(sec)
+        section_keys_by_page[page_idx] = keys
+    section_keys_by_page: Dict[int, set] = {}
+    for page_idx, words in ocr_by_page.items():
+        keys = set()
+        for w in words:
+            if w.get("words_type") == "handwriting":
+                continue
+            sec = _detect_section_key(str(w.get("words") or ""))
+            if sec:
+                keys.add(sec)
+        section_keys_by_page[page_idx] = keys
+    question_numbers_by_page: Dict[int, set] = {}
+    for page_idx, words in ocr_by_page.items():
+        q_nums = set()
+        for w in words:
+            if w.get("words_type") == "handwriting":
+                continue
+            q_num = _extract_question_number(str(w.get("words") or ""))
+            if q_num is not None:
+                q_nums.add(q_num)
+        question_numbers_by_page[page_idx] = q_nums
+    question_numbers_by_page: Dict[int, set] = {}
+    for page_idx, words in ocr_by_page.items():
+        q_nums = set()
+        for w in words:
+            if w.get("words_type") == "handwriting":
+                continue
+            q_num = _extract_question_number(str(w.get("words") or ""))
+            if q_num is not None:
+                q_nums.add(q_num)
+        question_numbers_by_page[page_idx] = q_nums
 
     ocr_lines_by_page: Dict[int, List[Dict[str, Any]]] = {}
     for page_idx, words in ocr_by_page.items():
@@ -972,6 +1361,65 @@ def analyze_ai_photos_from_debug(student_id: int, base_id: int) -> Dict:
         it["match_method"] = "no_match"
 
         if not lines:
+            continue
+
+        section_key = str(it.get("section_type") or "")
+        group_key = (section_key, q_num)
+        groups_for_page = handwriting_groups_by_page.get(page_idx, {}) or {}
+        group = groups_for_page.get(group_key) if q_num else None
+        if not group and q_num:
+            same_q_keys = [key for key in groups_for_page.keys() if key[1] == q_num]
+            if len(same_q_keys) == 1 and len(section_keys_by_page.get(page_idx, set())) <= 1:
+                group = groups_for_page[same_q_keys[0]]
+            elif same_q_keys:
+                continue
+        if not group and q_num and q_num in question_numbers_by_page.get(page_idx, set()):
+            continue
+        if group:
+            candidate_texts = [str(w.get("words") or "").strip() for w in group if str(w.get("words") or "").strip()]
+            llm_text_norm = normalize_answer(str(it.get("llm_text") or ""))
+            best_text = candidate_texts[0] if candidate_texts else ""
+            best_ratio_group = 0.0
+            if llm_text_norm and candidate_texts:
+                for cand in candidate_texts:
+                    cand_norm = normalize_answer(cand)
+                    if not cand_norm:
+                        continue
+                    ratio = difflib.SequenceMatcher(None, llm_text_norm, cand_norm).ratio()
+                    if ratio > best_ratio_group:
+                        best_ratio_group = ratio
+                        best_text = cand
+            it["ocr_text"] = best_text
+            it["ocr_text_candidates"] = candidate_texts
+            it["ocr_match_ratio"] = best_ratio_group
+            it["match_method"] = "question_group"
+
+            lefts: List[float] = []
+            tops: List[float] = []
+            rights: List[float] = []
+            bottoms: List[float] = []
+            for w in group:
+                loc = w.get("location") or {}
+                left = float(loc.get("left", 0))
+                top = float(loc.get("top", 0))
+                width = float(loc.get("width", 0))
+                height = float(loc.get("height", 0))
+                lefts.append(left)
+                tops.append(top)
+                rights.append(left + width)
+                bottoms.append(top + height)
+            if lefts and tops:
+                best_bbox = [min(lefts), min(tops), max(rights), max(bottoms)]
+                try:
+                    img = Image.open(io.BytesIO(img_bytes_list[page_idx]))
+                    img = ImageOps.exif_transpose(img)
+                    w, h = img.size
+                except Exception:
+                    w, h = 1, 1
+                norm_bbox = _abs_to_norm_bbox(best_bbox, w, h)
+                if norm_bbox:
+                    it["handwriting_bbox"] = norm_bbox
+                    it["line_bbox"] = norm_bbox
             continue
 
         llm_text_norm = normalize_answer(str(it.get("llm_text") or ""))
@@ -998,54 +1446,83 @@ def analyze_ai_photos_from_debug(student_id: int, base_id: int) -> Dict:
 
         if best_ratio >= ocr_match_thr:
             match_method = f"text_sim_{best_ratio:.2f}"
-        else:
-            q_positions = question_positions_by_page.get(page_idx, {})
-            if q_num in q_positions:
-                expected_top = q_positions[q_num]
-                closest_idx = None
-                closest_dist = float('inf')
-                for idx_ln, ln in enumerate(lines):
-                    if idx_ln in ocr_used.get(page_idx, set()):
-                        continue
-                    ln_top = ln.get("top", ln["bbox"][1])
-                    dist = abs(ln_top - expected_top)
-                    if dist < closest_dist and dist < 100:
-                        closest_dist = dist
-                        closest_idx = idx_ln
-                if closest_idx is not None:
-                    best_idx = closest_idx
-                    best_ratio = 0.0
-                    match_method = f"position_{closest_dist:.0f}px"
-
-        if best_idx is None:
-            for idx_ln, ln in enumerate(lines):
-                if idx_ln in ocr_used.get(page_idx, set()):
-                    continue
-                best_idx = idx_ln
-                best_ratio = 0.0
-                match_method = "sequential_fallback"
-                break
 
         if best_idx is None:
             continue
 
-        ocr_used.setdefault(page_idx, set()).add(best_idx)
-        best = lines[best_idx]
-        eng_words = [w for w in (best.get("words") or []) if re.search(r"[A-Za-z]", str(w.get("text") or ""))]
-        if eng_words:
-            it["ocr_text"] = " ".join([str(w.get("text") or "") for w in eng_words]).strip()
-            left = min(float(w["left"]) for w in eng_words)
-            top = min(float(w["top"]) for w in eng_words)
-            right = max(float(w["left"]) + float(w["width"]) for w in eng_words)
-            bottom = max(float(w["top"]) + float(w["height"]) for w in eng_words)
+        def _line_text_bbox(line: Dict[str, Any]) -> Tuple[str, List[float]]:
+            eng_words = [w for w in (line.get("words") or []) if re.search(r"[A-Za-z]", str(w.get("text") or ""))]
+            if eng_words:
+                text = " ".join([str(w.get("text") or "") for w in eng_words]).strip()
+                left = min(float(w["left"]) for w in eng_words)
+                top = min(float(w["top"]) for w in eng_words)
+                right = max(float(w["left"]) + float(w["width"]) for w in eng_words)
+                bottom = max(float(w["top"]) + float(w["height"]) for w in eng_words)
+                return text, [left, top, right, bottom]
+            return str(line.get("text") or ""), list(line.get("bbox") or [0, 0, 0, 0])
+
+        def _is_related_bbox(base_bbox: List[float], other_bbox: List[float]) -> bool:
+            base_h = base_bbox[3] - base_bbox[1]
+            other_h = other_bbox[3] - other_bbox[1]
+            pad = max(8, int(max(base_h, other_h) * 0.2))
+            return not (
+                other_bbox[2] < base_bbox[0] - pad
+                or other_bbox[0] > base_bbox[2] + pad
+                or other_bbox[3] < base_bbox[1] - pad
+                or other_bbox[1] > base_bbox[3] + pad
+            )
+
+        base_text, base_bbox = _line_text_bbox(lines[best_idx])
+        used_set = ocr_used.get(page_idx, set())
+        group_indices: List[int] = []
+        group_texts: List[str] = []
+        group_bboxes: List[List[float]] = []
+        for idx_ln, ln in enumerate(lines):
+            if idx_ln in used_set:
+                continue
+            text, bbox = _line_text_bbox(ln)
+            if idx_ln == best_idx or _is_related_bbox(base_bbox, bbox):
+                group_indices.append(idx_ln)
+                if text:
+                    group_texts.append(text)
+                group_bboxes.append(bbox)
+
+        for idx_ln in group_indices:
+            ocr_used.setdefault(page_idx, set()).add(idx_ln)
+
+        llm_text_norm = normalize_answer(str(it.get("llm_text") or ""))
+        best_text = base_text
+        best_ratio_group = best_ratio
+        if group_texts:
+            if llm_text_norm:
+                for text in group_texts:
+                    cand_norm = normalize_answer(text)
+                    if not cand_norm:
+                        continue
+                    ratio = difflib.SequenceMatcher(None, llm_text_norm, cand_norm).ratio()
+                    if ratio > best_ratio_group:
+                        best_ratio_group = ratio
+                        best_text = text
+            else:
+                best_text = group_texts[0]
+
+        it["ocr_text"] = best_text
+        it["ocr_text_candidates"] = group_texts
+        it["ocr_match_ratio"] = best_ratio_group
+        if llm_text_norm and best_ratio_group >= ocr_match_thr:
+            match_method = f"text_sim_{best_ratio_group:.2f}"
+        it["match_method"] = match_method
+        if best_ratio_group < ocr_match_thr and not match_method.startswith("position"):
+            it["note"] = (it.get("note") or "") + " ocr_match_low"
+
+        if group_bboxes:
+            left = min(b[0] for b in group_bboxes)
+            top = min(b[1] for b in group_bboxes)
+            right = max(b[2] for b in group_bboxes)
+            bottom = max(b[3] for b in group_bboxes)
             best_bbox = [left, top, right, bottom]
         else:
-            it["ocr_text"] = best["text"]
-            best_bbox = best["bbox"]
-        it["ocr_match_ratio"] = best_ratio
-        it["match_method"] = match_method
-        if best_ratio < ocr_match_thr and not match_method.startswith("position"):
-            it["note"] = (it.get("note") or "") + " ocr_match_low"
+            best_bbox = base_bbox
         try:
             img = Image.open(io.BytesIO(img_bytes_list[page_idx]))
             img = ImageOps.exif_transpose(img)
@@ -1059,21 +1536,44 @@ def analyze_ai_photos_from_debug(student_id: int, base_id: int) -> Dict:
             it["line_bbox"] = norm_bbox
 
     # Attach KB matches
+    # Match against all active learning bases for this student
     for it in items:
         it["student_text"] = it.get("llm_text") or ""
     with db() as conn:
-        items = _attach_kb_matches(conn, base_id, items)
+        active_base_ids = _get_active_base_ids(conn, student_id)
+        if not active_base_ids:
+            logger.warning(f"[AI GRADING DEBUG] Student {student_id} has no active learning bases")
+            active_base_ids = []
+        else:
+            logger.info(f"[AI GRADING DEBUG] Matching against {len(active_base_ids)} active knowledge bases: {active_base_ids}")
+        items = _attach_kb_matches(conn, active_base_ids, items)
 
     # Compare LLM vs OCR
     sim_thr = float(os.environ.get("EL_MATCH_SIM_THRESHOLD", "0.88"))
     for it in items:
         llm_text = normalize_answer(str(it.get("llm_text") or ""))
-        ocr_text = normalize_answer(str(it.get("ocr_text") or ""))
+        candidates = it.get("ocr_text_candidates") or []
+        if not candidates:
+            candidates = [str(it.get("ocr_text") or "")]
 
-        if llm_text and ocr_text:
-            ratio = difflib.SequenceMatcher(None, llm_text, ocr_text).ratio()
-            it["consistency_ok"] = ratio >= sim_thr
-        elif not llm_text and not ocr_text:
+        cand_norms: List[Tuple[str, str]] = []
+        for cand in candidates:
+            norm = normalize_answer(str(cand))
+            if norm:
+                cand_norms.append((str(cand), norm))
+
+        if llm_text and cand_norms:
+            best_ratio = 0.0
+            best_text = cand_norms[0][0]
+            for raw_text, norm_text in cand_norms:
+                ratio = difflib.SequenceMatcher(None, llm_text, norm_text).ratio()
+                if ratio > best_ratio:
+                    best_ratio = ratio
+                    best_text = raw_text
+            it["ocr_text"] = best_text
+            it["consistency_ok"] = best_ratio >= sim_thr
+            ratio = best_ratio
+        elif not llm_text and not cand_norms:
             ratio = 1.0
             it["consistency_ok"] = True
         else:
@@ -1082,7 +1582,7 @@ def analyze_ai_photos_from_debug(student_id: int, base_id: int) -> Dict:
 
         it["consistency_ratio"] = ratio
 
-        if not it["consistency_ok"] and (llm_text or ocr_text):
+        if not it["consistency_ok"] and (llm_text or cand_norms):
             if it.get("confidence") is not None:
                 it["confidence"] = max(0.0, float(it.get("confidence")) * 0.6)
             else:
@@ -1117,6 +1617,42 @@ def analyze_ai_photos_from_debug(student_id: int, base_id: int) -> Dict:
         ellipse_bbox = [cx - radius_x, cy - radius_y, cx + radius_x, cy + radius_y]
         draw.ellipse(ellipse_bbox, outline=color, width=width)
 
+    def needs_review_mark(item: Dict[str, Any]) -> bool:
+        """Match frontend 'warn' logic for inconsistent answers."""
+        if item.get("is_correct") is not True:
+            return False
+        if item.get("consistency_ok") is False:
+            return True
+        llm_text = normalize_answer(str(item.get("llm_text") or ""))
+        ref_text = normalize_answer(str(item.get("matched_en_text") or ""))
+        return bool(llm_text and ref_text and llm_text != ref_text)
+
+    def draw_question_mark(draw, bbox, color="#f59e0b"):
+        """Draw a question mark to the right of the bbox."""
+        x1, y1, x2, y2 = bbox
+        bbox_h = y2 - y1
+        font = ImageFont.load_default()
+        mark = "?"
+        if hasattr(draw, "textbbox"):
+            left, top, right, bottom = draw.textbbox((0, 0), mark, font=font)
+            text_w = right - left
+            text_h = bottom - top
+        elif hasattr(font, "getbbox"):
+            left, top, right, bottom = font.getbbox(mark)
+            text_w = right - left
+            text_h = bottom - top
+        else:
+            text_w, text_h = font.getsize(mark)
+        x = x2 + 8
+        y = y1 + max(0, int((bbox_h - text_h) / 2))
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            draw.text((x + dx, y + dy), mark, font=font, fill="#000000")
+        draw.text((x, y), mark, font=font, fill=color)
+
+    def draw_warning_ellipse(draw, bbox, color="#f59e0b", width=6):
+        """Draw a yellow ellipse around the answer bbox."""
+        draw_red_circle(draw, bbox, color=color, width=width)
+
     # Use white-balanced images for graded output
     for page_idx, img_bytes in enumerate(wb_img_bytes_list):
         try:
@@ -1134,9 +1670,10 @@ def analyze_ai_photos_from_debug(student_id: int, base_id: int) -> Dict:
                 if not abs_bbox:
                     continue
                 is_correct = it.get("is_correct")
-                if is_correct is None:
-                    color = "#f59e0b"
-                    draw.rectangle(abs_bbox, outline=color, width=3)
+                is_uncertain = (is_correct is None) or needs_review_mark(it)
+                if is_uncertain:
+                    draw_warning_ellipse(draw, abs_bbox, color="#f59e0b", width=6)
+                    draw_question_mark(draw, abs_bbox, color="#f59e0b")
                 elif is_correct:
                     draw_checkmark(draw, abs_bbox, color="#19c37d", width=6)
                 else:
@@ -1165,19 +1702,39 @@ def analyze_ai_photos_from_debug(student_id: int, base_id: int) -> Dict:
     if extracted_date:
         logger.info(f"[AI GRADING DEBUG] Extracted date from OCR: {extracted_date}")
 
+    # Extract UUID from OCR results
+    uuid_info = _extract_uuid_from_ocr(ocr_raw)
+    if uuid_info.get("uuid"):
+        logger.info(f"[AI GRADING DEBUG] Extracted UUID: {uuid_info['uuid']} (conf={uuid_info['confidence']:.2f}, consistent={uuid_info['consistent']})")
+
+    bundle_id = f"debug_{uuid.uuid4().hex}"
+    if os.environ.get("EL_AI_BUNDLE_SAVE", "1") == "1":
+        _save_ai_bundle(bundle_id, llm_raw or {}, ocr_raw or {}, [], graded_image_urls)
     return {
         "items": items,
-        "image_urls": [],
+        "image_urls": image_urls,
         "graded_image_urls": graded_image_urls,
         "debug_overlay_urls": debug_overlay_urls,
         "image_count": len(img_bytes_list),
         "matched_session": matched_session,
         "extracted_date": extracted_date,
+        "worksheet_uuid": uuid_info.get("uuid"),
+        "uuid_info": uuid_info,
+        "bundle_id": bundle_id,
     }
 
 
-def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) -> Dict:
-    """LLM analysis + Baidu OCR recognition with merging."""
+def analyze_ai_photos(student_id: int, base_id: int = None, uploads: List[UploadFile] = None) -> Dict:
+    """LLM analysis + Baidu OCR recognition with merging.
+
+    Args:
+        student_id: Student ID
+        base_id: (Deprecated) Legacy parameter, now ignored. Matching uses all active learning bases.
+        uploads: List of uploaded image files
+
+    Returns:
+        Dict with items, image_urls, etc.
+    """
     if not uploads:
         raise ValueError("no files uploaded")
 
@@ -1195,10 +1752,10 @@ def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) 
     img_bytes_list: List[bytes] = []
     saved_paths: List[str] = []
     for idx, upload in enumerate(uploads, start=1):
-        ext = os.path.splitext(upload.filename or "")[1].lower() or ".jpg"
+        raw_bytes = upload.file.read()
+        img_bytes, ext = _normalize_upload_image(raw_bytes, upload.filename or "")
         fname = f"ai_sheet_{student_id}_{idx}_{uuid.uuid4().hex}{ext}"
         out_path = os.path.join(MEDIA_DIR, "uploads", fname)
-        img_bytes = upload.file.read()
         img_bytes_list.append(img_bytes)
         saved_paths.append(out_path)
         with open(out_path, "wb") as f:
@@ -1214,8 +1771,8 @@ def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) 
 
     # parallel LLM + OCR
     import concurrent.futures
-    timeout_llm = int(os.environ.get("EL_AI_TIMEOUT_SECONDS", "30"))
-    timeout_ocr = int(os.environ.get("EL_OCR_TIMEOUT_SECONDS", "30"))
+    timeout_llm = int(os.environ.get("EL_AI_TIMEOUT_SECONDS", "90"))  # Increased from 30 to 90 seconds
+    timeout_ocr = int(os.environ.get("EL_OCR_TIMEOUT_SECONDS", "60"))  # Increased from 30 to 60 seconds
     logger.info(f"[AI GRADING] Timeout settings: LLM={timeout_llm}s, OCR={timeout_ocr}s")
     cfg = _load_ai_config()
     ocr_cfg = cfg.get("ocr", {}) or {}
@@ -1231,31 +1788,96 @@ def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) 
     def _run_ocr():
         return recognize_edu_test(img_bytes_list, timeout=timeout_ocr, endpoint=endpoint, params=ocr_params)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
-        fut_llm = ex.submit(_run_llm)
-        fut_ocr = ex.submit(_run_ocr)
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+    fut_llm = ex.submit(_run_llm)
+    fut_ocr = ex.submit(_run_ocr)
+    try:
         llm_start = time.time()
         try:
             llm_raw = fut_llm.result(timeout=timeout_llm)
             llm_elapsed = time.time() - llm_start
             logger.info(f"[AI GRADING] LLM completed in {llm_elapsed:.1f}s")
+        except concurrent.futures.TimeoutError:
+            llm_elapsed = time.time() - llm_start
+            logger.error(f"[AI GRADING] LLM timeout after {llm_elapsed:.1f}s (limit: {timeout_llm}s)")
+            fut_llm.cancel()
+            if not fut_ocr.done():
+                fut_ocr.cancel()
+            raise ValueError(f"LLM 识别超时（{llm_elapsed:.0f}秒），请稍后重试或增加超时限制")
         except Exception as e:
             llm_elapsed = time.time() - llm_start
+            error_msg = str(e)
             logger.error(f"[AI GRADING] LLM failed after {llm_elapsed:.1f}s: {e}")
-            raise ValueError(f"LLM 识别失败: {e}")
+            if not fut_ocr.done():
+                fut_ocr.cancel()
+
+            # Provide user-friendly error messages
+            if "Connection error" in error_msg or "ConnectionError" in str(type(e).__name__):
+                raise ValueError(f"LLM 识别网络连接失败，请检查网络连接后重试。如果问题持续出现，可能是 API 服务暂时不可用。(耗时: {llm_elapsed:.1f}秒)")
+            elif "timeout" in error_msg.lower():
+                raise ValueError(f"LLM 识别超时（{llm_elapsed:.0f}秒），图片可能过大或网络较慢，请重试")
+            else:
+                raise ValueError(f"LLM 识别失败: {error_msg} (耗时: {llm_elapsed:.1f}秒)")
+
         ocr_start = time.time()
         try:
             ocr_raw = fut_ocr.result(timeout=timeout_ocr)
             ocr_elapsed = time.time() - ocr_start
             logger.info(f"[AI GRADING] OCR completed in {ocr_elapsed:.1f}s")
+        except concurrent.futures.TimeoutError:
+            ocr_elapsed = time.time() - ocr_start
+            logger.error(f"[AI GRADING] OCR timeout after {ocr_elapsed:.1f}s (limit: {timeout_ocr}s)")
+            if not fut_llm.done():
+                fut_llm.cancel()
+            raise ValueError(f"OCR 识别超时（{ocr_elapsed:.0f}秒），请稍后重试或增加超时限制")
         except Exception as e:
             ocr_elapsed = time.time() - ocr_start
             logger.error(f"[AI GRADING] OCR failed after {ocr_elapsed:.1f}s: {e}")
+            if not fut_llm.done():
+                fut_llm.cancel()
             raise ValueError(f"OCR 识别失败: {e}")
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
 
-    items_raw = llm_raw.get("items") or []
+    # Parse LLM raw data (handle both sections format and flat items format)
+    items_raw = []
 
-    logger.info(f"[AI GRADING] LLM items: {len(items_raw)}; OCR pages: {len(ocr_raw.get('pages', []))}")
+    # Get the actual LLM response (may be wrapped in raw_llm)
+    llm_data = llm_raw.get("raw_llm") if "raw_llm" in llm_raw else llm_raw
+    sections = llm_data.get("sections") if isinstance(llm_data, dict) else None
+
+    if isinstance(sections, list):
+        logger.info(f"[AI GRADING] Found {len(sections)} sections in LLM response")
+        # Flatten sections into items (preserve section order and titles)
+        for sec in sections:
+            if not isinstance(sec, dict):
+                continue
+            sec_title = sec.get("title") or ""
+            sec_type = sec.get("type") or ""
+            sec_items = sec.get("items") or []
+            logger.info(f"[AI GRADING] Processing section: '{sec_title}' (type={sec_type}, items={len(sec_items)})")
+            # Mark first item of this section with title
+            for idx, it in enumerate(sec_items):
+                if not isinstance(it, dict):
+                    continue
+                # Convert short field names to long names
+                items_raw.append({
+                    "q": it.get("q"),
+                    "section_title": sec_title if idx == 0 else "",  # Only first item has title
+                    "section_type": sec_type,
+                    "zh_hint": it.get("hint") or "",
+                    "student_text": it.get("ans") or "",
+                    "is_correct": it.get("ok"),
+                    "confidence": it.get("conf"),
+                    "page_index": it.get("pg") or 0,
+                    "note": it.get("note") or "",
+                })
+    else:
+        logger.warning("[AI GRADING] No sections found in LLM response, using flat items format")
+        # Fallback to pre-flattened items from analyze_freeform_sheet
+        items_raw = llm_raw.get("items") or []
+
+    logger.info(f"[AI GRADING] LLM items_raw: {len(items_raw)}; OCR pages: {len(ocr_raw.get('pages', []))}")
 
     # Parse LLM items
     items: List[Dict] = []
@@ -1265,12 +1887,14 @@ def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) 
         zh_hint = it.get("zh_hint") or ""
         if _is_header_hint(str(zh_hint)):
             continue
-        # Use LLM's question number, fallback to large number to sort at end
-        position = int(it.get("q") or 9000 + idx)
+        # FIXED: Use global sequential index as position to avoid duplicates across sections
+        # Store original question number in 'q' field for display purposes
+        position = idx
         conf_val = it.get("confidence")
         items.append(
             {
                 "position": position,
+                "q": it.get("q"),  # Original question number within section
                 "section_type": it.get("section_type") or "",
                 "section_title": it.get("section_title") or "",
                 "zh_hint": zh_hint,
@@ -1304,8 +1928,8 @@ def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) 
     for p in ocr_pages:
         idx = int(p.get("page_index") or 0)
         raw = p.get("raw") or {}
-        words = raw.get("words_result") or raw.get("data") or []
-        if isinstance(words, list):
+        words = _normalize_ocr_words(raw)
+        if words:
             ocr_by_page[idx] = words
 
     # Map OCR lines to each item (bbox comes from OCR; fuzzy match to LLM text).
@@ -1371,12 +1995,58 @@ def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) 
 
     ocr_match_thr = float(os.environ.get("EL_OCR_MATCH_THRESHOLD", "0.6"))
 
-    # Extract question positions from print text (NEW: for position-based matching)
-    question_positions_by_page: Dict[int, Dict[int, float]] = {}
+    def _detect_section_key(text: str) -> Optional[str]:
+        if "单词默写" in text:
+            return "WORD"
+        if "短语默写" in text:
+            return "PHRASE"
+        if "句子默写" in text:
+            return "SENTENCE"
+        return None
+
+    def _group_handwriting_by_question(words: List[Dict[str, Any]]) -> Dict[Tuple[str, int], List[Dict[str, Any]]]:
+        groups: Dict[Tuple[str, int], List[Dict[str, Any]]] = {}
+        current_q: Optional[int] = None
+        current_section: Optional[str] = None
+        for w in words:
+            wt = w.get("words_type")
+            text = str(w.get("words") or "")
+            if wt != "handwriting":
+                section_key = _detect_section_key(text)
+                if section_key:
+                    current_section = section_key
+                    current_q = None
+                q_num = _extract_question_number(text)
+                if q_num is not None:
+                    current_q = q_num
+                continue
+            if current_q is None:
+                continue
+            key = ((current_section or ""), current_q)
+            groups.setdefault(key, []).append(w)
+        return groups
+
+    handwriting_groups_by_page: Dict[int, Dict[Tuple[str, int], List[Dict[str, Any]]]] = {
+        page_idx: _group_handwriting_by_question(words)
+        for page_idx, words in ocr_by_page.items()
+    }
+    question_numbers_by_page: Dict[int, set] = {}
+    section_keys_by_page: Dict[int, set] = {}
     for page_idx, words in ocr_by_page.items():
-        questions = _extract_question_positions(words)
-        # Build map: question_number -> top position
-        question_positions_by_page[page_idx] = {q["q_num"]: q["top"] for q in questions}
+        q_nums = set()
+        section_keys = set()
+        for w in words:
+            if w.get("words_type") == "handwriting":
+                continue
+            text = str(w.get("words") or "")
+            sec = _detect_section_key(text)
+            if sec:
+                section_keys.add(sec)
+            q_num = _extract_question_number(text)
+            if q_num is not None:
+                q_nums.add(q_num)
+        question_numbers_by_page[page_idx] = q_nums
+        section_keys_by_page[page_idx] = section_keys
 
     # Precompute OCR lines by page and track usage to avoid duplicates.
     ocr_lines_by_page: Dict[int, List[Dict[str, Any]]] = {}
@@ -1397,6 +2067,65 @@ def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) 
         it["match_method"] = "no_match"
 
         if not lines:
+            continue
+
+        section_key = str(it.get("section_type") or "")
+        group_key = (section_key, q_num)
+        groups_for_page = handwriting_groups_by_page.get(page_idx, {}) or {}
+        group = groups_for_page.get(group_key) if q_num else None
+        if not group and q_num:
+            same_q_keys = [key for key in groups_for_page.keys() if key[1] == q_num]
+            if len(same_q_keys) == 1 and len(section_keys_by_page.get(page_idx, set())) <= 1:
+                group = groups_for_page[same_q_keys[0]]
+            elif same_q_keys:
+                continue
+        if not group and q_num and q_num in question_numbers_by_page.get(page_idx, set()):
+            continue
+        if group:
+            candidate_texts = [str(w.get("words") or "").strip() for w in group if str(w.get("words") or "").strip()]
+            llm_text_norm = normalize_answer(str(it.get("llm_text") or ""))
+            best_text = candidate_texts[0] if candidate_texts else ""
+            best_ratio_group = 0.0
+            if llm_text_norm and candidate_texts:
+                for cand in candidate_texts:
+                    cand_norm = normalize_answer(cand)
+                    if not cand_norm:
+                        continue
+                    ratio = difflib.SequenceMatcher(None, llm_text_norm, cand_norm).ratio()
+                    if ratio > best_ratio_group:
+                        best_ratio_group = ratio
+                        best_text = cand
+            it["ocr_text"] = best_text
+            it["ocr_text_candidates"] = candidate_texts
+            it["ocr_match_ratio"] = best_ratio_group
+            it["match_method"] = "question_group"
+
+            lefts: List[float] = []
+            tops: List[float] = []
+            rights: List[float] = []
+            bottoms: List[float] = []
+            for w in group:
+                loc = w.get("location") or {}
+                left = float(loc.get("left", 0))
+                top = float(loc.get("top", 0))
+                width = float(loc.get("width", 0))
+                height = float(loc.get("height", 0))
+                lefts.append(left)
+                tops.append(top)
+                rights.append(left + width)
+                bottoms.append(top + height)
+            if lefts and tops:
+                best_bbox = [min(lefts), min(tops), max(rights), max(bottoms)]
+                try:
+                    img = Image.open(io.BytesIO(img_bytes_list[page_idx]))
+                    img = ImageOps.exif_transpose(img)
+                    w, h = img.size
+                except Exception:
+                    w, h = 1, 1
+                norm_bbox = _abs_to_norm_bbox(best_bbox, w, h)
+                if norm_bbox:
+                    it["handwriting_bbox"] = norm_bbox
+                    it["line_bbox"] = norm_bbox
             continue
 
         llm_text_norm = normalize_answer(str(it.get("llm_text") or ""))
@@ -1425,63 +2154,83 @@ def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) 
 
         if best_ratio >= ocr_match_thr:
             match_method = f"text_sim_{best_ratio:.2f}"
-        else:
-            # Strategy 2: Position-based match (medium priority, NEW)
-            q_positions = question_positions_by_page.get(page_idx, {})
-            if q_num in q_positions:
-                expected_top = q_positions[q_num]
-                closest_idx = None
-                closest_dist = float('inf')
-
-                # Find OCR line closest to expected question position
-                for idx_ln, ln in enumerate(lines):
-                    if idx_ln in ocr_used.get(page_idx, set()):
-                        continue
-
-                    ln_top = ln.get("top", ln["bbox"][1])
-                    # Answer should be at or below question (within ~100px)
-                    dist = abs(ln_top - expected_top)
-
-                    # Prefer answers near the question
-                    if dist < closest_dist and dist < 100:
-                        closest_dist = dist
-                        closest_idx = idx_ln
-
-                if closest_idx is not None:
-                    best_idx = closest_idx
-                    best_ratio = 0.0  # Position-based, not text-based
-                    match_method = f"position_{closest_dist:.0f}px"
-
-        # Strategy 3: Sequential fallback (lowest priority)
-        if best_idx is None:
-            for idx_ln, ln in enumerate(lines):
-                if idx_ln in ocr_used.get(page_idx, set()):
-                    continue
-                best_idx = idx_ln
-                best_ratio = 0.0
-                match_method = "sequential_fallback"
-                break
 
         if best_idx is None:
             continue
 
-        ocr_used.setdefault(page_idx, set()).add(best_idx)
-        best = lines[best_idx]
-        eng_words = [w for w in (best.get("words") or []) if re.search(r"[A-Za-z]", str(w.get("text") or ""))]
-        if eng_words:
-            it["ocr_text"] = " ".join([str(w.get("text") or "") for w in eng_words]).strip()
-            left = min(float(w["left"]) for w in eng_words)
-            top = min(float(w["top"]) for w in eng_words)
-            right = max(float(w["left"]) + float(w["width"]) for w in eng_words)
-            bottom = max(float(w["top"]) + float(w["height"]) for w in eng_words)
+        def _line_text_bbox(line: Dict[str, Any]) -> Tuple[str, List[float]]:
+            eng_words = [w for w in (line.get("words") or []) if re.search(r"[A-Za-z]", str(w.get("text") or ""))]
+            if eng_words:
+                text = " ".join([str(w.get("text") or "") for w in eng_words]).strip()
+                left = min(float(w["left"]) for w in eng_words)
+                top = min(float(w["top"]) for w in eng_words)
+                right = max(float(w["left"]) + float(w["width"]) for w in eng_words)
+                bottom = max(float(w["top"]) + float(w["height"]) for w in eng_words)
+                return text, [left, top, right, bottom]
+            return str(line.get("text") or ""), list(line.get("bbox") or [0, 0, 0, 0])
+
+        def _is_related_bbox(base_bbox: List[float], other_bbox: List[float]) -> bool:
+            base_h = base_bbox[3] - base_bbox[1]
+            other_h = other_bbox[3] - other_bbox[1]
+            pad = max(8, int(max(base_h, other_h) * 0.2))
+            return not (
+                other_bbox[2] < base_bbox[0] - pad
+                or other_bbox[0] > base_bbox[2] + pad
+                or other_bbox[3] < base_bbox[1] - pad
+                or other_bbox[1] > base_bbox[3] + pad
+            )
+
+        base_text, base_bbox = _line_text_bbox(lines[best_idx])
+        used_set = ocr_used.get(page_idx, set())
+        group_indices: List[int] = []
+        group_texts: List[str] = []
+        group_bboxes: List[List[float]] = []
+        for idx_ln, ln in enumerate(lines):
+            if idx_ln in used_set:
+                continue
+            text, bbox = _line_text_bbox(ln)
+            if idx_ln == best_idx or _is_related_bbox(base_bbox, bbox):
+                group_indices.append(idx_ln)
+                if text:
+                    group_texts.append(text)
+                group_bboxes.append(bbox)
+
+        for idx_ln in group_indices:
+            ocr_used.setdefault(page_idx, set()).add(idx_ln)
+
+        llm_text_norm = normalize_answer(str(it.get("llm_text") or ""))
+        best_text = base_text
+        best_ratio_group = best_ratio
+        if group_texts:
+            if llm_text_norm:
+                for text in group_texts:
+                    cand_norm = normalize_answer(text)
+                    if not cand_norm:
+                        continue
+                    ratio = difflib.SequenceMatcher(None, llm_text_norm, cand_norm).ratio()
+                    if ratio > best_ratio_group:
+                        best_ratio_group = ratio
+                        best_text = text
+            else:
+                best_text = group_texts[0]
+
+        it["ocr_text"] = best_text
+        it["ocr_text_candidates"] = group_texts
+        it["ocr_match_ratio"] = best_ratio_group
+        if llm_text_norm and best_ratio_group >= ocr_match_thr:
+            match_method = f"text_sim_{best_ratio_group:.2f}"
+        it["match_method"] = match_method
+        if best_ratio_group < ocr_match_thr and not match_method.startswith("position"):
+            it["note"] = (it.get("note") or "") + " ocr_match_low"
+
+        if group_bboxes:
+            left = min(b[0] for b in group_bboxes)
+            top = min(b[1] for b in group_bboxes)
+            right = max(b[2] for b in group_bboxes)
+            bottom = max(b[3] for b in group_bboxes)
             best_bbox = [left, top, right, bottom]
         else:
-            it["ocr_text"] = best["text"]
-            best_bbox = best["bbox"]
-        it["ocr_match_ratio"] = best_ratio
-        it["match_method"] = match_method
-        if best_ratio < ocr_match_thr and not match_method.startswith("position"):
-            it["note"] = (it.get("note") or "") + " ocr_match_low"
+            best_bbox = base_bbox
         try:
             img = Image.open(io.BytesIO(img_bytes_list[page_idx]))
             img = ImageOps.exif_transpose(img)
@@ -1496,34 +2245,54 @@ def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) 
 
 
     # Attach KB matches based on chosen (default LLM) text
+    # Match against all active learning bases for this student
     for it in items:
         it["student_text"] = it.get("llm_text") or ""
     with db() as conn:
-        items = _attach_kb_matches(conn, base_id, items)
+        active_base_ids = _get_active_base_ids(conn, student_id)
+        if not active_base_ids:
+            logger.warning(f"[AI GRADING] Student {student_id} has no active learning bases")
+            active_base_ids = []  # Will result in no matches
+        else:
+            logger.info(f"[AI GRADING] Matching against {len(active_base_ids)} active knowledge bases: {active_base_ids}")
+        items = _attach_kb_matches(conn, active_base_ids, items)
 
     # Compare LLM vs OCR
     sim_thr = float(os.environ.get("EL_MATCH_SIM_THRESHOLD", "0.88"))
     for it in items:
         llm_text = normalize_answer(str(it.get("llm_text") or ""))
-        ocr_text = normalize_answer(str(it.get("ocr_text") or ""))
+        candidates = it.get("ocr_text_candidates") or []
+        if not candidates:
+            candidates = [str(it.get("ocr_text") or "")]
 
-        # Calculate similarity
-        if llm_text and ocr_text:
-            ratio = difflib.SequenceMatcher(None, llm_text, ocr_text).ratio()
-            it["consistency_ok"] = ratio >= sim_thr
-        elif not llm_text and not ocr_text:
-            # Both empty (unanswered) - consistent
+        cand_norms: List[Tuple[str, str]] = []
+        for cand in candidates:
+            norm = normalize_answer(str(cand))
+            if norm:
+                cand_norms.append((str(cand), norm))
+
+        if llm_text and cand_norms:
+            best_ratio = 0.0
+            best_text = cand_norms[0][0]
+            for raw_text, norm_text in cand_norms:
+                ratio = difflib.SequenceMatcher(None, llm_text, norm_text).ratio()
+                if ratio > best_ratio:
+                    best_ratio = ratio
+                    best_text = raw_text
+            it["ocr_text"] = best_text
+            it["consistency_ok"] = best_ratio >= sim_thr
+            ratio = best_ratio
+        elif not llm_text and not cand_norms:
             ratio = 1.0
             it["consistency_ok"] = True
         else:
-            # One empty, one not - inconsistent
             ratio = 0.0
             it["consistency_ok"] = False
 
         it["consistency_ratio"] = ratio
 
         # Lower confidence if inconsistent
-        if not it["consistency_ok"] and (llm_text or ocr_text):
+        if not it["consistency_ok"] and (llm_text or cand_norms):
             if it.get("confidence") is not None:
                 it["confidence"] = max(0.0, float(it.get("confidence")) * 0.6)
             else:
@@ -1610,7 +2379,8 @@ def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) 
 
     # Re-match KB after OCR correction
     with db() as conn:
-        items = _attach_kb_matches(conn, base_id, items)
+        active_base_ids = _get_active_base_ids(conn, student_id)
+        items = _attach_kb_matches(conn, active_base_ids, items)
 
     logger.info("[AI GRADING] Anomaly detection complete")
 
@@ -1668,6 +2438,42 @@ def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) 
 
         draw.ellipse(ellipse_bbox, outline=color, width=width)
 
+    def needs_review_mark(item: Dict[str, Any]) -> bool:
+        """Match frontend 'warn' logic for inconsistent answers."""
+        if item.get("is_correct") is not True:
+            return False
+        if item.get("consistency_ok") is False:
+            return True
+        llm_text = normalize_answer(str(item.get("llm_text") or ""))
+        ref_text = normalize_answer(str(item.get("matched_en_text") or ""))
+        return bool(llm_text and ref_text and llm_text != ref_text)
+
+    def draw_question_mark(draw, bbox, color="#f59e0b"):
+        """Draw a question mark to the right of the bbox."""
+        x1, y1, x2, y2 = bbox
+        bbox_h = y2 - y1
+        font = ImageFont.load_default()
+        mark = "?"
+        if hasattr(draw, "textbbox"):
+            left, top, right, bottom = draw.textbbox((0, 0), mark, font=font)
+            text_w = right - left
+            text_h = bottom - top
+        elif hasattr(font, "getbbox"):
+            left, top, right, bottom = font.getbbox(mark)
+            text_w = right - left
+            text_h = bottom - top
+        else:
+            text_w, text_h = font.getsize(mark)
+        x = x2 + 8
+        y = y1 + max(0, int((bbox_h - text_h) / 2))
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            draw.text((x + dx, y + dy), mark, font=font, fill="#000000")
+        draw.text((x, y), mark, font=font, fill=color)
+
+    def draw_warning_ellipse(draw, bbox, color="#f59e0b", width=6):
+        """Draw a yellow ellipse around the answer bbox."""
+        draw_red_circle(draw, bbox, color=color, width=width)
+
     # Use white-balanced images for graded output
     for page_idx, img_bytes in enumerate(wb_img_bytes_list):
         try:
@@ -1685,10 +2491,10 @@ def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) 
                 if not abs_bbox:
                     continue
                 is_correct = it.get("is_correct")
-                if is_correct is None:
-                    # Unknown: draw orange rectangle
-                    color = "#f59e0b"
-                    draw.rectangle(abs_bbox, outline=color, width=3)
+                is_uncertain = (is_correct is None) or needs_review_mark(it)
+                if is_uncertain:
+                    draw_warning_ellipse(draw, abs_bbox, color="#f59e0b", width=6)
+                    draw_question_mark(draw, abs_bbox, color="#f59e0b")
                 elif is_correct:
                     # Correct: draw green checkmark to the right
                     draw_checkmark(draw, abs_bbox, color="#19c37d", width=6)
@@ -1713,10 +2519,18 @@ def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) 
     if extracted_date:
         logger.info(f"[AI GRADING] Extracted date from OCR: {extracted_date}")
 
+    # Extract UUID from OCR results
+    uuid_info = _extract_uuid_from_ocr(ocr_raw)
+    if uuid_info.get("uuid"):
+        logger.info(f"[AI GRADING] Extracted UUID: {uuid_info['uuid']} (conf={uuid_info['confidence']:.2f}, consistent={uuid_info['consistent']})")
+
     if os.environ.get("EL_AI_DEBUG_SAVE", "1") == "1":
         _save_debug_bundle(img_bytes_list, llm_raw or {}, ocr_raw or {})
 
     image_urls = [f"/media/uploads/{os.path.basename(p)}" for p in saved_paths]
+    bundle_id = f"ai_{uuid.uuid4().hex}"
+    if os.environ.get("EL_AI_BUNDLE_SAVE", "1") == "1":
+        _save_ai_bundle(bundle_id, llm_raw or {}, ocr_raw or {}, image_urls, graded_image_urls)
     return {
         "items": items,
         "image_urls": image_urls,
@@ -1724,17 +2538,120 @@ def analyze_ai_photos(student_id: int, base_id: int, uploads: List[UploadFile]) 
         "image_count": len(saved_paths),
         "matched_session": matched_session,
         "extracted_date": extracted_date,
+        "worksheet_uuid": uuid_info.get("uuid"),
+        "uuid_info": uuid_info,
+        "bundle_id": bundle_id,
     }
 
 
-def confirm_ai_extracted(student_id: int, base_id: int, items: List[Dict]) -> Dict:
-    """Create session/submission from AI-extracted items and update stats."""
+def confirm_ai_extracted(
+    student_id: int,
+    base_id: int,
+    items: List[Dict],
+    extracted_date: str = None,
+    worksheet_uuid: str = None,
+    force_duplicate: bool = False,
+    bundle_id: Optional[str] = None,
+) -> Dict:
+    """Create session/submission from AI-extracted items and update stats.
+
+    Args:
+        student_id: Student ID
+        base_id: Knowledge base ID
+        items: List of extracted items
+        extracted_date: Date extracted from worksheet (YYYY-MM-DD format)
+        worksheet_uuid: Worksheet UUID (e.g., ES-0055-CF12D2) - primary duplicate check
+        force_duplicate: If True, allow duplicate submission without checking
+        bundle_id: Optional AI bundle ID for raw LLM/OCR and images
+
+    Returns:
+        Dict with session info or duplicate warning
+    """
     use_items = [it for it in items if bool(it.get("include", True))]
     if not use_items:
         raise ValueError("没有可入库的题目")
 
+    # Check for duplicate submission (unless force_duplicate is True)
+    # Priority: UUID > Date
+    if not force_duplicate:
+        with db() as conn:
+            # Try UUID-based duplicate check first (more reliable)
+            if worksheet_uuid:
+                existing = conn.execute(
+                    """
+                    SELECT ps.id, ps.created_at, ps.practice_uuid, COUNT(pr.id) as total_items,
+                           SUM(CASE WHEN pr.is_correct = 1 THEN 1 ELSE 0 END) as correct_items
+                    FROM practice_sessions ps
+                    LEFT JOIN practice_results pr ON pr.session_id = ps.id
+                    WHERE ps.student_id = ?
+                      AND ps.practice_uuid = ?
+                      AND ps.params_json LIKE '%AI_EXTRACT%'
+                    GROUP BY ps.id
+                    ORDER BY ps.created_at DESC
+                    LIMIT 1
+                    """,
+                    (student_id, worksheet_uuid)
+                ).fetchone()
+
+                if existing:
+                    # Found duplicate submission by UUID
+                    accuracy = (existing["correct_items"] / existing["total_items"] * 100) if existing["total_items"] > 0 else 0
+                    return {
+                        "duplicate_warning": True,
+                        "existing_session_id": existing["id"],
+                        "existing_uuid": worksheet_uuid,
+                        "existing_created_at": existing["created_at"],
+                        "existing_total": existing["total_items"],
+                        "existing_correct": existing["correct_items"],
+                        "existing_accuracy": accuracy,
+                        "message": f"检测到重复提交：试卷编号 {worksheet_uuid} 已经提交过（共{existing['total_items']}题，正确{existing['correct_items']}题，正确率{accuracy:.1f}%）。如果这是学生重做的试卷，请确认是否再次提交。"
+                    }
+
+            # Fallback: Date-based check (for worksheets without UUID or old records)
+            elif extracted_date:
+                existing = conn.execute(
+                    """
+                    SELECT ps.id, ps.created_at, COUNT(pr.id) as total_items,
+                           SUM(CASE WHEN pr.is_correct = 1 THEN 1 ELSE 0 END) as correct_items
+                    FROM practice_sessions ps
+                    LEFT JOIN practice_results pr ON pr.session_id = ps.id
+                    WHERE ps.student_id = ?
+                      AND ps.created_date = ?
+                      AND ps.params_json LIKE '%AI_EXTRACT%'
+                    GROUP BY ps.id
+                    ORDER BY ps.created_at DESC
+                    LIMIT 1
+                    """,
+                    (student_id, extracted_date)
+                ).fetchone()
+
+                if existing:
+                    # Found duplicate submission by date
+                    accuracy = (existing["correct_items"] / existing["total_items"] * 100) if existing["total_items"] > 0 else 0
+                    return {
+                        "duplicate_warning": True,
+                        "existing_session_id": existing["id"],
+                        "existing_date": extracted_date,
+                        "existing_created_at": existing["created_at"],
+                        "existing_total": existing["total_items"],
+                        "existing_correct": existing["correct_items"],
+                        "existing_accuracy": accuracy,
+                        "message": f"检测到重复提交：{extracted_date} 的试卷已经提交过（共{existing['total_items']}题，正确{existing['correct_items']}题，正确率{accuracy:.1f}%）。如果这是学生重做的试卷，请确认是否再次提交。"
+                    }
+
+    matched_session = None
+    with db() as conn:
+        matched_session = _match_session_by_items(conn, student_id, base_id, use_items)
+
     params_json = json.dumps(
-        {"mode": "EXTERNAL_AI", "source": "AI_EXTRACT"},
+        {
+            "mode": "EXTERNAL_AI",
+            "source": "AI_EXTRACT",
+            "matched_session_id": matched_session["session_id"] if matched_session else None,
+            "match_ratio": matched_session["match_ratio"] if matched_session else None,
+            "extracted_date": extracted_date,
+            "worksheet_uuid": worksheet_uuid,
+        },
         ensure_ascii=False,
     )
     submitted_at = utcnow_iso()
@@ -1742,27 +2659,50 @@ def confirm_ai_extracted(student_id: int, base_id: int, items: List[Dict]) -> Di
     with db() as conn:
         cur = conn.execute(
             """
-            INSERT INTO practice_sessions(student_id, base_id, status, params_json, created_at, completed_at)
-            VALUES(?,?,?,?,?,?)
+            INSERT INTO practice_sessions(
+                student_id, base_id, status, params_json,
+                created_at, completed_at, corrected_at, created_date, practice_uuid
+            )
+            VALUES(?,?,?,?,?,?,?,?,?)
             """,
-            (student_id, base_id, "COMPLETED", params_json, submitted_at, submitted_at),
+            (
+                student_id,
+                base_id,
+                "CORRECTED",
+                params_json,
+                submitted_at,
+                submitted_at,
+                submitted_at,
+                extracted_date,
+                worksheet_uuid,
+            ),
         )
         session_id = int(cur.lastrowid)
 
         submission_cur = conn.execute(
             """
-            INSERT INTO submissions(session_id, submitted_at, image_path, text_raw, source)
-            VALUES(?,?,?,?,?)
+            INSERT INTO submissions(session_id, item_id, position, submitted_at, image_path, text_raw, source)
+            VALUES(?,?,?,?,?,?,?)
             """,
-            (session_id, submitted_at, None, None, "AI_EXTRACT"),
+            (session_id, None, None, submitted_at, None, None, "AI_EXTRACT"),
         )
         submission_id = int(submission_cur.lastrowid)
 
         # store raw ai/ocr choices for audit
         try:
+            raw_payload = {"items": use_items}
+            if bundle_id:
+                raw_payload["bundle_id"] = bundle_id
+                bundle_meta = _load_ai_bundle_meta(bundle_id)
+                if bundle_meta:
+                    raw_payload["bundle_meta"] = {
+                        "image_urls": bundle_meta.get("image_urls") or [],
+                        "graded_image_urls": bundle_meta.get("graded_image_urls") or [],
+                        "saved_at": bundle_meta.get("saved_at"),
+                    }
             conn.execute(
                 "UPDATE submissions SET text_raw=? WHERE id=?",
-                (json.dumps({"items": use_items}, ensure_ascii=False), submission_id),
+                (json.dumps(raw_payload, ensure_ascii=False), submission_id),
             )
         except Exception:
             pass
@@ -1775,7 +2715,7 @@ def confirm_ai_extracted(student_id: int, base_id: int, items: List[Dict]) -> Di
             item_row = None
             if matched_item_id:
                 item_row = conn.execute(
-                    "SELECT * FROM knowledge_items WHERE id=?",
+                    "SELECT * FROM items WHERE id=?",
                     (int(matched_item_id),),
                 ).fetchone()
 
@@ -1785,9 +2725,9 @@ def confirm_ai_extracted(student_id: int, base_id: int, items: List[Dict]) -> Di
             normalized = ""
             if item_row:
                 en_text = item_row["en_text"]
-                zh_hint = item_row["zh_hint"] or zh_hint
-                typ = item_row["type"]
-                normalized = item_row["normalized_answer"]
+                zh_hint = item_row["zh_text"] or zh_hint  # 使用 zh_text 而不是 zh_hint
+                typ = item_row["item_type"]
+                normalized = normalize_answer(en_text)  # Compute from en_text
             else:
                 en_text = str(it.get("student_text") or "")
                 normalized = normalize_answer(en_text)
@@ -1850,9 +2790,9 @@ def confirm_ai_extracted(student_id: int, base_id: int, items: List[Dict]) -> Di
 
 
 def bootstrap_single_child(student_name: str, grade_code: str) -> Dict[str, int]:
-    """第一次使用初始化：创建默认学生与默认资料库。
+    """第一次使用初始化：仅创建学生账户，不创建默认资料库。
 
-    返回：student_id, base_id
+    返回：student_id
     """
     from . import db as db_module
 
@@ -1860,14 +2800,7 @@ def bootstrap_single_child(student_name: str, grade_code: str) -> Dict[str, int]
         # create student using new db.py function
         student_id = db_module.create_student(conn, student_name, grade=grade_code)
 
-        # create default base using new db.py function
-        base_name = f"Default ({grade_code})"
-        base_id = db_module.create_base(conn, base_name, description=f"Default base for {grade_code}", is_system=False)
-
-        # add base to student's learning library
-        db_module.add_learning_base(conn, student_id, base_id, custom_name=None, current_unit="__ALL__")
-
-    return {"student_id": student_id, "base_id": base_id}
+    return {"student_id": student_id}
 
 
 def list_bases(grade_code: Optional[str] = None) -> List[Dict]:
@@ -1881,15 +2814,36 @@ def list_bases(grade_code: Optional[str] = None) -> List[Dict]:
         return bases
 
 
-def create_base(name: str, grade_code: str, is_system: bool = False) -> int:
+def create_base(
+    name: str,
+    grade_code: str,
+    is_system: bool = False,
+    education_stage: str = None,
+    grade: str = None,
+    term: str = None,
+    version: str = None,
+    publisher: str = None,
+    editor: str = None,
+    notes: str = None
+) -> int:
     """Create base. Note: grade_code parameter is deprecated in new schema but kept for API compatibility."""
     from . import db as db_module
 
     with db() as conn:
         # New schema doesn't use grade_code on bases
-        # Store grade_code in description if needed
-        description = f"Grade: {grade_code}" if grade_code else None
-        base_id = db_module.create_base(conn, name, description=description, is_system=is_system)
+        # Only use grade_code fallback if notes is explicitly None (not empty string)
+        description = notes if notes is not None else (f"Grade: {grade_code}" if grade_code else None)
+        base_id = db_module.create_base(
+            conn, name,
+            description=description,
+            is_system=is_system,
+            education_stage=education_stage,
+            grade=grade,
+            term=term,
+            version=version,
+            publisher=publisher,
+            editor=editor
+        )
         return base_id
 
 
@@ -1900,11 +2854,11 @@ def upsert_items(base_id: int, items: List[Dict], mode: str = "skip") -> Dict[st
       - skip: 若唯一键冲突则跳过（文档默认）
       - update: 允许更新
 
-    注意：新schema字段映射:
+    注意：字段映射:
       - unit_code -> unit (使用 "__ALL__" 代替 None)
       - type -> item_type
       - zh_hint -> zh_text (中文提示)
-      - difficulty_tag, normalized_answer, is_enabled, source 等字段在新schema中不存在
+      - difficulty_tag -> difficulty_tag (保留原值: write/read)
     """
     from . import db as db_module
 
@@ -1924,6 +2878,7 @@ def upsert_items(base_id: int, items: List[Dict], mode: str = "skip") -> Dict[st
             item_type = it["type"].upper() if "type" in it else "WORD"
             en_text = it["en_text"].strip()
             zh_text = it.get("zh_hint", "")  # Map zh_hint -> zh_text
+            difficulty_tag = it.get("difficulty_tag")  # Keep difficulty_tag as-is
 
             # Check if item already exists
             key = (unit, en_text)
@@ -1931,7 +2886,7 @@ def upsert_items(base_id: int, items: List[Dict], mode: str = "skip") -> Dict[st
                 if mode == "update":
                     # Update existing item
                     existing_id = existing_map[key]['id']
-                    db_module.update_item(conn, existing_id, zh_text=zh_text, item_type=item_type)
+                    db_module.update_item(conn, existing_id, zh_text=zh_text, item_type=item_type, difficulty_tag=difficulty_tag)
                     updated += 1
                 else:
                     skipped += 1
@@ -1945,7 +2900,8 @@ def upsert_items(base_id: int, items: List[Dict], mode: str = "skip") -> Dict[st
                         en_text=en_text,
                         unit=unit,
                         position=None,  # Auto-calculate
-                        item_type=item_type
+                        item_type=item_type,
+                        difficulty_tag=difficulty_tag
                     )
                     inserted += 1
                 except Exception:
@@ -1963,6 +2919,15 @@ def _select_items_for_session(
     total_count: int,
 ) -> List[Dict]:
     """按规则优先：最近错 > 长期未练 > 新引入。"""
+    def shuffle_candidate_pool(rows: List[Dict], pool_size: int) -> List[Dict]:
+        if not rows:
+            return rows
+        effective = min(len(rows), max(pool_size, min(len(rows), 5)))
+        pool = rows[:effective]
+        rest = rows[effective:]
+        random.shuffle(pool)
+        return pool + rest
+
     # expand ratio to per type counts
     ratio_total = sum(mix_ratio.values()) or 1
     counts = {
@@ -1986,20 +2951,18 @@ def _select_items_for_session(
             where_unit = ""
             if unit_scope:
                 placeholders = ",".join(["?"] * len(unit_scope))
-                where_unit = f" AND ki.unit_code IN ({placeholders})"
+                where_unit = f" AND ki.unit IN ({placeholders})"
                 params.extend(unit_scope)
 
             # only write items are eligible
             q = f"""
             SELECT
               ki.*, sis.wrong_attempts, sis.consecutive_wrong, sis.last_attempt_at
-            FROM knowledge_items ki
+            FROM items ki
             LEFT JOIN student_item_stats sis
               ON sis.item_id = ki.id AND sis.student_id = ?
             WHERE ki.base_id=?
-              AND ki.type=?
-              AND ki.difficulty_tag='write'
-              AND ki.is_enabled=1
+              AND ki.item_type=?
               {where_unit}
             ORDER BY
               COALESCE(sis.consecutive_wrong, 0) DESC,
@@ -2011,13 +2974,14 @@ def _select_items_for_session(
             """
             cur = conn.execute(q, params + [need * 3])
             rows = [dict(r) for r in cur.fetchall()]
+            rows = shuffle_candidate_pool(rows, need * 3)
 
             # remove duplicates across types/session by en_text
             for r in rows:
                 if len([x for x in selected if x["en_text"] == r["en_text"]]) > 0:
                     continue
                 selected.append(r)
-                if len([x for x in selected if x["type"] == typ]) >= need:
+                if len([x for x in selected if x["item_type"] == typ]) >= need:
                     break
 
     # if still short, backfill from any type (except grammar by default)
@@ -2028,16 +2992,14 @@ def _select_items_for_session(
             where_unit = ""
             if unit_scope:
                 placeholders = ",".join(["?"] * len(unit_scope))
-                where_unit = f" AND ki.unit_code IN ({placeholders})"
+                where_unit = f" AND ki.unit IN ({placeholders})"
                 params.extend(unit_scope)
             q = f"""
             SELECT ki.*, sis.wrong_attempts, sis.consecutive_wrong, sis.last_attempt_at
-            FROM knowledge_items ki
+            FROM items ki
             LEFT JOIN student_item_stats sis
               ON sis.item_id = ki.id AND sis.student_id = ?
             WHERE ki.base_id=?
-              AND ki.difficulty_tag='write'
-              AND ki.is_enabled=1
               {where_unit}
             ORDER BY
               COALESCE(sis.consecutive_wrong, 0) DESC,
@@ -2048,7 +3010,180 @@ def _select_items_for_session(
             LIMIT ?
             """
             rows = [dict(r) for r in conn.execute(q, params + [need * 5]).fetchall()]
+            rows = shuffle_candidate_pool(rows, need * 5)
             for r in rows:
+                if any(x["en_text"] == r["en_text"] for x in selected):
+                    continue
+                selected.append(r)
+                if len(selected) >= total_count:
+                    break
+
+    return selected[:total_count]
+
+
+def _select_items_for_session_multi(
+    student_id: int,
+    base_units: Dict[int, Optional[List[str]]],
+    mix_ratio: Dict[str, int],
+    total_count: int,
+    difficulty_filter: Optional[str] = None,
+) -> List[Dict]:
+    """Select items from multiple bases with different unit scopes.
+
+    Args:
+        student_id: Student ID
+        base_units: {base_id: unit_scope}, where unit_scope can be None (all units) or ["U1", "U2"]
+        mix_ratio: {"WORD": 15, "PHRASE": 8, "SENTENCE": 6}
+        total_count: Total number of items to select
+        difficulty_filter: Filter by difficulty tag ("write", "read", or None for all)
+
+    Returns:
+        List of selected items (dicts with id, type, en_text, zh_hint, etc.)
+    """
+    import logging
+    logger = logging.getLogger("uvicorn.error")
+    logger.info(f"[SELECT_ITEMS_MULTI] student_id={student_id}, base_units={base_units}, mix_ratio={mix_ratio}, total_count={total_count}")
+    def shuffle_candidate_pool(rows: List[Dict], pool_size: int) -> List[Dict]:
+        if not rows:
+            return rows
+        effective = min(len(rows), max(pool_size, min(len(rows), 5)))
+        pool = rows[:effective]
+        rest = rows[effective:]
+        random.shuffle(pool)
+        return pool + rest
+
+    # Calculate per-type counts
+    ratio_total = sum(mix_ratio.values()) or 1
+    counts = {
+        t: max(0, int(round(total_count * (mix_ratio.get(t, 0) / ratio_total))))
+        for t in ("WORD", "PHRASE", "SENTENCE", "GRAMMAR")
+    }
+    # Adjust rounding so sum == total_count
+    while sum(counts.values()) < total_count:
+        for t in ("WORD", "PHRASE", "SENTENCE"):
+            counts[t] += 1
+            if sum(counts.values()) == total_count:
+                break
+
+    selected: List[Dict] = []
+    with db() as conn:
+        for typ, need in counts.items():
+            if need <= 0:
+                continue
+
+            # Collect candidates from all bases
+            all_candidates = []
+            for base_id, unit_scope in base_units.items():
+                params = [student_id, base_id, typ]
+                where_unit = ""
+                if unit_scope:
+                    placeholders = ",".join(["?"] * len(unit_scope))
+                    where_unit = f" AND ki.unit IN ({placeholders})"
+                    params.extend(unit_scope)
+
+                # Add difficulty filter
+                where_difficulty = ""
+                if difficulty_filter == "write":
+                    where_difficulty = " AND ki.difficulty_tag = 'write'"
+                elif difficulty_filter == "read":
+                    where_difficulty = " AND ki.difficulty_tag IN ('read', 'recognize')"
+                # else: no filter (all difficulties)
+
+                q = f"""
+                SELECT
+                  ki.*, sis.wrong_attempts, sis.consecutive_wrong, sis.last_attempt_at
+                FROM items ki
+                LEFT JOIN student_item_stats sis
+                  ON sis.item_id = ki.id AND sis.student_id = ?
+                WHERE ki.base_id=?
+                  AND ki.item_type=?
+                  {where_unit}
+                  {where_difficulty}
+                ORDER BY
+                  COALESCE(sis.consecutive_wrong, 0) DESC,
+                  COALESCE(sis.wrong_attempts, 0) DESC,
+                  CASE WHEN sis.last_attempt_at IS NULL THEN 0 ELSE 1 END ASC,
+                  COALESCE(sis.last_attempt_at, '0000') ASC,
+                  ki.id DESC
+                LIMIT ?
+                """
+                cur = conn.execute(q, params + [need * 3])
+                rows = [dict(r) for r in cur.fetchall()]
+                all_candidates.extend(rows)
+
+            # Sort all candidates by priority and select
+            all_candidates.sort(
+                key=lambda r: (
+                    -(r.get("consecutive_wrong") or 0),
+                    -(r.get("wrong_attempts") or 0),
+                    0 if r.get("last_attempt_at") is None else 1,
+                    r.get("last_attempt_at") or "0000",
+                    -r.get("id", 0),
+                )
+            )
+            all_candidates = shuffle_candidate_pool(all_candidates, need * 3)
+
+            # Remove duplicates across types/session by en_text
+            for r in all_candidates:
+                if len([x for x in selected if x["en_text"] == r["en_text"]]) > 0:
+                    continue
+                selected.append(r)
+                if len([x for x in selected if x["item_type"] == typ]) >= need:
+                    break
+
+    # If still short, backfill from any type (except grammar by default)
+    if len(selected) < total_count:
+        with db() as conn:
+            need = total_count - len(selected)
+            all_candidates = []
+            for base_id, unit_scope in base_units.items():
+                params = [student_id, base_id]
+                where_unit = ""
+                if unit_scope:
+                    placeholders = ",".join(["?"] * len(unit_scope))
+                    where_unit = f" AND ki.unit IN ({placeholders})"
+                    params.extend(unit_scope)
+
+                # Add difficulty filter
+                where_difficulty = ""
+                if difficulty_filter == "write":
+                    where_difficulty = " AND ki.difficulty_tag = 'write'"
+                elif difficulty_filter == "read":
+                    where_difficulty = " AND ki.difficulty_tag IN ('read', 'recognize')"
+                # else: no filter (all difficulties)
+
+                q = f"""
+                SELECT ki.*, sis.wrong_attempts, sis.consecutive_wrong, sis.last_attempt_at
+                FROM items ki
+                LEFT JOIN student_item_stats sis
+                  ON sis.item_id = ki.id AND sis.student_id = ?
+                WHERE ki.base_id=?
+                  {where_unit}
+                  {where_difficulty}
+                ORDER BY
+                  COALESCE(sis.consecutive_wrong, 0) DESC,
+                  COALESCE(sis.wrong_attempts, 0) DESC,
+                  CASE WHEN sis.last_attempt_at IS NULL THEN 0 ELSE 1 END ASC,
+                  COALESCE(sis.last_attempt_at, '0000') ASC,
+                  ki.id DESC
+                LIMIT ?
+                """
+                rows = [dict(r) for r in conn.execute(q, params + [need * 5]).fetchall()]
+                all_candidates.extend(rows)
+
+            # Sort and select
+            all_candidates.sort(
+                key=lambda r: (
+                    -(r.get("consecutive_wrong") or 0),
+                    -(r.get("wrong_attempts") or 0),
+                    0 if r.get("last_attempt_at") is None else 1,
+                    r.get("last_attempt_at") or "0000",
+                    -r.get("id", 0),
+                )
+            )
+            all_candidates = shuffle_candidate_pool(all_candidates, need * 5)
+
+            for r in all_candidates:
                 if any(x["en_text"] == r["en_text"] for x in selected):
                     continue
                 selected.append(r)
@@ -2087,7 +3222,9 @@ def normalize_unit_scope(unit_scope: Any) -> Optional[List[str]]:
                 s = x.strip()
                 if not s:
                     continue
-                parts.extend(re.split(r"[，,;；\s]+", s))
+                # For list elements, only split by comma/semicolon, NOT by spaces
+                # This preserves "Unit 1" as a single unit name
+                parts.extend(re.split(r"[，,;；]+", s))
             else:
                 parts.append(str(x))
     else:
@@ -2098,6 +3235,15 @@ def normalize_unit_scope(unit_scope: Any) -> Optional[List[str]]:
         p = (p or "").strip()
         if not p:
             continue
+
+        # Preserve "Unit X" format if already in this format (most common in database)
+        if re.match(r"^Unit\s+\d+$", p, re.IGNORECASE):
+            # Normalize to "Unit X" with single space and title case
+            match = re.match(r"^Unit\s+(\d+)$", p, re.IGNORECASE)
+            if match:
+                out.append(f"Unit {match.group(1)}")
+                continue
+
         up = p.upper().replace(" ", "")
         # "1" or "UNIT1" -> "U1"
         m = re.match(r"^(?:UNIT)?(\d+)$", up)
@@ -2124,44 +3270,78 @@ def normalize_unit_scope(unit_scope: Any) -> Optional[List[str]]:
 
 def generate_practice_session(
     student_id: int,
-    base_id: int,
-    unit_scope: Optional[List[str]],
     total_count: int,
     mix_ratio: Dict[str, int],
     title: str = "四年级英语默写单",
+    base_id: Optional[int] = None,
+    unit_scope: Optional[List[str]] = None,
+    base_units: Optional[Dict[int, List[str]]] = None,
+    difficulty_filter: Optional[str] = None,
 ) -> Dict:
+    """Generate practice session.
+
+    Supports two modes:
+    1. Legacy single-base mode: base_id + optional unit_scope
+    2. Multi-base mode: base_units = {base_id: [units]}
+
+    Args:
+        difficulty_filter: Filter items by difficulty tag ("write", "read", or None for all)
+    """
     ensure_media_dir()
 
-    unit_scope = normalize_unit_scope(unit_scope)
+    # Normalize inputs
+    if base_units:
+        # New multi-base mode
+        if not base_units:
+            raise ValueError("base_units cannot be empty")
+        # Normalize each base's unit_scope
+        normalized_base_units = {
+            int(bid): normalize_unit_scope(units)
+            for bid, units in base_units.items()
+        }
+    elif base_id:
+        # Legacy single-base mode
+        unit_scope = normalize_unit_scope(unit_scope)
+        normalized_base_units = {base_id: unit_scope}
+    else:
+        raise ValueError("Must provide either base_id or base_units")
 
     with db() as conn:
         student = conn.execute("SELECT id FROM students WHERE id=?", (student_id,)).fetchone()
         if not student:
             raise ValueError(f"student_id {student_id} 不存在，请先完成初始化/创建学生。")
-        base = conn.execute("SELECT id FROM knowledge_bases WHERE id=?", (base_id,)).fetchone()
-        if not base:
-            raise ValueError(f"base_id {base_id} 不存在，请先导入或创建知识库。")
 
-    items = _select_items_for_session(
+        # Validate all base_ids exist
+        for bid in normalized_base_units.keys():
+            base = conn.execute("SELECT id FROM bases WHERE id=?", (bid,)).fetchone()
+            if not base:
+                raise ValueError(f"base_id {bid} 不存在，请先导入或创建知识库。")
+
+    items = _select_items_for_session_multi(
         student_id=student_id,
-        base_id=base_id,
-        unit_scope=unit_scope,
+        base_units=normalized_base_units,
         mix_ratio=mix_ratio,
         total_count=total_count,
+        difficulty_filter=difficulty_filter,
     )
 
     if not items:
         raise ValueError("所选出题范围内没有可用知识点（请检查 Unit 代码、或先导入知识库）。")
 
+    # For params_json, store the normalized base_units
     params_json = json.dumps(
         {
-            "unit_scope": unit_scope,
+            "base_units": {str(k): v for k, v in normalized_base_units.items()},
             "total_count": total_count,
             "mix_ratio": mix_ratio,
             "title": title,
+            "difficulty_filter": difficulty_filter,
         },
         ensure_ascii=False,
     )
+
+    # Use the first base_id for the session record (backward compatibility)
+    primary_base_id = list(normalized_base_units.keys())[0]
 
     with db() as conn:
         cur = conn.execute(
@@ -2169,13 +3349,15 @@ def generate_practice_session(
             INSERT INTO practice_sessions(student_id, base_id, status, params_json, created_at)
             VALUES(?,?,?,?,?)
             """,
-            (student_id, base_id, "DRAFT", params_json, utcnow_iso()),
+            (student_id, primary_base_id, "DRAFT", params_json, utcnow_iso()),
         )
         session_id = int(cur.lastrowid)
 
         # store exercise items (keep global position order)
         rows_all: List[ExerciseRow] = []
         for idx, it in enumerate(items, start=1):
+            en_text = it.get("en_text") or ""
+            normalized = normalize_answer(en_text)  # Compute normalized answer
             conn.execute(
                 """
                 INSERT INTO exercise_items(session_id, item_id, position, type, en_text, zh_hint, normalized_answer)
@@ -2185,18 +3367,18 @@ def generate_practice_session(
                     session_id,
                     it.get("id"),
                     idx,
-                    it.get("type"),
-                    it.get("en_text"),
-                    it.get("zh_hint"),
-                    it.get("normalized_answer"),
+                    it.get("item_type"),
+                    en_text,
+                    it.get("zh_text"),  # 使用zh_text而不是zh_hint
+                    normalized,
                 ),
             )
             rows_all.append(
                 ExerciseRow(
                     position=idx,
-                    zh_hint=it.get("zh_hint") or "",
+                    zh_hint=it.get("zh_text") or "",  # 使用zh_text而不是zh_hint
                     answer_en=it.get("en_text") or "",
-                    item_type=it.get("type") or "",
+                    item_type=it.get("item_type") or "",
                 )
             )
 
@@ -2209,30 +3391,65 @@ def generate_practice_session(
                 # ignore other types in MVP
                 pass
 
-        pdf_path = os.path.join(MEDIA_DIR, f"session_{session_id}_practice.pdf")
-        ans_path = os.path.join(MEDIA_DIR, f"session_{session_id}_answer.pdf")
+        # Generate filename: Practice_日期_编号.pdf (English for cross-platform compatibility)
+        from datetime import datetime
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        practice_uuid = f"ES-{session_id:04d}-{str(uuid.uuid4())[:6].upper()}"
+
+        pdf_filename = f"Practice_{date_str}_{practice_uuid}.pdf"
+        ans_filename = f"Practice_{date_str}_{practice_uuid}_Key.pdf"
+
+        pdf_path = os.path.join(MEDIA_DIR, pdf_filename)
+        ans_path = os.path.join(MEDIA_DIR, ans_filename)
 
         render_dictation_pdf(
             pdf_path,
             title,
             sections,
             show_answers=False,
+            session_id=session_id,
             footer=f"Session #{session_id}",
+            practice_uuid=practice_uuid,
         )
         render_dictation_pdf(
             ans_path,
             title + "（答案）",
             sections,
             show_answers=True,
+            session_id=session_id,
             footer=f"Session #{session_id}",
+            practice_uuid=practice_uuid,
         )
 
         conn.execute(
-            "UPDATE practice_sessions SET pdf_path=?, answer_pdf_path=? WHERE id=?",
-            (pdf_path, ans_path, session_id),
+            "UPDATE practice_sessions SET pdf_path=?, answer_pdf_path=?, practice_uuid=?, created_date=? WHERE id=?",
+            (pdf_path, ans_path, practice_uuid, date_str, session_id),
         )
 
-    return {"session_id": session_id, "pdf_path": pdf_path, "answer_pdf_path": ans_path}
+    # Return session info with items preview
+    # Safely build items preview from the items list
+    items_preview = []
+    try:
+        for idx, it in enumerate(items, start=1):
+            items_preview.append({
+                "position": idx,
+                "type": it.get("item_type", ""),
+                "zh_hint": it.get("zh_text", ""),  # Use zh_text from database
+                "en_text": it.get("en_text", ""),
+            })
+    except Exception as e:
+        # If preview generation fails, return empty list
+        items_preview = []
+
+    return {
+        "session_id": session_id,
+        "pdf_path": pdf_path,
+        "answer_pdf_path": ans_path,
+        "pdf_url": f"/media/{pdf_filename}",
+        "answer_pdf_url": f"/media/{ans_filename}",
+        "practice_uuid": practice_uuid,
+        "items": items_preview,
+    }
 
 
 def correct_session_manually(
@@ -2252,10 +3469,10 @@ def correct_session_manually(
         # create submission
         cur = conn.execute(
             """
-            INSERT INTO submissions(session_id, submitted_at, image_path, text_raw, source)
-            VALUES(?,?,?,?,?)
+            INSERT INTO submissions(session_id, item_id, position, submitted_at, image_path, text_raw, source)
+            VALUES(?,?,?,?,?,?,?)
             """,
-            (session_id, submitted_at, image_path, text_raw, source),
+            (session_id, None, None, submitted_at, image_path, text_raw, source),
         )
         submission_id = int(cur.lastrowid)
 
@@ -2434,6 +3651,464 @@ def list_sessions(student_id: int, base_id: int, limit: int = 30) -> List[Dict]:
     return [dict(r) for r in rows]
 
 
+def search_practice_sessions(
+    student_id: int,
+    base_id: Optional[int] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    practice_uuid: Optional[str] = None,
+    keyword: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> Tuple[List[Dict], int]:
+    base_sql = """
+        FROM practice_sessions ps
+        LEFT JOIN bases b ON ps.base_id = b.id
+        WHERE ps.student_id = ?
+    """
+    params: List[Any] = [student_id]
+    filters: List[str] = []
+
+    if base_id is not None:
+        filters.append("ps.base_id = ?")
+        params.append(base_id)
+
+    if start_date:
+        filters.append("COALESCE(ps.created_date, substr(ps.created_at, 1, 10)) >= ?")
+        params.append(start_date)
+    if end_date:
+        filters.append("COALESCE(ps.created_date, substr(ps.created_at, 1, 10)) <= ?")
+        params.append(end_date)
+    if practice_uuid:
+        filters.append("ps.practice_uuid LIKE ?")
+        params.append(f"%{practice_uuid}%")
+    if keyword:
+        filters.append(
+            """
+            EXISTS (
+                SELECT 1 FROM exercise_items ei
+                WHERE ei.session_id = ps.id
+                  AND (ei.en_text LIKE ? OR ei.zh_hint LIKE ?)
+            )
+            """.strip()
+        )
+        params.append(f"%{keyword}%")
+        params.append(f"%{keyword}%")
+
+    if filters:
+        base_sql += " AND " + " AND ".join(filters)
+
+    count_sql = "SELECT COUNT(1) " + base_sql
+    sql = """
+        SELECT
+            ps.id,
+            ps.status,
+            ps.created_at,
+            ps.corrected_at,
+            ps.practice_uuid,
+            ps.created_date,
+            ps.pdf_path,
+            ps.answer_pdf_path,
+            ps.base_id,
+            ps.params_json,
+            b.name AS base_name,
+            (SELECT COUNT(1) FROM exercise_items ei WHERE ei.session_id = ps.id) AS item_count,
+            (SELECT COUNT(1) FROM practice_results pr WHERE pr.session_id = ps.id) AS result_count,
+            (SELECT SUM(CASE WHEN pr.is_correct = 1 THEN 1 ELSE 0 END)
+             FROM practice_results pr WHERE pr.session_id = ps.id) AS correct_count,
+            (SELECT GROUP_CONCAT(DISTINCT it.difficulty_tag)
+             FROM exercise_items ei
+             LEFT JOIN items it ON ei.item_id = it.id
+             WHERE ei.session_id = ps.id) AS difficulty_tags
+    """ + base_sql + """
+        ORDER BY COALESCE(ps.created_date, substr(ps.created_at, 1, 10)) DESC, ps.id DESC
+        LIMIT ? OFFSET ?
+    """
+    params_with_limit = params + [int(limit), int(offset)]
+
+    with db() as conn:
+        total_count = conn.execute(count_sql, params).fetchone()[0]
+        rows = conn.execute(sql, params_with_limit).fetchall()
+
+    base_units_map: Dict[int, Dict[str, List[str]]] = {}
+    params_by_id: Dict[int, Dict[str, Any]] = {}
+    base_ids: set[int] = set()
+    for r in rows:
+        params_raw = r["params_json"] if "params_json" in r.keys() else None
+        if not params_raw:
+            if r["base_id"] is not None:
+                base_ids.add(int(r["base_id"]))
+            continue
+        try:
+            params = json.loads(params_raw)
+        except Exception:
+            params = {}
+        params_by_id[int(r["id"])] = params
+        base_units = params.get("base_units")
+        if isinstance(base_units, dict) and base_units:
+            base_units_map[int(r["id"])] = base_units
+            for bid in base_units.keys():
+                try:
+                    base_ids.add(int(bid))
+                except Exception:
+                    continue
+        elif r["base_id"] is not None:
+            base_ids.add(int(r["base_id"]))
+
+    base_name_map: Dict[int, str] = {}
+    if base_ids:
+        placeholders = ",".join("?" for _ in base_ids)
+        with db() as conn:
+            base_rows = conn.execute(
+                f"SELECT id, name FROM bases WHERE id IN ({placeholders})",
+                list(base_ids),
+            ).fetchall()
+        base_name_map = {int(b["id"]): b["name"] for b in base_rows}
+
+    sessions = []
+    for r in rows:
+        row = dict(r)
+        row_id = int(row.get("id") or 0)
+        params = params_by_id.get(row_id, {})
+        source = params.get("source")
+        matched_session_id = params.get("matched_session_id")
+        is_ai_extract = source == "AI_EXTRACT"
+        extracted_date = params.get("extracted_date") or row.get("created_date")
+
+        difficulty_filter = None
+        if params:
+            difficulty_filter = params.get("difficulty_filter")
+        if is_ai_extract and not matched_session_id:
+            difficulty_filter = "unknown"
+        if not difficulty_filter:
+            tags = row.get("difficulty_tags") or ""
+            tag_set = {t for t in tags.split(",") if t}
+            if tag_set == {"write"}:
+                difficulty_filter = "write"
+            elif tag_set == {"read"}:
+                difficulty_filter = "read"
+            else:
+                difficulty_filter = "all"
+        row["difficulty_filter"] = difficulty_filter
+        if is_ai_extract and not matched_session_id:
+            row["base_display"] = "未知"
+        else:
+            base_units = base_units_map.get(row_id)
+            if base_units:
+                parts = []
+                for bid_raw, units_raw in base_units.items():
+                    try:
+                        bid = int(bid_raw)
+                    except Exception:
+                        continue
+                    base_name = base_name_map.get(bid) or "未知"
+                    unit_list: List[str] = []
+                    if isinstance(units_raw, list):
+                        unit_list = [str(u) for u in units_raw if u]
+                    elif isinstance(units_raw, str) and units_raw:
+                        unit_list = [units_raw]
+                    if unit_list:
+                        parts.append(f"{base_name}({','.join(unit_list)})")
+                    else:
+                        parts.append(base_name)
+                row["base_display"] = "；".join(parts) if parts else (row.get("base_name") or "未知")
+            else:
+                base_name = row.get("base_name") or "未知"
+                row["base_display"] = base_name
+        if is_ai_extract:
+            row["created_date_display"] = extracted_date or "未知"
+            row["created_time_display"] = extracted_date or "未知"
+        else:
+            created_at = row.get("created_at") or ""
+            row["created_date_display"] = row.get("created_date") or (created_at[:10] if created_at else "-")
+            row["created_time_display"] = row.get("created_at")
+        row.pop("difficulty_tags", None)
+        row.pop("params_json", None)
+        pdf_path = row.get("pdf_path")
+        ans_path = row.get("answer_pdf_path")
+        row["pdf_url"] = f"/media/{os.path.basename(pdf_path)}" if pdf_path else None
+        row["answer_pdf_url"] = f"/media/{os.path.basename(ans_path)}" if ans_path else None
+        sessions.append(row)
+    return sessions, int(total_count)
+
+
+def get_practice_session_detail(session_id: int) -> Dict:
+    with db() as conn:
+        session = conn.execute(
+            """
+            SELECT
+                ps.id,
+                ps.student_id,
+                ps.base_id,
+                ps.status,
+                ps.created_at,
+                ps.corrected_at,
+                ps.practice_uuid,
+                ps.created_date,
+                ps.pdf_path,
+                ps.answer_pdf_path,
+                ps.params_json,
+                b.name AS base_name
+            FROM practice_sessions ps
+            LEFT JOIN bases b ON ps.base_id = b.id
+            WHERE ps.id = ?
+            """,
+            (session_id,),
+        ).fetchone()
+        if not session:
+            raise ValueError("session not found")
+        session_dict = dict(session)
+
+        params: Dict[str, Any] = {}
+        params_raw = session_dict.get("params_json")
+        if params_raw:
+            try:
+                params = json.loads(params_raw)
+            except Exception:
+                params = {}
+        source = params.get("source")
+        matched_session_id = params.get("matched_session_id")
+        is_ai_extract = source == "AI_EXTRACT"
+        extracted_date = params.get("extracted_date") or session_dict.get("created_date")
+
+        items = conn.execute(
+            """
+            SELECT id, position, type, en_text, zh_hint
+            FROM exercise_items
+            WHERE session_id = ?
+            ORDER BY position ASC
+            """,
+            (session_id,),
+        ).fetchall()
+        items_list = [dict(it) for it in items]
+
+        difficulty_filter = params.get("difficulty_filter")
+        if is_ai_extract and not matched_session_id:
+            difficulty_filter = "unknown"
+        if not difficulty_filter:
+            tags = conn.execute(
+                """
+                SELECT GROUP_CONCAT(DISTINCT it.difficulty_tag) AS tags
+                FROM exercise_items ei
+                LEFT JOIN items it ON ei.item_id = it.id
+                WHERE ei.session_id = ?
+                """,
+                (session_id,),
+            ).fetchone()
+            tag_str = tags["tags"] if tags else ""
+            tag_set = {t for t in (tag_str or "").split(",") if t}
+            if tag_set == {"write"}:
+                difficulty_filter = "write"
+            elif tag_set == {"read"}:
+                difficulty_filter = "read"
+            else:
+                difficulty_filter = "all"
+        session_dict["difficulty_filter"] = difficulty_filter
+
+        base_display = session_dict.get("base_name") or "未知"
+        if is_ai_extract and not matched_session_id:
+            base_display = "未知"
+        else:
+            base_units = params.get("base_units")
+            if isinstance(base_units, dict) and base_units:
+                base_ids = []
+                for bid_raw in base_units.keys():
+                    try:
+                        base_ids.append(int(bid_raw))
+                    except Exception:
+                        continue
+                base_name_map: Dict[int, str] = {}
+                if base_ids:
+                    placeholders = ",".join("?" for _ in base_ids)
+                    base_rows = conn.execute(
+                        f"SELECT id, name FROM bases WHERE id IN ({placeholders})",
+                        base_ids,
+                    ).fetchall()
+                    base_name_map = {int(b["id"]): b["name"] for b in base_rows}
+                parts = []
+                for bid_raw, units_raw in base_units.items():
+                    try:
+                        bid = int(bid_raw)
+                    except Exception:
+                        continue
+                    base_name = base_name_map.get(bid) or "未知"
+                    unit_list: List[str] = []
+                    if isinstance(units_raw, list):
+                        unit_list = [str(u) for u in units_raw if u]
+                    elif isinstance(units_raw, str) and units_raw:
+                        unit_list = [units_raw]
+                    if unit_list:
+                        parts.append(f"{base_name}({','.join(unit_list)})")
+                    else:
+                        parts.append(base_name)
+                if parts:
+                    base_display = "；".join(parts)
+        session_dict["base_display"] = base_display
+        if is_ai_extract:
+            session_dict["created_date_display"] = extracted_date or "未知"
+            session_dict["created_time_display"] = extracted_date or "未知"
+        else:
+            created_at = session_dict.get("created_at") or ""
+            session_dict["created_date_display"] = session_dict.get("created_date") or (created_at[:10] if created_at else "-")
+            session_dict["created_time_display"] = session_dict.get("created_at")
+
+        results = conn.execute(
+            """
+            SELECT exercise_item_id, answer_raw, is_correct, error_type, created_at
+            FROM practice_results
+            WHERE session_id = ?
+            ORDER BY exercise_item_id ASC, created_at DESC
+            """,
+            (session_id,),
+        ).fetchall()
+        latest_results: Dict[int, Dict[str, Any]] = {}
+        for r in results:
+            ex_id = int(r["exercise_item_id"])
+            if ex_id not in latest_results:
+                latest_results[ex_id] = dict(r)
+
+        submission = conn.execute(
+            """
+            SELECT id, text_raw, image_path, submitted_at, source
+            FROM submissions
+            WHERE session_id = ?
+            ORDER BY submitted_at DESC, id DESC
+            LIMIT 1
+            """,
+            (session_id,),
+        ).fetchone()
+        submission_dict = dict(submission) if submission else None
+
+    pdf_path = session_dict.get("pdf_path")
+    ans_path = session_dict.get("answer_pdf_path")
+    session_dict["pdf_url"] = f"/media/{os.path.basename(pdf_path)}" if pdf_path else None
+    session_dict["answer_pdf_url"] = f"/media/{os.path.basename(ans_path)}" if ans_path else None
+
+    raw_items: List[Dict[str, Any]] = []
+    bundle_id = None
+    bundle_meta = None
+    if submission_dict and submission_dict.get("text_raw"):
+        try:
+            raw_payload = json.loads(submission_dict["text_raw"])
+            raw_items = raw_payload.get("items") or []
+            bundle_id = raw_payload.get("bundle_id")
+            bundle_meta = raw_payload.get("bundle_meta") or None
+        except Exception:
+            raw_items = []
+            bundle_id = None
+            bundle_meta = None
+    if bundle_id and not bundle_meta:
+        bundle_meta = _load_ai_bundle_meta(bundle_id)
+
+    total_results = sum(1 for _ in latest_results.values())
+    correct_results = sum(1 for v in latest_results.values() if v.get("is_correct"))
+
+    return {
+        "session": session_dict,
+        "items": items_list,
+        "results_by_item": latest_results,
+        "summary": {"total": total_results, "correct": correct_results},
+        "submission": submission_dict,
+        "raw_items": raw_items,
+        "bundle_id": bundle_id,
+        "bundle_meta": bundle_meta,
+    }
+
+
+def regenerate_practice_pdfs(session_id: int) -> Dict:
+    ensure_media_dir()
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT id, practice_uuid, created_date, created_at, params_json
+            FROM practice_sessions
+            WHERE id = ?
+            """,
+            (session_id,),
+        ).fetchone()
+        if not row:
+            raise ValueError("session not found")
+        session = dict(row)
+        items = conn.execute(
+            """
+            SELECT position, type, en_text, zh_hint
+            FROM exercise_items
+            WHERE session_id = ?
+            ORDER BY position ASC
+            """,
+            (session_id,),
+        ).fetchall()
+        if not items:
+            raise ValueError("no items for session")
+
+        title = "英语练习单"
+        params_json = session.get("params_json") or ""
+        try:
+            params = json.loads(params_json) if params_json else {}
+            if isinstance(params, dict) and params.get("title"):
+                title = str(params.get("title"))
+        except Exception:
+            pass
+
+        from datetime import datetime
+        practice_uuid = session.get("practice_uuid") or f"ES-{session_id:04d}-{str(uuid.uuid4())[:6].upper()}"
+        date_str = session.get("created_date")
+        if not date_str:
+            created_at = session.get("created_at") or ""
+            date_str = created_at[:10] if created_at else datetime.now().strftime("%Y-%m-%d")
+
+        sections: Dict[str, List[ExerciseRow]] = {"WORD": [], "PHRASE": [], "SENTENCE": []}
+        for it in items:
+            item = dict(it)
+            typ = item.get("type") or item.get("item_type") or "WORD"
+            row_obj = ExerciseRow(
+                position=int(item.get("position") or 0),
+                zh_hint=item.get("zh_hint") or "",
+                answer_en=item.get("en_text") or "",
+                item_type=typ,
+            )
+            if typ in sections:
+                sections[typ].append(row_obj)
+
+        pdf_filename = f"Practice_{date_str}_{practice_uuid}.pdf"
+        ans_filename = f"Practice_{date_str}_{practice_uuid}_Key.pdf"
+        pdf_path = os.path.join(MEDIA_DIR, pdf_filename)
+        ans_path = os.path.join(MEDIA_DIR, ans_filename)
+
+        render_dictation_pdf(
+            pdf_path,
+            title,
+            sections,
+            show_answers=False,
+            session_id=session_id,
+            footer=f"Session #{session_id}",
+            practice_uuid=practice_uuid,
+        )
+        render_dictation_pdf(
+            ans_path,
+            title + "（答案）",
+            sections,
+            show_answers=True,
+            session_id=session_id,
+            footer=f"Session #{session_id}",
+            practice_uuid=practice_uuid,
+        )
+
+        conn.execute(
+            "UPDATE practice_sessions SET pdf_path=?, answer_pdf_path=?, practice_uuid=?, created_date=? WHERE id=?",
+            (pdf_path, ans_path, practice_uuid, date_str, session_id),
+        )
+
+    return {
+        "session_id": session_id,
+        "practice_uuid": practice_uuid,
+        "pdf_path": pdf_path,
+        "answer_pdf_path": ans_path,
+        "pdf_url": f"/media/{pdf_filename}",
+        "answer_pdf_url": f"/media/{ans_filename}",
+    }
+
+
 def upload_submission_image(session_id: int, upload: UploadFile) -> Dict:
     """拍照上传：MVP 只保存原图，不做自动OCR。"""
     ensure_media_dir()
@@ -2451,10 +4126,10 @@ def upload_submission_image(session_id: int, upload: UploadFile) -> Dict:
     with db() as conn:
         cur = conn.execute(
             """
-            INSERT INTO submissions(session_id, submitted_at, image_path, text_raw, source)
-            VALUES(?,?,?,?,?)
+            INSERT INTO submissions(session_id, item_id, position, submitted_at, image_path, text_raw, source)
+            VALUES(?,?,?,?,?,?,?)
             """,
-            (session_id, utcnow_iso(), out_path, None, "PHOTO"),
+            (session_id, None, None, utcnow_iso(), out_path, None, "PHOTO"),
         )
         submission_id = int(cur.lastrowid)
 
@@ -2588,7 +4263,7 @@ def get_dashboard(student_id: int, base_id: int, days: int = 30) -> Dict:
             """
             SELECT COUNT(1) AS c
             FROM student_item_stats sis
-            JOIN knowledge_items ki ON ki.id = sis.item_id
+            JOIN items ki ON ki.id = sis.item_id
             WHERE sis.student_id=? AND ki.base_id=?
             """,
             (student_id, base_id),
@@ -2598,7 +4273,7 @@ def get_dashboard(student_id: int, base_id: int, days: int = 30) -> Dict:
             """
             SELECT COUNT(1) AS c
             FROM student_item_stats sis
-            JOIN knowledge_items ki ON ki.id = sis.item_id
+            JOIN items ki ON ki.id = sis.item_id
             WHERE sis.student_id=? AND ki.base_id=? AND sis.consecutive_correct >= ?
             """,
             (student_id, base_id, get_mastery_threshold()),
@@ -2606,9 +4281,9 @@ def get_dashboard(student_id: int, base_id: int, days: int = 30) -> Dict:
 
         wrong_top = conn.execute(
             """
-            SELECT ki.type, ki.en_text, ki.zh_hint, sis.wrong_attempts, sis.last_attempt_at
+            SELECT ki.item_type, ki.en_text, ki.zh_text, sis.wrong_attempts, sis.last_attempt_at
             FROM student_item_stats sis
-            JOIN knowledge_items ki ON ki.id = sis.item_id
+            JOIN items ki ON ki.id = sis.item_id
             WHERE sis.student_id=? AND ki.base_id=? AND sis.wrong_attempts > 0
             ORDER BY sis.wrong_attempts DESC, sis.last_attempt_at DESC
             LIMIT 10
@@ -2664,4 +4339,219 @@ def get_dashboard(student_id: int, base_id: int, days: int = 30) -> Dict:
         "top_wrong": [dict(r) for r in wrong_top],
         "recent_sessions": sessions_out,
         "calendar_days": cal_rows,
+    }
+
+
+def cleanup_old_sessions(
+    undownloaded_days: int = 14
+) -> Dict[str, int]:
+    """清理旧的练习单和PDF文件
+
+    清理策略：
+    1. 删除未下载且创建超过undownloaded_days天的会话（包括关联数据）
+    2. 删除已下载且创建超过undownloaded_days天的PDF文件（保留数据库记录）
+
+    Args:
+        undownloaded_days: 会话与PDF保留天数（默认14天）
+
+    Returns:
+        清理统计：{"deleted_sessions": N, "deleted_pdfs": M}
+    """
+    import logging
+    from datetime import datetime, timedelta
+
+    logger = logging.getLogger("uvicorn.error")
+    deleted_sessions = 0
+    deleted_pdfs = 0
+
+    with db() as conn:
+        # 1. 删除未下载且过期的会话
+        cutoff_date = (datetime.now() - timedelta(days=undownloaded_days)).strftime("%Y-%m-%d")
+
+        # 先获取要删除的会话列表（用于删除PDF文件）
+        sessions_to_delete = conn.execute(
+            """
+            SELECT id, pdf_path, answer_pdf_path
+            FROM practice_sessions
+            WHERE downloaded_at IS NULL
+              AND created_date < ?
+            """,
+            (cutoff_date,)
+        ).fetchall()
+
+        if sessions_to_delete:
+            session_ids = [s["id"] for s in sessions_to_delete]
+            logger.info(f"[CLEANUP] Deleting {len(session_ids)} undownloaded sessions older than {cutoff_date}")
+
+            # 删除关联的PDF文件
+            for session in sessions_to_delete:
+                for path_key in ["pdf_path", "answer_pdf_path"]:
+                    pdf_path = session.get(path_key)
+                    if pdf_path and os.path.exists(pdf_path):
+                        try:
+                            os.remove(pdf_path)
+                            deleted_pdfs += 1
+                            logger.info(f"[CLEANUP] Deleted PDF: {pdf_path}")
+                        except Exception as e:
+                            logger.warning(f"[CLEANUP] Failed to delete PDF {pdf_path}: {e}")
+
+            # 删除关联的 exercise_items（外键级联删除可能不存在）
+            placeholders = ",".join(["?"] * len(session_ids))
+            conn.execute(
+                f"DELETE FROM exercise_items WHERE session_id IN ({placeholders})",
+                session_ids
+            )
+
+            # 删除会话记录
+            conn.execute(
+                f"DELETE FROM practice_sessions WHERE id IN ({placeholders})",
+                session_ids
+            )
+
+            deleted_sessions = len(session_ids)
+
+        # 2. 删除已下载但超过保留期的PDF文件（保留数据库记录）
+        old_downloaded_sessions = conn.execute(
+            """
+            SELECT id, pdf_path, answer_pdf_path
+            FROM practice_sessions
+            WHERE downloaded_at IS NOT NULL
+              AND created_date < ?
+              AND (pdf_path IS NOT NULL OR answer_pdf_path IS NOT NULL)
+            """,
+            (cutoff_date,)
+        ).fetchall()
+
+        if old_downloaded_sessions:
+            logger.info(f"[CLEANUP] Deleting PDFs for {len(old_downloaded_sessions)} sessions older than {cutoff_date}")
+
+            for session in old_downloaded_sessions:
+                session_id = session["id"]
+                pdf_deleted = False
+
+                # 删除PDF文件
+                for path_key in ["pdf_path", "answer_pdf_path"]:
+                    pdf_path = session.get(path_key)
+                    if pdf_path and os.path.exists(pdf_path):
+                        try:
+                            os.remove(pdf_path)
+                            deleted_pdfs += 1
+                            pdf_deleted = True
+                            logger.info(f"[CLEANUP] Deleted old PDF: {pdf_path}")
+                        except Exception as e:
+                            logger.warning(f"[CLEANUP] Failed to delete old PDF {pdf_path}: {e}")
+
+                # 清除数据库中的PDF路径（数据仍保留，可重新生成）
+                if pdf_deleted:
+                    conn.execute(
+                        "UPDATE practice_sessions SET pdf_path = NULL, answer_pdf_path = NULL WHERE id = ?",
+                        (session_id,)
+                    )
+
+    logger.info(f"[CLEANUP] Cleanup complete: deleted {deleted_sessions} sessions, {deleted_pdfs} PDFs")
+
+    return {
+        "deleted_sessions": deleted_sessions,
+        "deleted_pdfs": deleted_pdfs,
+        "undownloaded_cutoff_date": cutoff_date,
+        "pdf_cutoff_date": cutoff_date,
+    }
+
+
+def _safe_remove_file(path: Optional[str]) -> bool:
+    if not path:
+        return False
+    try:
+        abs_path = os.path.abspath(path)
+        media_root = os.path.abspath(MEDIA_DIR)
+        if os.path.commonpath([abs_path, media_root]) != media_root:
+            return False
+        if os.path.exists(abs_path):
+            os.remove(abs_path)
+            return True
+    except Exception:
+        return False
+    return False
+
+
+def _path_from_media_url(url: Optional[str]) -> Optional[str]:
+    if not url or not isinstance(url, str):
+        return None
+    if url.startswith("/media/"):
+        rel = url[len("/media/"):]
+        return os.path.join(MEDIA_DIR, rel)
+    return None
+
+
+def delete_practice_session(session_id: int) -> Dict[str, Any]:
+    """Delete a practice session and related files."""
+    import shutil
+
+    with db() as conn:
+        session_row = conn.execute(
+            "SELECT id, pdf_path, answer_pdf_path FROM practice_sessions WHERE id=?",
+            (session_id,),
+        ).fetchone()
+        if not session_row:
+            raise ValueError("session not found")
+        session = dict(session_row)
+
+        submissions_rows = conn.execute(
+            "SELECT id, image_path, text_raw FROM submissions WHERE session_id=?",
+            (session_id,),
+        ).fetchall()
+        submissions = [dict(r) for r in submissions_rows]
+
+        conn.execute("DELETE FROM practice_sessions WHERE id=?", (session_id,))
+
+    removed_files: List[str] = []
+    removed_bundles: List[str] = []
+
+    for key in ("pdf_path", "answer_pdf_path"):
+        if _safe_remove_file(session.get(key)):
+            removed_files.append(session.get(key))
+
+    for sub in submissions:
+        if _safe_remove_file(sub.get("image_path")):
+            removed_files.append(sub.get("image_path"))
+        raw = sub.get("text_raw")
+        if not raw:
+            continue
+        try:
+            payload = json.loads(raw)
+        except Exception:
+            payload = None
+        if not isinstance(payload, dict):
+            continue
+        bundle_id = payload.get("bundle_id")
+        if bundle_id:
+            bundle_dir = os.path.join(MEDIA_DIR, "uploads", "ai_bundles", str(bundle_id))
+            try:
+                abs_dir = os.path.abspath(bundle_dir)
+                media_root = os.path.abspath(MEDIA_DIR)
+                if os.path.commonpath([abs_dir, media_root]) == media_root and os.path.exists(abs_dir):
+                    shutil.rmtree(abs_dir, ignore_errors=True)
+                    removed_bundles.append(str(bundle_id))
+            except Exception:
+                pass
+        bundle_meta = payload.get("bundle_meta") if isinstance(payload.get("bundle_meta"), dict) else {}
+        for url in (bundle_meta.get("image_urls") or []) + (bundle_meta.get("graded_image_urls") or []):
+            path = _path_from_media_url(url)
+            if path and _safe_remove_file(path):
+                removed_files.append(path)
+        items = payload.get("items")
+        if isinstance(items, list):
+            for it in items:
+                if not isinstance(it, dict):
+                    continue
+                crop_url = it.get("crop_url")
+                path = _path_from_media_url(crop_url)
+                if path and _safe_remove_file(path):
+                    removed_files.append(path)
+
+    return {
+        "deleted": True,
+        "session_id": session_id,
+        "removed_files": removed_files,
+        "removed_bundles": removed_bundles,
     }

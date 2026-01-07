@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>练习单管理</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
+    .wrap{max-width:1280px;margin:0 auto;padding:24px}
+    a{color:#0b5fff;text-decoration:none}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+    .card-title{font-weight:600;margin:0 0 10px 0}
+    .muted{color:#666;font-size:13px}
+    label{display:block;margin-top:10px;font-size:13px;color:#333;font-weight:500}
+    input[type="text"],input[type="date"]{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box}
+    button{padding:10px 16px;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer;font-weight:500;font-size:14px}
+    button.secondary{background:#e5e7eb;color:#111}
+    button.ghost{background:#fff;border:1px solid #d1d5db;color:#111}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#eef2ff;font-size:12px}
+    .pill.ok{background:#dcfce7;color:#15803d}
+    .pill.warn{background:#fef3c7;color:#a16207}
+    .pill.err{background:#fee2e2;color:#b91c1c}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 8px;border-bottom:1px solid #eee;text-align:left;font-size:13px;vertical-align:top}
+    th{background:#fafafa;position:sticky;top:0;z-index:1}
+    .table-wrap{border:1px solid #f1f1f1;border-radius:10px}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    .pager{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px}
+    .danger{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+    <div>
+      <h1 style="margin:0 0 6px 0">练习单管理</h1>
+      <div class="muted" id="ctx"></div>
+    </div>
+    <div>
+      <a href="/">← 返回引导页</a>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="card-title">查询条件</div>
+    <div class="row">
+      <div style="flex:1 1 180px">
+        <label>开始日期</label>
+        <input type="date" id="startDate" />
+      </div>
+      <div style="flex:1 1 180px">
+        <label>结束日期</label>
+        <input type="date" id="endDate" />
+      </div>
+      <div style="flex:1 1 220px">
+        <label>练习单编号（UUID）</label>
+        <input type="text" id="uuidInput" placeholder="如 ES-0001-ABC123" />
+      </div>
+      <div style="flex:1 1 220px">
+        <label>知识点关键词</label>
+        <input type="text" id="keywordInput" placeholder="英文或中文提示" />
+      </div>
+    </div>
+    <div class="actions">
+      <button id="searchBtn">查询</button>
+      <button class="secondary" id="resetBtn">重置</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <div class="card-title">历史练习单</div>
+    <div class="muted" id="listHint">输入条件后点击查询</div>
+    <div class="table-wrap" style="margin-top:10px">
+      <table id="sessionTable">
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>状态</th>
+            <th>资料库</th>
+            <th>要求项</th>
+            <th>题数</th>
+            <th>正确/总数</th>
+            <th>编号</th>
+            <th>生成时间</th>
+            <th>入库时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="pager" id="pager" style="display:none">
+      <div class="muted" id="pageInfo"></div>
+      <div class="row" style="gap:8px">
+        <button class="secondary" id="prevPage">上一页</button>
+        <button class="secondary" id="nextPage">下一页</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function getCfg(){
+  const raw = localStorage.getItem('el_cfg');
+  return raw ? JSON.parse(raw) : null;
+}
+async function api(path, opts){
+  const res = await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
+  if(!res.ok){
+    let msg = await res.text();
+    throw new Error(msg || '请求失败');
+  }
+  return res.json();
+}
+
+const cfg = getCfg();
+if(!cfg){ location.href = '/'; }
+document.getElementById('ctx').textContent = `孩子：${cfg.student_name || cfg.student_id}｜资料库：${cfg.base_name || cfg.base_id}`;
+
+function statusPill(status){
+  if(status === 'CORRECTED'){ return '<span class="pill ok">已入库</span>'; }
+  return '<span class="pill warn">待提交</span>';
+}
+
+function formatDate(s){
+  if(!s) return '-';
+  return s.replace('T',' ').slice(0,16);
+}
+
+function formatDateOnly(s){
+  if(!s) return '-';
+  if(s === '未知') return s;
+  return s.slice(0, 10);
+}
+
+function formatRequirement(mode){
+  if(!mode || mode === 'unknown') return '未知';
+  if(mode === 'write') return '会写';
+  if(mode === 'read') return '会认';
+  return '会写+会认';
+}
+
+const PAGE_SIZE = 20;
+let currentPage = 1;
+let lastFilters = null;
+
+function getFilters(){
+  return {
+    start: document.getElementById('startDate').value,
+    end: document.getElementById('endDate').value,
+    uuid: document.getElementById('uuidInput').value.trim(),
+    keyword: document.getElementById('keywordInput').value.trim(),
+  };
+}
+
+function renderPager(total, page){
+  const pager = document.getElementById('pager');
+  const pageInfo = document.getElementById('pageInfo');
+  const prevBtn = document.getElementById('prevPage');
+  const nextBtn = document.getElementById('nextPage');
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  pageInfo.textContent = `第 ${page} / ${totalPages} 页，共 ${total} 条`;
+  prevBtn.disabled = page <= 1;
+  nextBtn.disabled = page >= totalPages;
+  pager.style.display = total > 0 ? 'flex' : 'none';
+}
+
+async function searchSessions(page){
+  const filters = lastFilters || getFilters();
+  const start = filters.start;
+  const end = filters.end;
+  const uuid = filters.uuid;
+  const keyword = filters.keyword;
+  const pageNum = page || 1;
+  const params = new URLSearchParams({
+    student_id: String(cfg.student_id),
+    base_id: String(cfg.base_id),
+    page: String(pageNum),
+    page_size: String(PAGE_SIZE),
+  });
+  if(start) params.append('start_date', start);
+  if(end) params.append('end_date', end);
+  if(uuid) params.append('practice_uuid', uuid);
+  if(keyword) params.append('keyword', keyword);
+  const listHint = document.getElementById('listHint');
+  listHint.textContent = '加载中...';
+  const data = await api(`/api/practice-sessions/search?${params.toString()}`);
+  renderSessionList(data.sessions || []);
+  const total = data.total || data.count || 0;
+  renderPager(total, pageNum);
+  listHint.textContent = `共 ${total} 条结果`;
+  currentPage = pageNum;
+  return data;
+}
+
+function renderSessionList(sessions){
+  const tbody = document.querySelector('#sessionTable tbody');
+  tbody.innerHTML = '';
+  sessions.forEach(s=>{
+    const tr = document.createElement('tr');
+    const total = s.result_count || 0;
+    const correct = s.correct_count || 0;
+    const accuracy = total ? `${correct}/${total}` : '-';
+    const dateText = s.created_date_display || s.created_date || (s.created_at ? s.created_at.slice(0,10) : '-');
+    const createdTime = formatDateOnly(s.created_time_display || s.created_at || '-');
+    tr.innerHTML = `
+      <td>${dateText}</td>
+      <td>${statusPill(s.status)}</td>
+      <td>${s.base_display || s.base_name || s.base_id || '-'}</td>
+      <td>${formatRequirement(s.difficulty_filter)}</td>
+      <td>${s.item_count || '-'}</td>
+      <td>${accuracy}</td>
+      <td>${s.practice_uuid || '-'}</td>
+      <td>${createdTime}</td>
+      <td>${s.corrected_at ? formatDateOnly(s.corrected_at) : '-'}</td>
+      <td>
+        <a class="ghost" style="padding:6px 10px;border-radius:8px;border:1px solid #d1d5db;display:inline-block" href="practice-view.html?session_id=${s.id}">查看</a>
+        <button class="ghost danger delete-btn" data-id="${s.id}" style="padding:6px 10px;border-radius:8px;margin-left:6px">删除</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('.delete-btn').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      e.preventDefault();
+      const sessionId = btn.getAttribute('data-id');
+      if(!sessionId) return;
+      const ok = confirm('确认删除该练习单？删除后无法恢复。');
+      if(!ok) return;
+      btn.disabled = true;
+      try{
+        await api(`/api/practice-sessions/${sessionId}`, {method: 'DELETE'});
+        const data = await searchSessions(currentPage);
+        if((data.sessions || []).length === 0 && currentPage > 1){
+          await searchSessions(currentPage - 1);
+        }
+      }catch(err){
+        alert('删除失败：' + err.message);
+      }finally{
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+document.getElementById('searchBtn').addEventListener('click', ()=>{
+  lastFilters = getFilters();
+  searchSessions(1);
+});
+document.getElementById('prevPage').addEventListener('click', ()=>{
+  if(currentPage > 1){
+    searchSessions(currentPage - 1);
+  }
+});
+document.getElementById('nextPage').addEventListener('click', ()=>{
+  searchSessions(currentPage + 1);
+});
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  document.getElementById('startDate').value = '';
+  document.getElementById('endDate').value = '';
+  document.getElementById('uuidInput').value = '';
+  document.getElementById('keywordInput').value = '';
+  document.getElementById('listHint').textContent = '输入条件后点击查询';
+  document.querySelector('#sessionTable tbody').innerHTML = '';
+  document.getElementById('pager').style.display = 'none';
+  lastFilters = null;
+  currentPage = 1;
+});
+</script>
+</body>
+</html>

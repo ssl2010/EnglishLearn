@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>知识点管理</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
+    .wrap{max-width:1400px;margin:0 auto;padding:24px}
+    .card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 8px 24px rgba(0,0,0,.06);margin-bottom:14px}
+    a{color:#0b5fff;text-decoration:none}
+    button{border:0;border-radius:10px;padding:10px 14px;background:#111;color:#fff;cursor:pointer;font-size:13px}
+    button.secondary{background:#fff;color:#111;border:1px solid #ddd}
+    button.danger{background:#dc2626;color:#fff}
+    input,select,textarea{padding:8px;border-radius:10px;border:1px solid #ddd;font-size:13px}
+    .muted{color:#666;font-size:12px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .row > *{flex:1;min-width:200px}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{padding:8px;text-align:left;border-bottom:1px solid #eee}
+    th{background:#f8f9fa;font-weight:500;font-size:12px}
+    td{font-size:13px}
+    .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:500}
+    .badge.word{background:#dcfce7;color:#166534}
+    .badge.phrase{background:#fef3c7;color:#92400e}
+    .badge.sentence{background:#dbeafe;color:#1e40af}
+    .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center}
+    .modal.active{display:flex}
+    .modal-content{background:#fff;border-radius:14px;padding:24px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto}
+    .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+    .modal-header h3{margin:0}
+    .close-btn{cursor:pointer;font-size:24px;color:#666}
+    label{display:block;margin-top:12px;margin-bottom:4px;font-size:12px;font-weight:500}
+
+    /* Tabs */
+    .tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid #e5e7eb;overflow-x:auto;flex-wrap:wrap}
+    .tab{padding:10px 16px;cursor:pointer;border:none;background:none;color:#6b7280;font-size:13px;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all 0.2s}
+    .tab:hover{color:#111;background:#f9fafb}
+    .tab.active{color:#0b5fff;border-bottom-color:#0b5fff}
+
+    /* Add Item Form */
+    .add-form{background:#f8f9fa;padding:16px;border-radius:8px;margin-bottom:16px}
+    .add-form.hidden{display:none}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <h2 style="margin:0">知识点管理</h2>
+      <div style="display:flex;gap:8px">
+        <button onclick="toggleAddForm()">添加知识点</button>
+        <a href="/library.html" style="padding:10px 14px;background:#fff;color:#111;border:1px solid #ddd;border-radius:10px;text-decoration:none;font-size:13px">返回资料库列表</a>
+      </div>
+    </div>
+    <div class="muted" id="baseInfo">加载中...</div>
+  </div>
+
+  <!-- Add Item Form -->
+  <div id="addItemForm" class="card add-form hidden">
+    <h3 style="margin:0 0 12px">添加知识点</h3>
+    <div class="row">
+      <div>
+        <label>中文提示</label>
+        <input id="newZhText" type="text" placeholder="例如：游泳" style="width:100%" />
+      </div>
+      <div>
+        <label>英文原文</label>
+        <input id="newEnText" type="text" placeholder="例如：swim" style="width:100%" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>单元代码</label>
+        <input id="newUnit" type="text" placeholder="例如：Unit 1 (留空则为不分单元)" style="width:100%" />
+      </div>
+      <div>
+        <label>类型</label>
+        <select id="newItemType" style="width:100%">
+          <option value="WORD">单词</option>
+          <option value="PHRASE">短语</option>
+          <option value="SENTENCE">句子</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button onclick="saveNewItem()">保存</button>
+      <button class="secondary" onclick="toggleAddForm()">取消</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h3 style="margin:0">知识点列表</h3>
+      <span id="itemCount" class="muted"></span>
+    </div>
+
+    <!-- Unit Tabs -->
+    <div id="unitTabs" class="tabs"></div>
+
+    <!-- Items Table -->
+    <div id="itemsList" style="overflow-x:auto">
+      <div class="muted">加载中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Item Modal -->
+<div id="editItemModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>编辑知识点</h3>
+      <span class="close-btn" onclick="closeEditItemModal()">&times;</span>
+    </div>
+    <label>中文提示</label>
+    <input id="editZhText" type="text" style="width:100%" />
+    <label>英文原文</label>
+    <input id="editEnText" type="text" style="width:100%" />
+    <label>单元代码</label>
+    <input id="editUnit" type="text" style="width:100%" />
+    <label>类型</label>
+    <select id="editItemType" style="width:100%">
+      <option value="WORD">单词</option>
+      <option value="PHRASE">短语</option>
+      <option value="SENTENCE">句子</option>
+    </select>
+    <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="secondary" onclick="closeEditItemModal()">取消</button>
+      <button onclick="saveEditItem()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="unit_tabs_shared.js"></script>
+<script>
+window.currentBaseId = null;
+window.currentEditItemId = null;
+window.currentUnit = '';
+window.allItems = [];
+window.unitCodes = [];
+
+async function apiJSON(path, opts){
+  const res = await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
+  if(!res.ok){
+    let errorMsg;
+    try{
+      const errorData = await res.json();
+      errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData);
+    }catch(e){
+      errorMsg = await res.text();
+    }
+    throw new Error(errorMsg);
+  }
+  return res.json();
+}
+
+function getUrlParams(){
+  const params = new URLSearchParams(window.location.search);
+  return {
+    baseId: params.get('base_id'),
+    baseName: params.get('base_name') || '资料库'
+  };
+}
+
+async function loadBaseInfo(){
+  const params = getUrlParams();
+  if(!params.baseId){
+    document.getElementById('baseInfo').innerHTML = '<span style="color:#d00">缺少 base_id 参数</span>';
+    return;
+  }
+
+  window.currentBaseId = parseInt(params.baseId);
+  document.getElementById('baseInfo').innerHTML = `资料库: <strong>${decodeURIComponent(params.baseName)}</strong> (#${params.baseId})`;
+
+  await loadAllItems();
+}
+
+async function loadAllItems(){
+  try{
+    const res = await apiJSON(`/api/knowledge-bases/${window.currentBaseId}/items`);
+    window.allItems = res.items || [];
+
+    // Load unit metadata (already sorted by unit_index from backend)
+    const unitsRes = await apiJSON(`/api/knowledge-bases/${window.currentBaseId}/units`);
+    const unitsMeta = unitsRes.units || [];
+
+    // Use unit_code from metadata in the order provided by backend (sorted by unit_index)
+    const units = unitsMeta.map(u => u.unit_code);
+    window.unitCodes = units;
+
+    // Create mapping: unit_code -> unit_name
+    window.unitNames = {};
+    unitsMeta.forEach(u => {
+      window.unitNames[u.unit_code] = u.unit_name;
+    });
+
+    // Render unit tabs
+    renderUnitTabs(units);
+
+    // Render items for current unit
+    renderItems();
+  }catch(e){
+    document.getElementById('itemsList').innerHTML = `<div class="muted" style="color:#d00">加载失败: ${e.message}</div>`;
+  }
+}
+
+function renderUnitTabs(units){
+  const counts = {};
+  counts[''] = window.allItems.length;
+  units.forEach(u => {
+    counts[u] = window.allItems.filter(it => it.unit === u).length;
+  });
+  if(window.ELUnitTabs && window.ELUnitTabs.render){
+    window.ELUnitTabs.render('unitTabs', {
+      units,
+      unitNames: window.unitNames || {},
+      counts,
+      currentUnit: window.currentUnit,
+      onChange: switchUnit,
+      includeAll: true,
+      allValue: '',
+      allLabel: '全部'
+    });
+  }
+}
+
+function switchUnit(unit){
+  window.currentUnit = unit;
+  renderItems();
+  renderUnitTabs(window.unitCodes || []);
+}
+
+function renderItems(){
+  // Filter items by current unit
+  const filteredItems = window.currentUnit === ''
+    ? window.allItems
+    : window.allItems.filter(it => it.unit === window.currentUnit);
+
+  // Update count
+  document.getElementById('itemCount').innerText = `共 ${filteredItems.length} 个知识点`;
+
+  if(filteredItems.length === 0){
+    document.getElementById('itemsList').innerHTML = '<div class="muted">该单元暂无知识点</div>';
+    return;
+  }
+
+  const typeMap = {WORD: 'word', PHRASE: 'phrase', SENTENCE: 'sentence'};
+  const typeLabel = {WORD: '单词', PHRASE: '短语', SENTENCE: '句子'};
+  const typeOrder = {WORD: 0, PHRASE: 1, SENTENCE: 2};
+  const difficultyOrder = {write: 0, read: 1, recognize: 1};
+  const sortedItems = filteredItems
+    .map((it, idx) => ({it, idx}))
+    .sort((a, b) => {
+      const typeA = typeOrder[a.it.item_type] ?? 99;
+      const typeB = typeOrder[b.it.item_type] ?? 99;
+      if (typeA !== typeB) return typeA - typeB;
+      const diffA = difficultyOrder[a.it.difficulty_tag] ?? 2;
+      const diffB = difficultyOrder[b.it.difficulty_tag] ?? 2;
+      if (diffA !== diffB) return diffA - diffB;
+      return a.idx - b.idx;
+    })
+    .map(entry => entry.it);
+
+  const html = `
+    <table>
+      <thead>
+        <tr>
+          <th style="width:80px">类型</th>
+          <th style="width:120px">单元</th>
+          <th>中文提示</th>
+          <th>英文原文</th>
+          <th style="width:120px">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${sortedItems.map(it => {
+          const unitName = window.unitNames && window.unitNames[it.unit] ? window.unitNames[it.unit] : '';
+          const unitDisplay = it.unit === '__ALL__' ? '-' : (unitName ? `${it.unit} - ${unitName}` : it.unit);
+          return `
+          <tr>
+            <td><span class="badge ${typeMap[it.item_type] || 'word'}">${typeLabel[it.item_type] || it.item_type}</span></td>
+            <td>${unitDisplay}</td>
+            <td>${it.zh_text || '-'}</td>
+            <td>${it.en_text}</td>
+            <td>
+              <button class="secondary" onclick="openEditItem(${it.id})" style="padding:4px 8px;font-size:11px">编辑</button>
+              <button class="danger" onclick="deleteItem(${it.id})" style="padding:4px 8px;font-size:11px">删除</button>
+            </td>
+          </tr>
+        `;}).join('')}
+      </tbody>
+    </table>
+  `;
+  document.getElementById('itemsList').innerHTML = html;
+}
+
+function toggleAddForm(){
+  const form = document.getElementById('addItemForm');
+  if(form.classList.contains('hidden')){
+    form.classList.remove('hidden');
+    document.getElementById('newZhText').value = '';
+    document.getElementById('newEnText').value = '';
+    document.getElementById('newUnit').value = window.currentUnit === '' ? '' : window.currentUnit;
+    document.getElementById('newItemType').value = 'WORD';
+    document.getElementById('newEnText').focus();
+  }else{
+    form.classList.add('hidden');
+  }
+}
+
+async function saveNewItem(){
+  const zhText = document.getElementById('newZhText').value.trim();
+  const enText = document.getElementById('newEnText').value.trim();
+  const unit = document.getElementById('newUnit').value.trim() || '__ALL__';
+  const itemType = document.getElementById('newItemType').value;
+
+  if(!enText){
+    alert('请输入英文原文');
+    return;
+  }
+
+  try{
+    await apiJSON('/api/knowledge-items', {
+      method: 'POST',
+      body: JSON.stringify({
+        base_id: window.currentBaseId,
+        zh_text: zhText,
+        en_text: enText,
+        unit: unit,
+        item_type: itemType
+      })
+    });
+    toggleAddForm();
+    await loadAllItems();
+  }catch(e){
+    alert('添加失败：' + e.message);
+  }
+}
+
+function openEditItem(itemId){
+  const item = window.allItems.find(it => it.id === itemId);
+  if(!item){
+    alert('知识点不存在');
+    return;
+  }
+  window.currentEditItemId = itemId;
+  document.getElementById('editZhText').value = item.zh_text || '';
+  document.getElementById('editEnText').value = item.en_text;
+  document.getElementById('editUnit').value = item.unit === '__ALL__' ? '' : item.unit;
+  document.getElementById('editItemType').value = item.item_type;
+  document.getElementById('editItemModal').classList.add('active');
+}
+
+function closeEditItemModal(){
+  document.getElementById('editItemModal').classList.remove('active');
+}
+
+async function saveEditItem(){
+  const zhText = document.getElementById('editZhText').value.trim();
+  const enText = document.getElementById('editEnText').value.trim();
+  const unit = document.getElementById('editUnit').value.trim() || '__ALL__';
+  const itemType = document.getElementById('editItemType').value;
+
+  if(!enText){
+    alert('请输入英文原文');
+    return;
+  }
+
+  try{
+    await apiJSON(`/api/knowledge-items/${window.currentEditItemId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        zh_text: zhText,
+        en_text: enText,
+        unit: unit,
+        item_type: itemType
+      })
+    });
+    closeEditItemModal();
+    await loadAllItems();
+  }catch(e){
+    alert('更新失败：' + e.message);
+  }
+}
+
+async function deleteItem(itemId){
+  if(!confirm('确定要删除这个知识点吗？')){
+    return;
+  }
+  try{
+    await apiJSON(`/api/knowledge-items/${itemId}`, {method: 'DELETE'});
+    await loadAllItems();
+  }catch(e){
+    alert('删除失败：' + e.message);
+  }
+}
+
+// Initialize
+window.addEventListener('DOMContentLoaded', loadBaseInfo);
+</script>
+</body>
+</html>

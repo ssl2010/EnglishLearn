@@ -116,7 +116,7 @@ def create_student(conn: sqlite3.Connection, name: str, grade: str = None) -> in
     return exec1(conn, sql, (name, grade))
 
 
-def update_student(conn: sqlite3.Connection, student_id: int, name: str = None, grade: str = None) -> None:
+def update_student(conn: sqlite3.Connection, student_id: int, name: str = None, grade: str = None, avatar: str = None) -> None:
     """更新学生信息"""
     updates = []
     args = []
@@ -127,6 +127,9 @@ def update_student(conn: sqlite3.Connection, student_id: int, name: str = None, 
     if grade is not None:
         updates.append("grade = ?")
         args.append(grade)
+    if avatar is not None:
+        updates.append("avatar = ?")
+        args.append(avatar)
 
     if updates:
         updates.append("updated_at = ?")
@@ -163,19 +166,44 @@ def get_base(conn: sqlite3.Connection, base_id: int) -> Optional[Dict]:
     return row_to_dict(row)
 
 
-def create_base(conn: sqlite3.Connection, name: str, description: str = None, is_system: bool = False) -> int:
+def create_base(
+    conn: sqlite3.Connection,
+    name: str,
+    description: str = None,
+    is_system: bool = False,
+    education_stage: str = None,
+    grade: str = None,
+    term: str = None,
+    version: str = None,
+    publisher: str = None,
+    editor: str = None,
+    cover_image: str = None
+) -> int:
     """创建资料库"""
-    sql = "INSERT INTO bases (name, description, is_system) VALUES (?, ?, ?)"
-    return exec1(conn, sql, (name, description, 1 if is_system else 0))
+    sql = """INSERT INTO bases
+             (name, description, is_system, education_stage, grade, term, version, publisher, editor, cover_image)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+    return exec1(conn, sql, (
+        name, description, 1 if is_system else 0,
+        education_stage, grade, term, version, publisher, editor, cover_image
+    ))
 
 
-def update_base(conn: sqlite3.Connection, base_id: int, name: str = None, description: str = None) -> None:
-    """更新资料库（仅限自定义资料库）"""
-    # 检查是否为系统资料库
-    base = get_base(conn, base_id)
-    if base and base['is_system']:
-        raise ValueError("Cannot update system base")
-
+def update_base(
+    conn: sqlite3.Connection,
+    base_id: int,
+    name: str = None,
+    description: str = None,
+    is_system: bool = None,
+    education_stage: str = None,
+    grade: str = None,
+    term: str = None,
+    version: str = None,
+    publisher: str = None,
+    editor: str = None,
+    cover_image: str = None
+) -> None:
+    """更新资料库"""
     updates = []
     args = []
 
@@ -185,6 +213,30 @@ def update_base(conn: sqlite3.Connection, base_id: int, name: str = None, descri
     if description is not None:
         updates.append("description = ?")
         args.append(description)
+    if is_system is not None:
+        updates.append("is_system = ?")
+        args.append(1 if is_system else 0)
+    if education_stage is not None:
+        updates.append("education_stage = ?")
+        args.append(education_stage)
+    if grade is not None:
+        updates.append("grade = ?")
+        args.append(grade)
+    if term is not None:
+        updates.append("term = ?")
+        args.append(term)
+    if version is not None:
+        updates.append("version = ?")
+        args.append(version)
+    if publisher is not None:
+        updates.append("publisher = ?")
+        args.append(publisher)
+    if editor is not None:
+        updates.append("editor = ?")
+        args.append(editor)
+    if cover_image is not None:
+        updates.append("cover_image = ?")
+        args.append(cover_image)
 
     if updates:
         updates.append("updated_at = ?")
@@ -196,13 +248,165 @@ def update_base(conn: sqlite3.Connection, base_id: int, name: str = None, descri
 
 
 def delete_base(conn: sqlite3.Connection, base_id: int) -> None:
-    """删除资料库（仅限自定义资料库）"""
-    # 检查是否为系统资料库
-    base = get_base(conn, base_id)
-    if base and base['is_system']:
-        raise ValueError("Cannot delete system base")
-
+    """删除资料库"""
     conn.execute("DELETE FROM bases WHERE id = ?", (base_id,))
+
+
+# ============================================================
+# 单元元数据相关
+# ============================================================
+
+def get_units(conn: sqlite3.Connection, base_id: int) -> List[Dict]:
+    """获取资料库的单元元数据列表
+
+    Args:
+        base_id: 资料库ID
+
+    Returns:
+        单元列表，按unit_index排序
+    """
+    sql = """
+        SELECT * FROM units
+        WHERE base_id = ?
+        ORDER BY unit_index, unit_code
+    """
+    rows = qall(conn, sql, (base_id,))
+    return rows_to_dicts(rows)
+
+
+def get_unit(conn: sqlite3.Connection, base_id: int, unit_code: str) -> Optional[Dict]:
+    """获取单个单元元数据
+
+    Args:
+        base_id: 资料库ID
+        unit_code: 单元代码（如"U1", "Unit 1"）
+
+    Returns:
+        单元信息字典，不存在则返回None
+    """
+    sql = "SELECT * FROM units WHERE base_id = ? AND unit_code = ?"
+    row = qone(conn, sql, (base_id, unit_code))
+    return row_to_dict(row)
+
+
+def create_unit(
+    conn: sqlite3.Connection,
+    base_id: int,
+    unit_code: str,
+    unit_name: str = None,
+    unit_index: int = None,
+    description: str = None
+) -> int:
+    """创建单元元数据
+
+    Args:
+        base_id: 资料库ID
+        unit_code: 单元代码（如"U1", "Unit 1"）
+        unit_name: 单元名称（如"My school"）
+        unit_index: 单元序号（用于排序）
+        description: 单元描述
+
+    Returns:
+        新创建的单元ID
+    """
+    sql = """
+        INSERT INTO units (base_id, unit_code, unit_name, unit_index, description)
+        VALUES (?, ?, ?, ?, ?)
+    """
+    return exec1(conn, sql, (base_id, unit_code, unit_name, unit_index, description))
+
+
+def update_unit(
+    conn: sqlite3.Connection,
+    unit_id: int,
+    unit_name: str = None,
+    unit_index: int = None,
+    description: str = None
+) -> None:
+    """更新单元元数据
+
+    Args:
+        unit_id: 单元ID
+        unit_name: 单元名称
+        unit_index: 单元序号
+        description: 单元描述
+    """
+    updates = []
+    args = []
+
+    if unit_name is not None:
+        updates.append("unit_name = ?")
+        args.append(unit_name)
+    if unit_index is not None:
+        updates.append("unit_index = ?")
+        args.append(unit_index)
+    if description is not None:
+        updates.append("description = ?")
+        args.append(description)
+
+    if updates:
+        args.append(unit_id)
+        sql = f"UPDATE units SET {', '.join(updates)} WHERE id = ?"
+        conn.execute(sql, args)
+
+
+def upsert_units(conn: sqlite3.Connection, base_id: int, units: List[Dict]) -> Dict[str, int]:
+    """批量插入或更新单元元数据
+
+    Args:
+        base_id: 资料库ID
+        units: 单元列表，每个元素包含 unit_code, unit_name, unit_index, description 等字段
+
+    Returns:
+        统计信息：{"inserted": N, "updated": M}
+    """
+    inserted = 0
+    updated = 0
+
+    for unit_data in units:
+        unit_code = unit_data.get("unit_code")
+        if not unit_code:
+            continue  # Skip units without code
+
+        unit_name = unit_data.get("unit_name")
+        unit_index = unit_data.get("unit_index")
+        description = unit_data.get("description")
+
+        # Check if unit already exists
+        existing = get_unit(conn, base_id, unit_code)
+
+        if existing:
+            # Update existing unit
+            update_unit(
+                conn,
+                existing["id"],
+                unit_name=unit_name,
+                unit_index=unit_index,
+                description=description
+            )
+            updated += 1
+        else:
+            # Insert new unit
+            create_unit(
+                conn,
+                base_id=base_id,
+                unit_code=unit_code,
+                unit_name=unit_name,
+                unit_index=unit_index,
+                description=description
+            )
+            inserted += 1
+
+    return {"inserted": inserted, "updated": updated}
+
+
+def delete_unit(conn: sqlite3.Connection, unit_id: int) -> None:
+    """删除单元元数据
+
+    Args:
+        unit_id: 单元ID
+    """
+    conn.execute("DELETE FROM units WHERE id = ?", (unit_id,))
 
 
 # ============================================================
@@ -263,7 +467,8 @@ def create_item(
     en_text: str,
     unit: str = "__ALL__",
     position: int = None,
-    item_type: str = "WORD"
+    item_type: str = "WORD",
+    difficulty_tag: str = None
 ) -> int:
     """创建词条"""
     # 如果未指定position，自动计算
@@ -276,10 +481,10 @@ def create_item(
         position = row['next_pos']
 
     sql = """
-        INSERT INTO items (base_id, unit, position, zh_text, en_text, item_type)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO items (base_id, unit, position, zh_text, en_text, item_type, difficulty_tag)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     """
-    return exec1(conn, sql, (base_id, unit, position, zh_text, en_text, item_type))
+    return exec1(conn, sql, (base_id, unit, position, zh_text, en_text, item_type, difficulty_tag))
 
 
 def update_item(
@@ -289,7 +494,8 @@ def update_item(
     en_text: str = None,
     unit: str = None,
     position: int = None,
-    item_type: str = None
+    item_type: str = None,
+    difficulty_tag: str = None
 ) -> None:
     """更新词条"""
     updates = []
@@ -310,6 +516,9 @@ def update_item(
     if item_type is not None:
         updates.append("item_type = ?")
         args.append(item_type)
+    if difficulty_tag is not None:
+        updates.append("difficulty_tag = ?")
+        args.append(difficulty_tag)
 
     if updates:
         updates.append("updated_at = ?")
@@ -339,7 +548,13 @@ def get_student_learning_bases(conn: sqlite3.Connection, student_id: int, is_act
             slb.*,
             b.name as base_name,
             b.description as base_description,
-            b.is_system as base_is_system
+            b.is_system as base_is_system,
+            b.education_stage as base_education_stage,
+            b.grade as base_grade,
+            b.term as base_term,
+            b.version as base_version,
+            b.publisher as base_publisher,
+            b.cover_image as base_cover_image
         FROM student_learning_bases slb
         JOIN bases b ON slb.base_id = b.id
         WHERE slb.student_id = ?

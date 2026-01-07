@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>资料库维护</title>
+  <style>
+    * { box-sizing: border-box; }
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;margin:0;background:#f6f7fb;color:#1a202c;line-height:1.5}
+    .wrap{max-width:1200px;margin:0 auto;padding:32px 24px}
+    .card{background:#fff;border-radius:16px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,.1),0 1px 2px rgba(0,0,0,.06);margin-bottom:24px}
+    a{color:#0b5fff;text-decoration:none;transition:color 0.2s}
+    a:hover{color:#0847cc}
+
+    button{border:0;border-radius:10px;padding:11px 20px;background:#1a202c;color:#fff;cursor:pointer;font-size:14px;font-weight:500;transition:all 0.2s;line-height:1.5}
+    button:hover{background:#2d3748;transform:translateY(-1px);box-shadow:0 4px 6px rgba(0,0,0,.1)}
+    button:active{transform:translateY(0)}
+    button.secondary{background:#fff;color:#1a202c;border:1.5px solid #e2e8f0}
+    button.secondary:hover{background:#f7fafc;border-color:#cbd5e0}
+    button.danger{background:#dc2626;color:#fff}
+    button.danger:hover{background:#b91c1c}
+
+    input,select,textarea{
+      padding:11px 14px;
+      border-radius:10px;
+      border:1.5px solid #e2e8f0;
+      font-size:14px;
+      transition:all 0.2s;
+      width:100%;
+      font-family:inherit;
+      line-height:1.5;
+    }
+    input:focus,select:focus,textarea:focus{
+      outline:none;
+      border-color:#0b5fff;
+      box-shadow:0 0 0 3px rgba(11,95,255,0.1);
+    }
+    textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:13px}
+
+    label{
+      display:block;
+      margin-bottom:8px;
+      font-size:13px;
+      font-weight:600;
+      color:#4a5568;
+      letter-spacing:0.01em;
+    }
+
+    .muted{color:#718096;font-size:13px}
+
+    .badge{
+      display:inline-block;
+      padding:3px 10px;
+      border-radius:12px;
+      font-size:11px;
+      font-weight:600;
+      letter-spacing:0.02em;
+    }
+    .badge.system{background:#dbeafe;color:#1e40af}
+    .badge.custom{background:#fef3c7;color:#92400e}
+
+    .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
+    .modal.active{display:flex}
+    .modal-content{background:#fff;border-radius:16px;padding:32px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 25px -5px rgba(0,0,0,.1),0 10px 10px -5px rgba(0,0,0,.04)}
+    .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #e2e8f0}
+    .modal-header h3{margin:0;font-size:20px;font-weight:700;color:#1a202c}
+    .close-btn{cursor:pointer;font-size:28px;color:#718096;line-height:1;transition:color 0.2s}
+    .close-btn:hover{color:#1a202c}
+
+    .page-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      margin-bottom:8px;
+      flex-wrap:wrap;
+      gap:16px;
+    }
+    .page-header h2{
+      margin:0;
+      font-size:28px;
+      font-weight:700;
+      color:#1a202c;
+    }
+
+    .section-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:24px;
+    }
+    .section-header h3{
+      margin:0;
+      font-size:20px;
+      font-weight:700;
+      color:#1a202c;
+    }
+
+    .btn-group{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+
+    .base-item{
+      border:1.5px solid #e2e8f0;
+      border-radius:12px;
+      padding:20px;
+      margin-bottom:12px;
+      transition:all 0.2s;
+    }
+    .base-item:hover{
+      border-color:#cbd5e0;
+      box-shadow:0 4px 6px rgba(0,0,0,.05);
+    }
+    .base-item-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:16px;
+    }
+    .base-item-title{
+      font-weight:600;
+      font-size:15px;
+      color:#1a202c;
+      margin-bottom:6px;
+    }
+    .base-item-desc{
+      color:#718096;
+      font-size:13px;
+      margin-top:8px;
+      line-height:1.5;
+    }
+
+    .form-group{margin-bottom:20px}
+    .form-hint{
+      font-size:12px;
+      color:#718096;
+      margin-top:6px;
+      line-height:1.4;
+    }
+
+    .empty-state{
+      text-align:center;
+      padding:48px 24px;
+      color:#718096;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="page-header">
+      <div>
+        <h2>资料库维护</h2>
+        <div class="muted" style="margin-top:8px">管理资料库及其知识点内容。调试模式下具备全部管理功能。</div>
+      </div>
+      <div style="display:flex;gap:12px">
+        <a href="/" style="padding:11px 20px;background:#fff;color:#1a202c;border:1.5px solid #e2e8f0;border-radius:10px;text-decoration:none;font-size:14px;font-weight:500">← 返回引导页</a>
+        <a href="/knowledge.html" style="padding:11px 20px;background:#fff;color:#1a202c;border:1.5px solid #e2e8f0;border-radius:10px;text-decoration:none;font-size:14px;font-weight:500">学习库管理</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-header">
+      <h3>资料库列表</h3>
+      <div class="btn-group">
+        <button onclick="openCreateBaseModal()">+ 手动创建</button>
+        <button class="secondary" onclick="openImportBaseModal()">📁 从文件导入</button>
+      </div>
+    </div>
+    <div id="basesList" class="muted">加载中...</div>
+  </div>
+</div>
+
+<!-- Manual Create Base Modal -->
+<div id="baseModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>手动创建资料库</h3>
+      <span class="close-btn" onclick="closeBaseModal()">&times;</span>
+    </div>
+
+    <div class="form-group">
+      <label>资料库名称 <span style="color:#dc2626">*</span></label>
+      <input id="baseName" type="text" placeholder="例如：四年级上册英语" required maxlength="100" />
+      <div class="form-hint">必填，不超过100字符</div>
+    </div>
+
+    <div class="form-group">
+      <label>类型 <span style="color:#dc2626">*</span></label>
+      <select id="baseIsSystem">
+        <option value="false">自定义资料库</option>
+        <option value="true">系统资料库</option>
+      </select>
+      <div class="form-hint">系统资料库可供所有学生使用</div>
+    </div>
+
+    <div class="form-group">
+      <label>封面图片 (可选)</label>
+      <input id="baseCoverImage" type="file" accept="image/*" />
+      <div class="form-hint">上传教材封面图片，支持 JPG、PNG 等格式</div>
+    </div>
+
+    <div class="form-group">
+      <label>描述 (可选)</label>
+      <textarea id="baseDescription" placeholder="资料库描述" rows="3" maxlength="500"></textarea>
+      <div class="form-hint">不超过500字符</div>
+    </div>
+
+    <div class="btn-group" style="justify-content:flex-end">
+      <button class="secondary" onclick="closeBaseModal()">取消</button>
+      <button onclick="saveBase()">创建</button>
+    </div>
+    <div id="createMsg" class="muted" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- Import Base from File Modal -->
+<div id="importBaseModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>从文件导入资料库</h3>
+      <span class="close-btn" onclick="closeImportBaseModal()">&times;</span>
+    </div>
+
+    <div class="form-group">
+      <label>选择 JSON 文件 <span style="color:#dc2626">*</span></label>
+      <input id="importBaseFile" type="file" accept=".json,application/json" required />
+      <div class="form-hint">
+        <strong>支持的格式：</strong> EL_KB_V1_UNITMETA<br/>
+        文件中应包含：<br/>
+        • base: 资料库基本信息（名称、教材信息等）<br/>
+        • items: 知识点列表<br/>
+        • unit_meta: 单元元数据（可选）<br/><br/>
+        <strong>提示：</strong>系统将自动从文件中提取所有信息，无需手动填写。
+      </div>
+    </div>
+
+    <div class="btn-group" style="justify-content:flex-end">
+      <button class="secondary" onclick="closeImportBaseModal()">取消</button>
+      <button onclick="importBase()">导入</button>
+    </div>
+    <div id="importMsg" class="muted" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<script>
+async function apiJSON(path, opts){
+  const res = await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
+  if(!res.ok){
+    let errorMsg;
+    try{
+      const text = await res.text();
+      try{
+        const errorData = JSON.parse(text);
+        errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData);
+      }catch(e){
+        errorMsg = text;
+      }
+    }catch(e){
+      errorMsg = 'Request failed';
+    }
+    throw new Error(errorMsg);
+  }
+  return res.json();
+}
+
+async function loadBases(){
+  try{
+    const res = await apiJSON('/api/knowledge-bases');
+    const bases = res.bases || [];
+    if(bases.length === 0){
+      document.getElementById('basesList').innerHTML = '<div class="empty-state">暂无资料库，点击"+ 创建资料库"开始</div>';
+      return;
+    }
+
+    const html = bases.map(b => {
+      const typeTag = b.is_system ? 'system' : 'custom';
+      const typeLabel = b.is_system ? '系统' : '自定义';
+
+      // Cover image display
+      const coverHtml = b.cover_image
+        ? `<img src="${b.cover_image}" alt="封面" style="width:60px;height:80px;object-fit:cover;border-radius:8px;margin-right:16px;border:1px solid #e2e8f0" />`
+        : `<div style="width:60px;height:80px;background:#f0f0f0;border-radius:8px;margin-right:16px;display:flex;align-items:center;justify-content:center;color:#999;font-size:11px;text-align:center;border:1px solid #e2e8f0">无封面</div>`;
+
+      // Build metadata tags
+      const metaTags = [];
+      if(b.education_stage && b.grade){
+        metaTags.push(`${b.education_stage} ${b.grade}`);
+      }else if(b.education_stage){
+        metaTags.push(b.education_stage);
+      }else if(b.grade){
+        metaTags.push(b.grade);
+      }
+      if(b.term) metaTags.push(b.term);
+      if(b.version) metaTags.push(b.version);
+      if(b.publisher) metaTags.push(b.publisher);
+      if(b.editor) metaTags.push(`主编: ${b.editor}`);
+
+      const metaHtml = metaTags.length > 0
+        ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">
+            ${metaTags.map(tag => `<span style="font-size:12px;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:4px">${tag}</span>`).join('')}
+          </div>`
+        : '';
+
+      return `
+        <div class="base-item">
+          <div class="base-item-header">
+            ${coverHtml}
+            <div style="flex:1">
+              <div class="base-item-title">
+                ${b.name}
+                <span class="badge ${typeTag}">${typeLabel}</span>
+              </div>
+              ${b.description ? `<div class="base-item-desc">${b.description}</div>` : ''}
+              ${metaHtml}
+            </div>
+            <div class="btn-group" style="flex-shrink:0">
+              <a href="library-edit.html?base_id=${b.id}" style="padding:8px 16px;font-size:13px;background:#1a202c;color:#fff;border-radius:10px;text-decoration:none;display:inline-block;font-weight:500">编辑</a>
+              <button class="danger" onclick="deleteBase(${b.id}, '${b.name}')" style="padding:8px 16px;font-size:13px">删除</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    document.getElementById('basesList').innerHTML = html;
+  }catch(e){
+    document.getElementById('basesList').innerHTML = `<div class="empty-state" style="color:#dc2626">加载失败: ${e.message}</div>`;
+  }
+}
+
+function openCreateBaseModal(){
+  document.getElementById('baseName').value = '';
+  document.getElementById('baseIsSystem').value = 'false';
+  document.getElementById('baseCoverImage').value = '';
+  document.getElementById('baseDescription').value = '';
+  document.getElementById('createMsg').innerText = '';
+  document.getElementById('baseModal').classList.add('active');
+}
+
+function closeBaseModal(){
+  document.getElementById('baseModal').classList.remove('active');
+}
+
+async function saveBase(){
+  const name = document.getElementById('baseName').value.trim();
+  const isSystem = document.getElementById('baseIsSystem').value === 'true';
+  const coverImageFile = document.getElementById('baseCoverImage').files[0];
+  const description = document.getElementById('baseDescription').value.trim();
+  const msg = document.getElementById('createMsg');
+
+  // 验证名称
+  if(!name){
+    alert('请输入资料库名称');
+    document.getElementById('baseName').focus();
+    return;
+  }
+  if(name.length > 100){
+    alert('资料库名称不能超过100个字符');
+    document.getElementById('baseName').focus();
+    return;
+  }
+  if(description.length > 500){
+    alert('描述不能超过500个字符');
+    document.getElementById('baseDescription').focus();
+    return;
+  }
+
+  // 验证封面图片
+  if(coverImageFile){
+    if(!coverImageFile.type.startsWith('image/')){
+      alert('封面必须是图片文件');
+      document.getElementById('baseCoverImage').focus();
+      return;
+    }
+    if(coverImageFile.size > 5 * 1024 * 1024){
+      alert('封面图片大小不能超过 5MB');
+      document.getElementById('baseCoverImage').focus();
+      return;
+    }
+  }
+
+  try{
+    msg.innerText = '创建中...';
+    msg.style.color = '#718096';
+
+    // Create new base with basic fields only
+    const createPayload = {
+      name,
+      grade_code: '',  // Deprecated but required
+      is_system: isSystem
+    };
+
+    // Add optional description
+    if(description) createPayload.description = description;
+
+    const createRes = await apiJSON('/api/knowledge-bases', {
+      method: 'POST',
+      body: JSON.stringify(createPayload)
+    });
+
+    const newBaseId = createRes.base_id;
+
+    // Upload cover image if provided
+    if(coverImageFile && newBaseId){
+      msg.innerText = '上传封面图片...';
+
+      const formData = new FormData();
+      formData.append('file', coverImageFile);
+
+      const response = await fetch(`/api/knowledge-bases/${newBaseId}/cover`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if(!response.ok){
+        const text = await response.text();
+        let errorMsg;
+        try{
+          const errorData = JSON.parse(text);
+          errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData);
+        }catch(e){
+          errorMsg = text;
+        }
+        throw new Error('封面上传失败：' + errorMsg);
+      }
+    }
+
+    msg.innerText = '资料库创建成功！可在编辑页面添加知识点或导入教材信息。';
+    msg.style.color = '#166534';
+
+    setTimeout(() => {
+      closeBaseModal();
+      loadBases();
+    }, 1500);
+  }catch(e){
+    msg.innerText = '失败：' + e.message;
+    msg.style.color = '#dc2626';
+  }
+}
+
+async function deleteBase(baseId, baseName){
+  if(!confirm(`确定要删除资料库"${baseName}"吗？\n\n这将删除该资料库及其所有知识点，且无法恢复！`)){
+    return;
+  }
+  try{
+    await apiJSON(`/api/knowledge-bases/${baseId}`, {method: 'DELETE'});
+    alert('资料库已删除');
+    loadBases();
+  }catch(e){
+    // Display detailed error message
+    const errorMsg = e.message || '删除失败';
+    alert(errorMsg);
+  }
+}
+
+// Import Base from File
+function openImportBaseModal(){
+  document.getElementById('importBaseFile').value = '';
+  document.getElementById('importMsg').innerText = '';
+  document.getElementById('importBaseModal').classList.add('active');
+}
+
+function closeImportBaseModal(){
+  document.getElementById('importBaseModal').classList.remove('active');
+}
+
+async function importBase(){
+  const file = document.getElementById('importBaseFile').files[0];
+  const msg = document.getElementById('importMsg');
+
+  if(!file){
+    alert('请选择要导入的文件');
+    document.getElementById('importBaseFile').focus();
+    return;
+  }
+
+  // 验证文件类型
+  if(!file.name.endsWith('.json')){
+    alert('只支持 .json 文件');
+    document.getElementById('importBaseFile').focus();
+    return;
+  }
+
+  // 验证文件大小（最大 10MB）
+  if(file.size > 10 * 1024 * 1024){
+    alert('文件大小不能超过 10MB');
+    document.getElementById('importBaseFile').focus();
+    return;
+  }
+
+  try{
+    msg.innerText = '读取文件...';
+    msg.style.color = '#718096';
+
+    // 使用 FormData 上传文件到 import-file API
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('mode', 'skip');
+
+    const response = await fetch('/api/knowledge-bases/import-file', {
+      method: 'POST',
+      body: formData
+    });
+
+    if(!response.ok){
+      const text = await response.text();
+      let errorMsg;
+      try{
+        const errorData = JSON.parse(text);
+        errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData);
+      }catch(e){
+        errorMsg = text;
+      }
+      throw new Error(errorMsg);
+    }
+
+    const result = await response.json();
+
+    // 构建成功消息
+    const itemsMsg = `知识点：${result.inserted || 0} 个`;
+    const unitsMsg = result.units && (result.units.inserted + result.units.updated) > 0
+      ? `，单元：${result.units.inserted + result.units.updated} 个`
+      : '';
+    const skippedMsg = result.skipped > 0 ? `，跳过重复：${result.skipped} 个` : '';
+
+    msg.innerText = `导入成功！${itemsMsg}${unitsMsg}${skippedMsg}`;
+    msg.style.color = '#166534';
+
+    setTimeout(() => {
+      closeImportBaseModal();
+      loadBases();
+    }, 2000);
+  }catch(e){
+    msg.innerText = '导入失败：' + e.message;
+    msg.style.color = '#dc2626';
+  }
+}
+
+// Initialize
+window.addEventListener('DOMContentLoaded', loadBases);
+</script>
+</body>
+</html>

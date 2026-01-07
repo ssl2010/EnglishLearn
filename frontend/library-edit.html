@@ -1,0 +1,1303 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>编辑资料库</title>
+  <style>
+    * { box-sizing: border-box; }
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;margin:0;background:#f6f7fb;color:#1a202c;line-height:1.5}
+    .wrap{max-width:1400px;margin:0 auto;padding:32px 24px}
+    .card{background:#fff;border-radius:16px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,.1),0 1px 2px rgba(0,0,0,.06);margin-bottom:24px}
+    a{color:#0b5fff;text-decoration:none;transition:color 0.2s}
+    a:hover{color:#0847cc}
+    button{border:0;border-radius:10px;padding:11px 20px;background:#1a202c;color:#fff;cursor:pointer;font-size:14px;font-weight:500;transition:all 0.2s;line-height:1.5}
+    button:hover{background:#2d3748;transform:translateY(-1px);box-shadow:0 4px 6px rgba(0,0,0,.1)}
+    button:active{transform:translateY(0)}
+    button.secondary{background:#fff;color:#1a202c;border:1.5px solid #e2e8f0}
+    button.secondary:hover{background:#f7fafc;border-color:#cbd5e0}
+    button.danger{background:#dc2626;color:#fff}
+    button.danger:hover{background:#b91c1c}
+
+    /* Form Elements */
+    input,select,textarea{
+      padding:11px 14px;
+      border-radius:10px;
+      border:1.5px solid #e2e8f0;
+      font-size:14px;
+      transition:all 0.2s;
+      width:100%;
+      font-family:inherit;
+      line-height:1.5;
+      background:#fff;
+      color:#1a202c;
+    }
+    input:focus,select:focus,textarea:focus{
+      outline:none;
+      border-color:#0b5fff;
+      box-shadow:0 0 0 3px rgba(11,95,255,0.1);
+    }
+    input:disabled,select:disabled{
+      background:#f7fafc;
+      color:#718096;
+      cursor:not-allowed;
+    }
+    textarea{resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:13px}
+
+    label{
+      display:block;
+      margin-bottom:8px;
+      font-size:13px;
+      font-weight:600;
+      color:#4a5568;
+      letter-spacing:0.01em;
+    }
+
+    .form-group{margin-bottom:24px}
+    .form-row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:24px;
+      margin-bottom:24px;
+    }
+    @media (max-width:768px){
+      .form-row{grid-template-columns:1fr}
+    }
+
+    .form-hint{
+      font-size:12px;
+      color:#718096;
+      margin-top:6px;
+      line-height:1.4;
+    }
+
+    .muted{color:#718096;font-size:13px}
+
+    /* Tables */
+    table{width:100%;border-collapse:separate;border-spacing:0;margin-top:16px}
+    th,td{padding:12px;text-align:left;border-bottom:1px solid #e2e8f0}
+    th{
+      background:#f7fafc;
+      font-weight:600;
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:0.05em;
+      color:#4a5568;
+      border-bottom:2px solid #e2e8f0;
+    }
+    tr:last-child td{border-bottom:none}
+    td{font-size:14px;color:#2d3748}
+    tr:hover{background:#f7fafc}
+
+    /* Badges */
+    .badge{
+      display:inline-block;
+      padding:3px 10px;
+      border-radius:12px;
+      font-size:11px;
+      font-weight:600;
+      letter-spacing:0.02em;
+    }
+    .badge.system{background:#dbeafe;color:#1e40af}
+    .badge.custom{background:#fef3c7;color:#92400e}
+    .badge.word{background:#dcfce7;color:#166534}
+    .badge.phrase{background:#fef3c7;color:#92400e}
+    .badge.sentence{background:#dbeafe;color:#1e40af}
+
+    /* Modal */
+    .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
+    .modal.active{display:flex}
+    .modal-content{background:#fff;border-radius:16px;padding:32px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 25px -5px rgba(0,0,0,.1),0 10px 10px -5px rgba(0,0,0,.04)}
+    .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #e2e8f0}
+    .modal-header h3{margin:0;font-size:20px;font-weight:700;color:#1a202c}
+    .close-btn{cursor:pointer;font-size:28px;color:#718096;line-height:1;transition:color 0.2s}
+    .close-btn:hover{color:#1a202c}
+
+    /* Tabs */
+    .tabs{
+      display:flex;
+      gap:8px;
+      margin-bottom:20px;
+      border-bottom:2px solid #e2e8f0;
+      overflow-x:auto;
+      flex-wrap:wrap;
+      padding-bottom:2px;
+    }
+    .tab{
+      padding:12px 20px;
+      cursor:pointer;
+      border:none;
+      background:none;
+      color:#718096;
+      font-size:14px;
+      font-weight:500;
+      border-bottom:3px solid transparent;
+      margin-bottom:-2px;
+      white-space:nowrap;
+      transition:all 0.2s;
+      border-radius:8px 8px 0 0;
+    }
+    .tab:hover{color:#2d3748;background:#f7fafc}
+    .tab.active{color:#0b5fff;border-bottom-color:#0b5fff;background:#eff6ff}
+
+    /* Add Form */
+    .add-form{
+      background:#f7fafc;
+      padding:24px;
+      border-radius:12px;
+      margin-bottom:20px;
+      border:1.5px solid #e2e8f0;
+    }
+    .add-form.hidden{display:none}
+    .add-form h4{
+      margin:0 0 20px;
+      font-size:16px;
+      font-weight:600;
+      color:#2d3748;
+    }
+
+    /* Section Headers */
+    .section-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:24px;
+    }
+    .section-header h3{
+      margin:0;
+      font-size:20px;
+      font-weight:700;
+      color:#1a202c;
+    }
+
+    .section-divider{
+      border:none;
+      border-top:2px solid #e2e8f0;
+      margin:40px 0 32px;
+    }
+
+    /* Page Header */
+    .page-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      margin-bottom:8px;
+      flex-wrap:wrap;
+      gap:16px;
+    }
+    .page-header h2{
+      margin:0;
+      font-size:28px;
+      font-weight:700;
+      color:#1a202c;
+    }
+
+    /* Button Groups */
+    .btn-group{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+
+    /* Stats */
+    .stats{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:12px 0;
+      margin-bottom:16px;
+    }
+    .stat-label{
+      font-size:13px;
+      color:#718096;
+      font-weight:500;
+    }
+
+    /* Empty State */
+    .empty-state{
+      text-align:center;
+      padding:48px 24px;
+      color:#718096;
+    }
+
+    /* Info Display Styles */
+    .info-item{
+      padding:20px 0;
+      border-bottom:1px solid #f3f4f6;
+      transition:all 0.2s;
+    }
+    .info-item:last-child{
+      border-bottom:none;
+    }
+    .info-item-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:16px;
+    }
+    .info-label{
+      font-size:13px;
+      font-weight:600;
+      color:#6b7280;
+      text-transform:uppercase;
+      letter-spacing:0.05em;
+      margin-bottom:8px;
+    }
+    .info-value{
+      font-size:16px;
+      color:#1a202c;
+      font-weight:500;
+    }
+    .info-value.muted{
+      color:#9ca3af;
+      font-style:italic;
+    }
+
+    /* Edit Controls */
+    .edit-btn{
+      border:0;
+      background:transparent;
+      color:#0b5fff;
+      cursor:pointer;
+      font-size:14px;
+      font-weight:500;
+      padding:6px 12px;
+      border-radius:6px;
+      transition:all 0.2s;
+    }
+    .edit-btn:hover{
+      background:#eff6ff;
+    }
+    .edit-form{
+      display:none;
+      margin-top:16px;
+      padding:20px;
+      background:#f9fafb;
+      border-radius:12px;
+      border:1px solid #e5e7eb;
+    }
+    .edit-form.active{
+      display:block;
+    }
+
+    .meta-tags{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:8px;
+    }
+    .meta-tag{
+      font-size:13px;
+      color:#4a5568;
+      background:#f3f4f6;
+      padding:4px 12px;
+      border-radius:6px;
+      font-weight:500;
+    }
+
+    /* Buttons */
+    .btn{
+      border:0;
+      border-radius:8px;
+      padding:9px 18px;
+      cursor:pointer;
+      font-size:14px;
+      font-weight:500;
+      transition:all 0.2s;
+      line-height:1.5;
+    }
+    .btn-primary{
+      background:#0b5fff;
+      color:#fff;
+    }
+    .btn-primary:hover{
+      background:#0847cc;
+    }
+    .btn-secondary{
+      background:#fff;
+      color:#4a5568;
+      border:1.5px solid #e2e8f0;
+    }
+    .btn-secondary:hover{
+      background:#f7fafc;
+      border-color:#cbd5e0;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <!-- Basic Info Section -->
+  <div class="card">
+    <!-- Return Button -->
+    <div style="display:flex;justify-content:flex-end;margin-bottom:24px">
+      <a href="/library.html" style="padding:10px 18px;background:#fff;color:#1a202c;border:1.5px solid #e2e8f0;border-radius:10px;text-decoration:none;font-size:14px;font-weight:500;transition:all 0.2s">← 返回资料库列表</a>
+    </div>
+
+    <!-- Header: Cover + Name + Type + Metadata -->
+    <div style="display:flex;align-items:flex-start;gap:24px;padding-bottom:32px;border-bottom:1px solid #e2e8f0;margin-bottom:32px">
+      <!-- Cover Image -->
+      <div style="position:relative">
+        <div id="coverPreview"></div>
+        <button onclick="uploadCover()" style="margin-top:12px;width:100%;padding:8px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;color:#4a5568;cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s">更换图片</button>
+      </div>
+
+      <!-- Info -->
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <h1 id="pageTitle" style="margin:0;font-size:28px;font-weight:700;color:#1a202c">资料库</h1>
+          <span id="typeTag" class="badge">-</span>
+        </div>
+
+        <div id="descDisplay" style="color:#718096;font-size:14px;line-height:1.6;margin-bottom:16px"></div>
+
+        <div id="metaDisplay" class="meta-tags"></div>
+
+        <div style="margin-top:16px;display:flex;gap:8px">
+          <button class="edit-btn" onclick="toggleEdit('basic')" style="padding:8px 16px;background:#eff6ff;color:#0b5fff">编辑基本信息</button>
+          <button class="edit-btn" onclick="toggleEdit('metadata')" style="padding:8px 16px;background:#eff6ff;color:#0b5fff">编辑教材信息</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Forms -->
+    <!-- Basic Info Edit -->
+    <div class="edit-form" id="basicEdit">
+      <h4 style="margin:0 0 20px;font-size:16px;font-weight:600;color:#1a202c">编辑基本信息</h4>
+
+      <div class="form-group">
+        <label>资料库名称 <span style="color:#dc2626">*</span></label>
+        <input id="baseName" type="text" placeholder="例如：四年级上册英语" required maxlength="100" />
+        <div class="form-hint">必填，不超过100字符</div>
+      </div>
+
+      <div class="form-group">
+        <label>类型</label>
+        <select id="baseIsSystem">
+          <option value="false">自定义资料库</option>
+          <option value="true">系统资料库</option>
+        </select>
+        <div class="form-hint">系统资料库可供所有学生使用</div>
+      </div>
+
+      <div class="form-group">
+        <label>描述 (可选)</label>
+        <textarea id="baseDescription" placeholder="资料库描述" rows="4" maxlength="500"></textarea>
+        <div class="form-hint">不超过500字符</div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="saveField('basic')">保存</button>
+        <button class="btn btn-secondary" onclick="cancelEdit('basic')">取消</button>
+      </div>
+    </div>
+
+    <!-- Metadata Edit -->
+    <div class="edit-form" id="metadataEdit">
+      <h4 style="margin:0 0 20px;font-size:16px;font-weight:600;color:#1a202c">编辑教材信息</h4>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>学段</label>
+          <select id="baseEducationStage">
+            <option value="">- 未设置 -</option>
+            <option value="小学">小学</option>
+            <option value="初中">初中</option>
+            <option value="高中">高中</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>年级</label>
+          <input id="baseGrade" type="text" placeholder="例如：四年级" maxlength="20" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>学期</label>
+          <select id="baseTerm">
+            <option value="">- 未设置 -</option>
+            <option value="上学期">上学期</option>
+            <option value="下学期">下学期</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>版本</label>
+          <input id="baseVersion" type="text" placeholder="例如：2025年秋" maxlength="50" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>出版社</label>
+        <input id="basePublisher" type="text" placeholder="例如：人民教育出版社" maxlength="100" />
+      </div>
+      <div class="form-group">
+        <label>主编</label>
+        <input id="baseEditor" type="text" placeholder="例如：张三" maxlength="100" />
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="saveField('metadata')">保存</button>
+        <button class="btn btn-secondary" onclick="cancelEdit('metadata')">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Items Management Section -->
+  <div class="card">
+    <hr class="section-divider" />
+
+    <div class="section-header">
+      <h3>知识点管理</h3>
+      <button onclick="toggleAddForm()">+ 添加知识点</button>
+    </div>
+
+    <!-- Add Item Form (with tabs) -->
+    <div id="addItemForm" class="add-form hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h4 style="margin:0">添加知识点</h4>
+        <div style="display:flex;gap:8px;background:#e2e8f0;padding:4px;border-radius:8px">
+          <button class="tab-btn active" onclick="switchAddMode('manual')" style="padding:6px 16px;border:none;border-radius:6px;background:#fff;color:#1a202c;cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s">单个添加</button>
+          <button class="tab-btn" onclick="switchAddMode('import')" style="padding:6px 16px;border:none;border-radius:6px;background:transparent;color:#4a5568;cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s">批量导入</button>
+        </div>
+      </div>
+
+      <!-- Manual Add Mode -->
+      <div id="manualAddMode">
+        <div class="form-row">
+          <div class="form-group">
+            <label>英文原文 <span style="color:#dc2626">*</span></label>
+            <input id="newEnText" type="text" placeholder="例如：swim" required maxlength="200" />
+          </div>
+          <div class="form-group">
+            <label>中文提示</label>
+            <input id="newZhText" type="text" placeholder="例如：游泳" maxlength="200" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>单元代码</label>
+            <input id="newUnit" type="text" placeholder="例如：Unit 1 (留空为不分单元)" maxlength="50" />
+          </div>
+          <div class="form-group">
+            <label>类型</label>
+            <select id="newItemType">
+              <option value="WORD">单词</option>
+              <option value="PHRASE">短语</option>
+              <option value="SENTENCE">句子</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>要求</label>
+            <select id="newDifficultyTag">
+              <option value="">- 未设置 -</option>
+              <option value="write">会写</option>
+              <option value="recognize">会认</option>
+            </select>
+            <div class="form-hint">会写：要求能够默写；会认：只需要认识</div>
+          </div>
+        </div>
+        <div class="btn-group">
+          <button onclick="saveNewItem()">保存</button>
+          <button class="secondary" onclick="toggleAddForm()">取消</button>
+        </div>
+      </div>
+
+      <!-- Import Mode -->
+      <div id="importMode" style="display:none">
+        <div class="form-group">
+          <label>选择 JSON 文件</label>
+          <input id="importJsonFile" type="file" accept=".json,application/json" />
+          <div class="form-hint">支持 EL_KB_V1 格式或纯 items 数组，重复项将自动跳过</div>
+        </div>
+        <div class="btn-group">
+          <button onclick="importJsonFile()">导入</button>
+          <button class="secondary" onclick="toggleAddForm()">取消</button>
+        </div>
+        <div id="importJsonMsg" class="muted" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <span id="itemCount" class="stat-label"></span>
+    </div>
+
+    <!-- Unit Tabs -->
+    <div id="unitTabs" class="tabs"></div>
+
+    <!-- Items Table -->
+    <div id="itemsList" style="overflow-x:auto">
+      <div class="empty-state">加载中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Item Modal -->
+<div id="editItemModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>编辑知识点</h3>
+      <span class="close-btn" onclick="closeEditItemModal()">&times;</span>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>英文原文 <span style="color:#dc2626">*</span></label>
+        <input id="editEnText" type="text" required maxlength="200" />
+      </div>
+      <div class="form-group">
+        <label>中文提示</label>
+        <input id="editZhText" type="text" maxlength="200" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>单元代码</label>
+        <input id="editUnit" type="text" maxlength="50" />
+      </div>
+      <div class="form-group">
+        <label>类型</label>
+        <select id="editItemType">
+          <option value="WORD">单词</option>
+          <option value="PHRASE">短语</option>
+          <option value="SENTENCE">句子</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>要求</label>
+        <select id="editDifficultyTag">
+          <option value="">- 未设置 -</option>
+          <option value="write">会写</option>
+          <option value="recognize">会认</option>
+        </select>
+        <div class="form-hint">会写：要求能够默写；会认：只需要认识</div>
+      </div>
+    </div>
+
+    <div class="btn-group" style="justify-content:flex-end">
+      <button class="secondary" onclick="closeEditItemModal()">取消</button>
+      <button onclick="saveEditItem()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="unit_tabs_shared.js"></script>
+<script>
+window.currentBaseId = null;
+window.currentEditItemId = null;
+window.currentUnit = '';
+window.allItems = [];
+window.unitCodes = [];
+window.baseData = null;
+
+async function apiJSON(path, opts){
+  const res = await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
+  if(!res.ok){
+    let errorMsg;
+    try{
+      const text = await res.text();
+      try{
+        const errorData = JSON.parse(text);
+        errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData);
+      }catch(e){
+        errorMsg = text;
+      }
+    }catch(e){
+      errorMsg = 'Request failed';
+    }
+    throw new Error(errorMsg);
+  }
+  return res.json();
+}
+
+function getUrlParams(){
+  const params = new URLSearchParams(window.location.search);
+  return {
+    baseId: params.get('base_id')
+  };
+}
+
+async function loadBaseData(){
+  const params = getUrlParams();
+  if(!params.baseId){
+    document.getElementById('baseInfo').innerHTML = '<span style="color:#d00">缺少 base_id 参数</span>';
+    return;
+  }
+
+  window.currentBaseId = parseInt(params.baseId);
+
+  try{
+    // Load base info
+    const res = await apiJSON('/api/knowledge-bases');
+    window.baseData = (res.bases || []).find(b => b.id === window.currentBaseId);
+
+    if(!window.baseData){
+      return;
+    }
+
+    // Set page title to base name
+    document.getElementById('pageTitle').textContent = window.baseData.name;
+
+    // Fill display fields
+    updateDisplayFields();
+
+    // Fill form fields
+    document.getElementById('baseName').value = window.baseData.name;
+    document.getElementById('baseDescription').value = window.baseData.description || '';
+    document.getElementById('baseIsSystem').value = window.baseData.is_system ? 'true' : 'false';
+
+    // Fill metadata fields
+    document.getElementById('baseEducationStage').value = window.baseData.education_stage || '';
+    document.getElementById('baseGrade').value = window.baseData.grade || '';
+    document.getElementById('baseTerm').value = window.baseData.term || '';
+    document.getElementById('baseVersion').value = window.baseData.version || '';
+    document.getElementById('basePublisher').value = window.baseData.publisher || '';
+    document.getElementById('baseEditor').value = window.baseData.editor || '';
+
+    // Load items
+    await loadAllItems();
+  }catch(e){
+    alert('加载资料库失败: ' + e.message);
+  }
+}
+
+function updateDisplayFields(){
+  if(!window.baseData) return;
+
+  // Cover image display
+  const coverPreview = document.getElementById('coverPreview');
+  if(window.baseData.cover_image){
+    coverPreview.innerHTML = `<img src="${window.baseData.cover_image}" alt="封面" style="width:120px;height:160px;object-fit:cover;border-radius:8px;border:2px solid #e2e8f0" />`;
+  }else{
+    coverPreview.innerHTML = `<div style="width:120px;height:160px;background:#f0f0f0;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px;text-align:center;border:2px dashed #e2e8f0">暂无图片<br/>点击上传</div>`;
+  }
+
+  // Type tag display
+  const typeTag = document.getElementById('typeTag');
+  if(window.baseData.is_system){
+    typeTag.className = 'badge system';
+    typeTag.textContent = '系统';
+  }else{
+    typeTag.className = 'badge custom';
+    typeTag.textContent = '自定义';
+  }
+
+  // Description display
+  const descEl = document.getElementById('descDisplay');
+  if(window.baseData.description){
+    descEl.textContent = window.baseData.description;
+    descEl.style.display = 'block';
+  }else{
+    descEl.textContent = '暂无描述';
+    descEl.style.display = 'block';
+    descEl.style.fontStyle = 'italic';
+    descEl.style.color = '#9ca3af';
+  }
+
+  // Metadata display
+  const metaTags = [];
+  if(window.baseData.education_stage && window.baseData.grade){
+    metaTags.push(`${window.baseData.education_stage} ${window.baseData.grade}`);
+  }else if(window.baseData.education_stage){
+    metaTags.push(window.baseData.education_stage);
+  }else if(window.baseData.grade){
+    metaTags.push(window.baseData.grade);
+  }
+  if(window.baseData.term) metaTags.push(window.baseData.term);
+  if(window.baseData.version) metaTags.push(window.baseData.version);
+  if(window.baseData.publisher) metaTags.push(window.baseData.publisher);
+  if(window.baseData.editor) metaTags.push(`主编: ${window.baseData.editor}`);
+
+  const metaDisplay = document.getElementById('metaDisplay');
+  if(metaTags.length > 0){
+    metaDisplay.innerHTML = metaTags.map(tag => `<span class="meta-tag">${tag}</span>`).join('');
+  }else{
+    metaDisplay.innerHTML = '';
+  }
+}
+
+function toggleEdit(field){
+  // Close all edit forms
+  ['basic', 'metadata'].forEach(f => {
+    if(f !== field){
+      document.getElementById(f + 'Edit').classList.remove('active');
+    }
+  });
+
+  // Toggle current field
+  const editForm = document.getElementById(field + 'Edit');
+  if(editForm.classList.contains('active')){
+    editForm.classList.remove('active');
+  }else{
+    editForm.classList.add('active');
+  }
+}
+
+function cancelEdit(field){
+  document.getElementById(field + 'Edit').classList.remove('active');
+
+  // Reset form fields to current data
+  if(!window.baseData) return;
+
+  if(field === 'basic'){
+    document.getElementById('baseName').value = window.baseData.name;
+    document.getElementById('baseIsSystem').value = window.baseData.is_system ? 'true' : 'false';
+    document.getElementById('baseDescription').value = window.baseData.description || '';
+  }else if(field === 'metadata'){
+    document.getElementById('baseEducationStage').value = window.baseData.education_stage || '';
+    document.getElementById('baseGrade').value = window.baseData.grade || '';
+    document.getElementById('baseTerm').value = window.baseData.term || '';
+    document.getElementById('baseVersion').value = window.baseData.version || '';
+    document.getElementById('basePublisher').value = window.baseData.publisher || '';
+    document.getElementById('baseEditor').value = window.baseData.editor || '';
+  }
+}
+
+async function saveField(field){
+  let payload = {};
+
+  if(field === 'basic'){
+    const name = document.getElementById('baseName').value.trim();
+    const isSystem = document.getElementById('baseIsSystem').value === 'true';
+    const description = document.getElementById('baseDescription').value.trim();
+
+    // Validate
+    if(!name){
+      alert('请输入资料库名称');
+      document.getElementById('baseName').focus();
+      return;
+    }
+    if(name.length > 100){
+      alert('资料库名称不能超过100个字符');
+      document.getElementById('baseName').focus();
+      return;
+    }
+    if(description.length > 500){
+      alert('描述不能超过500个字符');
+      document.getElementById('baseDescription').focus();
+      return;
+    }
+
+    payload.name = name;
+    payload.is_system = isSystem;
+    payload.description = description || null;
+  }else if(field === 'metadata'){
+    const educationStage = document.getElementById('baseEducationStage').value.trim() || null;
+    const grade = document.getElementById('baseGrade').value.trim() || null;
+    const term = document.getElementById('baseTerm').value.trim() || null;
+    const version = document.getElementById('baseVersion').value.trim() || null;
+    const publisher = document.getElementById('basePublisher').value.trim() || null;
+    const editor = document.getElementById('baseEditor').value.trim() || null;
+
+    // Validate
+    if(grade && grade.length > 20){
+      alert('年级不能超过20个字符');
+      document.getElementById('baseGrade').focus();
+      return;
+    }
+    if(version && version.length > 50){
+      alert('版本不能超过50个字符');
+      document.getElementById('baseVersion').focus();
+      return;
+    }
+    if(publisher && publisher.length > 100){
+      alert('出版社不能超过100个字符');
+      document.getElementById('basePublisher').focus();
+      return;
+    }
+    if(editor && editor.length > 100){
+      alert('主编不能超过100个字符');
+      document.getElementById('baseEditor').focus();
+      return;
+    }
+
+    payload.education_stage = educationStage;
+    payload.grade = grade;
+    payload.term = term;
+    payload.version = version;
+    payload.publisher = publisher;
+    payload.editor = editor;
+  }
+
+  try{
+    await apiJSON(`/api/knowledge-bases/${window.currentBaseId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+
+    // Reload base data
+    await loadBaseData();
+
+    // Close edit form
+    document.getElementById(field + 'Edit').classList.remove('active');
+  }catch(e){
+    alert('保存失败：' + e.message);
+  }
+}
+
+async function uploadCover(){
+  // Create file input
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+
+    if(!file.type.startsWith('image/')){
+      alert('请选择图片文件');
+      return;
+    }
+
+    if(file.size > 5 * 1024 * 1024){
+      alert('图片大小不能超过 5MB');
+      return;
+    }
+
+    try{
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`/api/knowledge-bases/${window.currentBaseId}/cover`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if(!response.ok){
+        const text = await response.text();
+        let errorMsg;
+        try{
+          const errorData = JSON.parse(text);
+          errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData);
+        }catch(e){
+          errorMsg = text;
+        }
+        throw new Error(errorMsg);
+      }
+
+      // Reload base data to show new cover
+      await loadBaseData();
+    }catch(e){
+      alert('上传失败：' + e.message);
+    }
+  };
+
+  input.click();
+}
+
+async function loadAllItems(){
+  try{
+    const res = await apiJSON(`/api/knowledge-bases/${window.currentBaseId}/items`);
+    window.allItems = res.items || [];
+
+    // Load unit metadata (already sorted by unit_index from backend)
+    const unitsRes = await apiJSON(`/api/knowledge-bases/${window.currentBaseId}/units`);
+    const unitsMeta = unitsRes.units || [];
+
+    // Use unit_code from metadata in the order provided by backend (sorted by unit_index)
+    const units = unitsMeta.map(u => u.unit_code);
+    window.unitCodes = units;
+
+    // Create mapping: unit_code -> unit_name
+    window.unitNames = {};
+    unitsMeta.forEach(u => {
+      window.unitNames[u.unit_code] = u.unit_name;
+    });
+
+    // Render unit tabs
+    renderUnitTabs(units);
+
+    // Render items for current unit
+    renderItems();
+  }catch(e){
+    document.getElementById('itemsList').innerHTML = `<div class="muted" style="color:#d00">加载失败: ${e.message}</div>`;
+  }
+}
+
+function renderUnitTabs(units){
+  const counts = {};
+  counts[''] = window.allItems.length;
+  units.forEach(u => {
+    counts[u] = window.allItems.filter(it => it.unit === u).length;
+  });
+  if(window.ELUnitTabs && window.ELUnitTabs.render){
+    window.ELUnitTabs.render('unitTabs', {
+      units,
+      unitNames: window.unitNames || {},
+      counts,
+      currentUnit: window.currentUnit,
+      onChange: switchUnit,
+      includeAll: true,
+      allValue: '',
+      allLabel: '全部'
+    });
+  }
+}
+
+function switchUnit(unit){
+  window.currentUnit = unit;
+  renderItems();
+  renderUnitTabs(window.unitCodes || []);
+}
+
+function renderItems(){
+  // Filter items by current unit
+  const filteredItems = window.currentUnit === ''
+    ? window.allItems
+    : window.allItems.filter(it => it.unit === window.currentUnit);
+
+  // Update count
+  document.getElementById('itemCount').innerText = `共 ${filteredItems.length} 个知识点`;
+
+  if(filteredItems.length === 0){
+    document.getElementById('itemsList').innerHTML = '<div class="empty-state">该单元暂无知识点</div>';
+    return;
+  }
+
+  const typeMap = {WORD: 'word', PHRASE: 'phrase', SENTENCE: 'sentence'};
+  const typeLabel = {WORD: '单词', PHRASE: '短语', SENTENCE: '句子'};
+  const difficultyLabel = {write: '会写', read: '会认', recognize: '会认'};
+  const typeOrder = {WORD: 0, PHRASE: 1, SENTENCE: 2};
+  const difficultyOrder = {write: 0, read: 1, recognize: 1};
+  const sortedItems = filteredItems
+    .map((it, idx) => ({it, idx}))
+    .sort((a, b) => {
+      const typeA = typeOrder[a.it.item_type] ?? 99;
+      const typeB = typeOrder[b.it.item_type] ?? 99;
+      if (typeA !== typeB) return typeA - typeB;
+      const diffA = difficultyOrder[a.it.difficulty_tag] ?? 2;
+      const diffB = difficultyOrder[b.it.difficulty_tag] ?? 2;
+      if (diffA !== diffB) return diffA - diffB;
+      return a.idx - b.idx;
+    })
+    .map(entry => entry.it);
+
+  const html = `
+    <table>
+      <thead>
+        <tr>
+          <th style="width:80px">类型</th>
+          <th style="width:120px">单元</th>
+          <th style="width:28%">英文原文</th>
+          <th style="width:90px">要求</th>
+          <th style="width:25%">中文提示</th>
+          <th style="width:140px">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${sortedItems.map(it => {
+          let diffTag;
+          if (it.difficulty_tag === 'write') {
+            diffTag = '<span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;background:#fee2e2;color:#991b1b">会写</span>';
+          } else if (it.difficulty_tag === 'recognize' || it.difficulty_tag === 'read') {
+            diffTag = '<span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;background:#dbeafe;color:#1e40af">会认</span>';
+          } else {
+            diffTag = '<span style="font-size:12px;color:#9ca3af">-</span>';
+          }
+          return `
+          <tr>
+            <td><span class="badge ${typeMap[it.item_type] || 'word'}">${typeLabel[it.item_type] || it.item_type}</span></td>
+            <td>${it.unit === '__ALL__' ? '-' : it.unit}</td>
+            <td><strong>${it.en_text}</strong></td>
+            <td>${diffTag}</td>
+            <td>${it.zh_text || '-'}</td>
+            <td>
+              <button class="secondary" onclick="openEditItem(${it.id})" style="padding:6px 12px;font-size:12px">编辑</button>
+              <button class="danger" onclick="deleteItem(${it.id})" style="padding:6px 12px;font-size:12px">删除</button>
+            </td>
+          </tr>
+        `}).join('')}
+      </tbody>
+    </table>
+  `;
+  document.getElementById('itemsList').innerHTML = html;
+}
+
+function toggleAddForm(){
+  const form = document.getElementById('addItemForm');
+
+  if(form.classList.contains('hidden')){
+    form.classList.remove('hidden');
+    // Reset to manual mode
+    switchAddMode('manual');
+    document.getElementById('newZhText').value = '';
+    document.getElementById('newEnText').value = '';
+    document.getElementById('newUnit').value = window.currentUnit === '' ? '' : window.currentUnit;
+    document.getElementById('newItemType').value = 'WORD';
+    document.getElementById('newDifficultyTag').value = '';
+    document.getElementById('newEnText').focus();
+  }else{
+    form.classList.add('hidden');
+  }
+}
+
+function switchAddMode(mode){
+  const manualMode = document.getElementById('manualAddMode');
+  const importMode = document.getElementById('importMode');
+  const tabBtns = document.querySelectorAll('.tab-btn');
+
+  if(mode === 'manual'){
+    manualMode.style.display = 'block';
+    importMode.style.display = 'none';
+    tabBtns[0].classList.add('active');
+    tabBtns[1].classList.remove('active');
+    tabBtns[0].style.background = '#fff';
+    tabBtns[0].style.color = '#1a202c';
+    tabBtns[1].style.background = 'transparent';
+    tabBtns[1].style.color = '#4a5568';
+  } else {
+    manualMode.style.display = 'none';
+    importMode.style.display = 'block';
+    tabBtns[0].classList.remove('active');
+    tabBtns[1].classList.add('active');
+    tabBtns[0].style.background = 'transparent';
+    tabBtns[0].style.color = '#4a5568';
+    tabBtns[1].style.background = '#fff';
+    tabBtns[1].style.color = '#1a202c';
+    // Clear import form
+    document.getElementById('importJsonFile').value = '';
+    document.getElementById('importJsonMsg').innerText = '';
+  }
+}
+
+async function importJsonFile(){
+  const file = document.getElementById('importJsonFile').files[0];
+  if(!file){
+    alert('请选择文件');
+    return;
+  }
+
+  const msg = document.getElementById('importJsonMsg');
+  msg.innerText = '读取文件...';
+  msg.style.color = '#718096';
+
+  try{
+    // 验证文件类型
+    if(!file.name.endsWith('.json')){
+      throw new Error('只支持 .json 文件');
+    }
+
+    // 验证文件大小（最大 10MB）
+    if(file.size > 10 * 1024 * 1024){
+      throw new Error('文件大小不能超过 10MB');
+    }
+
+    const text = await file.text();
+    let data;
+
+    try{
+      data = JSON.parse(text);
+    }catch(e){
+      throw new Error('JSON 格式错误：' + e.message);
+    }
+
+    // Extract items from EL_KB_V1 format or direct array
+    let items = data.items || data;
+    if(!Array.isArray(items)){
+      throw new Error('文件格式错误：未找到有效的 items 数组');
+    }
+
+    if(items.length === 0){
+      throw new Error('文件中没有知识点数据');
+    }
+
+    // 验证 items 格式
+    const invalidItems = [];
+    items.forEach((item, idx) => {
+      if(!item.en_text || typeof item.en_text !== 'string'){
+        invalidItems.push(`第 ${idx + 1} 条缺少 en_text 字段`);
+      }else if(item.en_text.length > 200){
+        invalidItems.push(`第 ${idx + 1} 条 en_text 超过200字符`);
+      }
+      if(item.zh_text && item.zh_text.length > 200){
+        invalidItems.push(`第 ${idx + 1} 条 zh_text 超过200字符`);
+      }
+      if(item.unit && item.unit !== '__ALL__' && item.unit.length > 50){
+        invalidItems.push(`第 ${idx + 1} 条 unit 超过50字符`);
+      }
+    });
+
+    if(invalidItems.length > 0){
+      throw new Error('数据格式错误：\n' + invalidItems.slice(0, 3).join('\n') +
+        (invalidItems.length > 3 ? `\n...(共 ${invalidItems.length} 条错误)` : ''));
+    }
+
+    msg.innerText = `导入 ${items.length} 个知识点...`;
+    const res = await apiJSON('/api/knowledge-items/import', {
+      method: 'POST',
+      body: JSON.stringify({base_id: window.currentBaseId, mode: 'skip', items})
+    });
+
+    // Import unit metadata if present (EL_KB_V1_UNITMETA format)
+    const unit_meta = data.unit_meta;
+    let unitsImported = 0;
+    if(unit_meta && Array.isArray(unit_meta) && unit_meta.length > 0){
+      msg.innerText = `导入单元元数据...`;
+      try{
+        const unitRes = await apiJSON(`/api/knowledge-bases/${window.currentBaseId}/units/import`, {
+          method: 'POST',
+          body: JSON.stringify({units: unit_meta})
+        });
+        unitsImported = unitRes.inserted + unitRes.updated;
+      }catch(e){
+        console.warn('导入单元元数据失败：', e);
+      }
+    }
+
+    const itemsMsg = `插入 ${res.inserted} 条，跳过 ${res.skipped} 条`;
+    const unitsMsg = unitsImported > 0 ? `，单元 ${unitsImported} 个` : '';
+    msg.innerText = `导入成功：${itemsMsg}${unitsMsg}`;
+    msg.style.color = '#166534';
+    await loadAllItems();
+
+    setTimeout(() => {
+      toggleAddForm();
+    }, 2000);
+  }catch(e){
+    msg.innerText = '导入失败：' + e.message;
+    msg.style.color = '#dc2626';
+  }
+}
+
+async function saveNewItem(){
+  const zhText = document.getElementById('newZhText').value.trim();
+  const enText = document.getElementById('newEnText').value.trim();
+  const unit = document.getElementById('newUnit').value.trim() || '__ALL__';
+  const itemType = document.getElementById('newItemType').value;
+  const difficultyTag = document.getElementById('newDifficultyTag').value || null;
+
+  // 验证英文原文
+  if(!enText){
+    alert('请输入英文原文');
+    document.getElementById('newEnText').focus();
+    return;
+  }
+  if(enText.length > 200){
+    alert('英文原文不能超过200个字符');
+    document.getElementById('newEnText').focus();
+    return;
+  }
+
+  // 验证中文提示（可选，但有长度限制）
+  if(zhText.length > 200){
+    alert('中文提示不能超过200个字符');
+    document.getElementById('newZhText').focus();
+    return;
+  }
+
+  // 验证单元代码
+  if(unit !== '__ALL__' && unit.length > 50){
+    alert('单元代码不能超过50个字符');
+    document.getElementById('newUnit').focus();
+    return;
+  }
+
+  try{
+    await apiJSON('/api/knowledge-items', {
+      method: 'POST',
+      body: JSON.stringify({
+        base_id: window.currentBaseId,
+        zh_text: zhText,
+        en_text: enText,
+        unit: unit,
+        item_type: itemType,
+        difficulty_tag: difficultyTag
+      })
+    });
+    toggleAddForm();
+    await loadAllItems();
+  }catch(e){
+    alert('添加失败：' + e.message);
+  }
+}
+
+function openEditItem(itemId){
+  const item = window.allItems.find(it => it.id === itemId);
+  if(!item){
+    alert('知识点不存在');
+    return;
+  }
+  window.currentEditItemId = itemId;
+  document.getElementById('editZhText').value = item.zh_text || '';
+  document.getElementById('editEnText').value = item.en_text;
+  document.getElementById('editUnit').value = item.unit === '__ALL__' ? '' : item.unit;
+  document.getElementById('editItemType').value = item.item_type;
+  document.getElementById('editDifficultyTag').value = item.difficulty_tag || '';
+  document.getElementById('editItemModal').classList.add('active');
+}
+
+function closeEditItemModal(){
+  document.getElementById('editItemModal').classList.remove('active');
+}
+
+async function saveEditItem(){
+  const zhText = document.getElementById('editZhText').value.trim();
+  const enText = document.getElementById('editEnText').value.trim();
+  const unit = document.getElementById('editUnit').value.trim() || '__ALL__';
+  const itemType = document.getElementById('editItemType').value;
+  const difficultyTag = document.getElementById('editDifficultyTag').value || null;
+
+  // 验证英文原文
+  if(!enText){
+    alert('请输入英文原文');
+    document.getElementById('editEnText').focus();
+    return;
+  }
+  if(enText.length > 200){
+    alert('英文原文不能超过200个字符');
+    document.getElementById('editEnText').focus();
+    return;
+  }
+
+  // 验证中文提示（可选，但有长度限制）
+  if(zhText.length > 200){
+    alert('中文提示不能超过200个字符');
+    document.getElementById('editZhText').focus();
+    return;
+  }
+
+  // 验证单元代码
+  if(unit !== '__ALL__' && unit.length > 50){
+    alert('单元代码不能超过50个字符');
+    document.getElementById('editUnit').focus();
+    return;
+  }
+
+  try{
+    await apiJSON(`/api/knowledge-items/${window.currentEditItemId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        zh_text: zhText,
+        en_text: enText,
+        unit: unit,
+        item_type: itemType,
+        difficulty_tag: difficultyTag
+      })
+    });
+    closeEditItemModal();
+    await loadAllItems();
+  }catch(e){
+    alert('更新失败：' + e.message);
+  }
+}
+
+async function deleteItem(itemId){
+  if(!confirm('确定要删除这个知识点吗？')){
+    return;
+  }
+  try{
+    await apiJSON(`/api/knowledge-items/${itemId}`, {method: 'DELETE'});
+    await loadAllItems();
+  }catch(e){
+    alert('删除失败：' + e.message);
+  }
+}
+
+// Initialize
+window.addEventListener('DOMContentLoaded', loadBaseData);
+</script>
+</body>
+</html>

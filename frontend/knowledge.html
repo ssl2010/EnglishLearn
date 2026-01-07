@@ -3,121 +3,310 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>知识库管理</title>
+  <title>学习库管理</title>
   <style>
-    body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
-    .wrap{max-width:980px;margin:0 auto;padding:24px}
-    .card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 8px 24px rgba(0,0,0,.06);margin-bottom:14px}
-    a{color:#0b5fff;text-decoration:none}
-    textarea{width:100%;min-height:220px;font-family:ui-monospace,Menlo,Consolas,monospace}
-    button{border:0;border-radius:10px;padding:10px 14px;background:#111;color:#fff;cursor:pointer}
-    button.secondary{background:#fff;color:#111;border:1px solid #ddd}
-    input,select{padding:8px;border-radius:10px;border:1px solid #ddd}
-    .muted{color:#666;font-size:12px}
-    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-    .row > *{flex:1;min-width:240px}
-    code{background:#f0f1f5;padding:2px 6px;border-radius:6px}
+    * { box-sizing: border-box; }
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;margin:0;background:#f6f7fb;color:#1a202c;line-height:1.5}
+    .wrap{max-width:1200px;margin:0 auto;padding:32px 24px}
+    .card{background:#fff;border-radius:16px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,.1),0 1px 2px rgba(0,0,0,.06);margin-bottom:24px}
+    a{color:#0b5fff;text-decoration:none;transition:color 0.2s}
+    a:hover{color:#0847cc}
+
+    button{border:0;border-radius:10px;padding:11px 20px;background:#1a202c;color:#fff;cursor:pointer;font-size:14px;font-weight:500;transition:all 0.2s;line-height:1.5}
+    button:hover{background:#2d3748;transform:translateY(-1px);box-shadow:0 4px 6px rgba(0,0,0,.1)}
+    button:active{transform:translateY(0)}
+    button.secondary{background:#fff;color:#1a202c;border:1.5px solid #e2e8f0}
+    button.secondary:hover{background:#f7fafc;border-color:#cbd5e0}
+    button.danger{background:#dc2626;color:#fff}
+    button.danger:hover{background:#b91c1c}
+    button.small{padding:6px 12px;font-size:13px}
+
+    .muted{color:#718096;font-size:13px}
+
+    .badge{
+      display:inline-block;
+      padding:3px 10px;
+      border-radius:12px;
+      font-size:11px;
+      font-weight:600;
+      letter-spacing:0.02em;
+    }
+    .badge.system{background:#dbeafe;color:#1e40af}
+    .badge.custom{background:#fef3c7;color:#92400e}
+    .badge.word{background:#dcfce7;color:#166534}
+    .badge.phrase{background:#fef3c7;color:#92400e}
+    .badge.sentence{background:#dbeafe;color:#1e40af}
+
+    .mastery-table{width:100%;border-collapse:collapse;margin-top:10px}
+    .mastery-table th,.mastery-table td{padding:8px;text-align:left;border-bottom:1px solid #eee}
+    .mastery-table th{background:#f8f9fa;font-weight:500;font-size:12px;color:#4a5568}
+    .mastery-table td{font-size:13px}
+    .tabs{display:flex;gap:4px;margin-bottom:12px;border-bottom:2px solid #e5e7eb;overflow-x:auto;flex-wrap:wrap}
+    .tab{padding:8px 14px;cursor:pointer;border:none;background:none;color:#6b7280;font-size:12px;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all 0.2s}
+    .tab:hover{color:#1a202c;background:#f7fafc}
+    .tab.active{color:#0b5fff;border-bottom-color:#0b5fff}
+
+    /* Page Header */
+    .page-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      margin-bottom:8px;
+      flex-wrap:wrap;
+      gap:16px;
+    }
+    .page-header h2{
+      margin:0;
+      font-size:28px;
+      font-weight:700;
+      color:#1a202c;
+    }
+
+    /* Section Headers */
+    .section-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:24px;
+    }
+    .section-header h3{
+      margin:0;
+      font-size:20px;
+      font-weight:700;
+      color:#1a202c;
+    }
+
+    /* Learning Base Item */
+    .learning-base-item{
+      border:1.5px solid #e2e8f0;
+      border-radius:12px;
+      padding:24px;
+      margin-bottom:20px;
+      transition:all 0.2s;
+    }
+    .learning-base-item:hover{
+      border-color:#cbd5e0;
+      box-shadow:0 4px 6px rgba(0,0,0,.05);
+    }
+
+    .base-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      margin-bottom:16px;
+      gap:16px;
+    }
+    .base-title{
+      font-weight:600;
+      font-size:16px;
+      color:#1a202c;
+      margin-bottom:4px;
+    }
+    .base-meta{
+      color:#718096;
+      font-size:12px;
+    }
+
+    /* Progress Stats */
+    .progress-stats{
+      display:flex;
+      gap:16px;
+      padding:16px;
+      background:#f7fafc;
+      border-radius:10px;
+      margin-bottom:16px;
+      flex-wrap:wrap;
+    }
+    .stat-item{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .stat-label{
+      font-size:12px;
+      color:#718096;
+      font-weight:500;
+    }
+    .stat-value{
+      font-size:20px;
+      font-weight:700;
+      color:#1a202c;
+    }
+    .stat-value.accent{
+      color:#0b5fff;
+    }
+
+    /* Unit Navigation */
+    .unit-nav{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+    .unit-card{
+      flex:1;
+      min-width:100px;
+      max-width:140px;
+      padding:12px;
+      border:1.5px solid #e2e8f0;
+      border-radius:10px;
+      cursor:pointer;
+      transition:all 0.2s;
+      text-align:center;
+      background:#fff;
+      position:relative;
+    }
+    .unit-card:hover{
+      border-color:#0b5fff;
+      background:#eff6ff;
+    }
+    .unit-card.completed{
+      border-color:#10b981;
+      background:#d1fae5;
+    }
+    .unit-card.current{
+      border-color:#0b5fff;
+      background:#eff6ff;
+      box-shadow:0 0 0 3px rgba(11,95,255,0.1);
+    }
+    .unit-card.disabled{
+      opacity:0.5;
+      cursor:not-allowed;
+    }
+    .unit-card.disabled:hover{
+      border-color:#e2e8f0;
+      background:#fff;
+    }
+    .unit-name{
+      font-weight:600;
+      font-size:13px;
+      color:#1a202c;
+      margin-bottom:4px;
+    }
+    .unit-status{
+      font-size:11px;
+      color:#718096;
+    }
+    .unit-card.completed .unit-status{
+      color:#059669;
+    }
+    .unit-card.current .unit-status{
+      color:#0b5fff;
+    }
+    .unit-icon{
+      font-size:18px;
+      margin-bottom:4px;
+    }
+
+    /* Available Bases */
+    .base-list{
+      display:grid;
+      grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));
+      gap:12px;
+    }
+    .available-base{
+      padding:16px;
+      background:#fff;
+      border:1.5px solid #e2e8f0;
+      border-radius:10px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      transition:all 0.2s;
+    }
+    .available-base:hover{
+      border-color:#cbd5e0;
+      box-shadow:0 2px 4px rgba(0,0,0,.05);
+    }
+    .available-base-name{
+      font-size:14px;
+      font-weight:500;
+      color:#1a202c;
+      flex:1;
+    }
+
+    /* Empty State */
+    .empty-state{
+      text-align:center;
+      padding:48px 24px;
+      color:#718096;
+    }
+
+    /* Button Groups */
+    .btn-group{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
   </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
-    <h2 style="margin:0 0 6px 0">学习库管理</h2>
-    <div class="muted">管理学生的学习资料库，包括选择系统课本、创建自定义资料库、设置学习进度等。</div>
-    <div style="margin-top:10px"><a href="/">← 返回引导页</a></div>
+    <div class="page-header">
+      <div>
+        <h2>学习库管理</h2>
+        <div id="cfgInfo" class="muted" style="margin-top:8px"></div>
+      </div>
+      <div style="display:flex;gap:12px">
+        <a href="/library.html" style="padding:11px 20px;background:#fff;color:#1a202c;border:1.5px solid #e2e8f0;border-radius:10px;text-decoration:none;font-size:14px;font-weight:500">资料库维护</a>
+        <a href="/" style="padding:11px 20px;background:#fff;color:#1a202c;border:1.5px solid #e2e8f0;border-radius:10px;text-decoration:none;font-size:14px;font-weight:500">← 返回引导页</a>
+      </div>
+    </div>
   </div>
 
   <div class="card">
-    <h3 style="margin-top:0">当前学生信息</h3>
-    <div id="cfgInfo" class="muted"></div>
-  </div>
-
-  <div class="card">
-    <h3 style="margin-top:0">我的学习库</h3>
-    <div class="muted" style="margin-bottom:10px">这些是学生当前正在学习的资料库。可以设置每个资料库的学习进度。</div>
+    <div class="section-header">
+      <h3 id="learningLibraryTitle">我的学习库</h3>
+    </div>
+    <div class="muted" style="margin-bottom:20px">当前正在学习的资料库。点击单元卡片即可更新学习进度。</div>
     <div id="myLearningBases"></div>
   </div>
 
   <div class="card">
-    <h3 style="margin-top:0">添加资料库到学习库</h3>
-    <div class="row" style="margin-bottom:10px">
-      <div>
-        <h4 style="margin:0 0 8px;font-size:13px">系统课本资料库</h4>
-        <div id="systemBases" class="muted">加载中...</div>
-      </div>
-      <div>
-        <h4 style="margin:0 0 8px;font-size:13px">我的自定义资料库</h4>
-        <div id="customBases" class="muted">加载中...</div>
-      </div>
+    <div class="section-header">
+      <h3>添加资料库到学习库</h3>
     </div>
-  </div>
 
-  <div class="card">
-    <h3 style="margin-top:0">从文件导入（创建新资料库）</h3>
-    <div class="muted">
-      支持 JSON 文件：可同时创建资料库并导入全部知识点。建议使用 <code>EL_KB_V1</code> 格式。
-    </div>
-    <div class="row" style="margin-top:10px">
-      <div>
-        <label class="muted">mode</label>
-        <select id="fileMode">
-          <option value="skip">skip（冲突跳过）</option>
-          <option value="update">update（允许更新）</option>
-        </select>
-      </div>
-      <div>
-        <label class="muted">选择文件</label>
-        <input id="kbFile" type="file" accept=".json,application/json" />
-      </div>
-      <div style="display:flex;gap:10px;align-items:end">
-        <button id="importFileBtn">导入文件</button>
-        <button class="secondary" id="downloadSpecBtn">查看文件格式说明</button>
-      </div>
-    </div>
-    <div id="fileMsg" class="muted" style="margin-top:10px"></div>
-  </div>
+    <h4 style="margin:0 0 12px;font-size:15px;font-weight:600">系统课本资料库</h4>
+    <div id="systemBases" class="muted">加载中...</div>
 
-  <div class="card">
-    <h3 style="margin-top:0">粘贴导入（JSON 数组，给高级用户）</h3>
-    <div class="muted">每条元素示例：{"type":"WORD","en_text":"swim","zh_hint":"游泳","unit_code":"Unit 1","difficulty_tag":"write"}</div>
-    <div class="row" style="margin-top:10px">
-      <div style="flex:0.5;min-width:160px">
-        <label class="muted">导入到资料库</label>
-        <select id="baseForImport"></select>
-      </div>
-      <div style="flex:0.5;min-width:160px">
-        <label class="muted">mode</label>
-        <select id="mode">
-          <option value="skip">skip（冲突跳过）</option>
-          <option value="update">update（允许更新）</option>
-        </select>
-      </div>
-      <div style="flex:1;min-width:260px;display:flex;gap:10px;align-items:end">
-        <button class="secondary" id="sampleBtn">填入样例</button>
-        <button id="importBtn">导入</button>
-      </div>
+    <h4 style="margin:32px 0 12px;font-size:15px;font-weight:600">我的自定义资料库</h4>
+    <div id="customBases" class="muted">加载中...</div>
+
+    <div class="muted" style="margin-top:20px;padding:12px;background:#f7fafc;border-radius:8px">
+      💡 提示：如需创建新资料库或管理知识点，请访问 <a href="/library.html">资料库维护</a> 页面
     </div>
-    <textarea id="payload" placeholder="在这里粘贴 JSON 数组"></textarea>
-    <div id="msg" class="muted" style="margin-top:8px"></div>
   </div>
 </div>
 
+<!-- Cover Image Modal -->
+<div id="coverModal" onclick="hideCoverImage()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;justify-content:center;align-items:center;cursor:pointer">
+  <img id="coverModalImg" src="" alt="封面大图" style="max-width:90vw;max-height:90vh;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.5)" />
+</div>
+
+<script src="unit_tabs_shared.js"></script>
 <script>
 function getCfg(){
   const raw = localStorage.getItem('el_cfg');
   return raw ? JSON.parse(raw) : {};
 }
-function setCfg(cfg){ localStorage.setItem('el_cfg', JSON.stringify(cfg||{})); }
 
 async function apiJSON(path, opts){
   const res = await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
   if(!res.ok){
     let errorMsg;
     try{
-      const errorData = await res.json();
-      errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData);
+      const text = await res.text();
+      try{
+        const errorData = JSON.parse(text);
+        errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData);
+      }catch(e){
+        errorMsg = text;
+      }
     }catch(e){
-      errorMsg = await res.text();
+      errorMsg = 'Request failed';
     }
     throw new Error(errorMsg);
   }
@@ -126,147 +315,558 @@ async function apiJSON(path, opts){
 
 async function loadAll(){
   const cfg = getCfg();
-  document.getElementById('cfgInfo').innerText =
-    `学生: ${cfg.student_name||'-'} | 年级: ${cfg.grade_code||'-'} | ID: ${cfg.student_id||'-'}`;
+  document.getElementById('cfgInfo').innerHTML =
+    `年级: ${cfg.grade_code||'-'} | ID: #${cfg.student_id||'-'}`;
+  const titleEl = document.getElementById('learningLibraryTitle');
+  if(titleEl){
+    const displayName = cfg.student_name || '学生';
+    titleEl.textContent = `${displayName}的学习库`;
+  }
 
   if(!cfg.student_id){
-    document.getElementById('myLearningBases').innerHTML = '<div class="muted">请先在引导页完成初始化</div>';
+    document.getElementById('myLearningBases').innerHTML = '<div class="empty-state">请先在引导页完成初始化</div>';
     return;
   }
 
-  // Load learning library
   await loadLearningLibrary(cfg.student_id);
-
-  // Load all bases (for adding to library)
   await loadAvailableBases(cfg.student_id);
-
-  // Load bases for import dropdown
-  await loadBasesForImport();
 }
 
 async function loadLearningLibrary(studentId){
   try{
     const res = await apiJSON(`/api/students/${studentId}/learning-bases`);
     const lb = res.learning_bases || [];
+
     if(lb.length === 0){
-      document.getElementById('myLearningBases').innerHTML = '<div class="muted">学习库为空。请从下方添加资料库。</div>';
+      document.getElementById('myLearningBases').innerHTML = '<div class="empty-state">学习库为空<br><span class="muted">请从下方添加资料库开始学习</span></div>';
       return;
     }
 
-    // Load units for each base
-    const basesWithUnits = await Promise.all(lb.map(async (b) => {
+    // Load items, units, and mastery stats for each base
+    const basesWithData = await Promise.all(lb.map(async (b) => {
       try{
-        const itemsRes = await apiJSON(`/api/knowledge-bases/${b.base_id}/items`);
-        const items = itemsRes.items || [];
-        // Extract unique units
-        const units = [...new Set(items.map(item => item.unit).filter(u => u && u !== '__ALL__'))].sort();
-        return {...b, units};
+        // Fetch unit metadata (already sorted by unit_index from backend)
+        const unitsRes = await apiJSON(`/api/knowledge-bases/${b.base_id}/units`);
+        const unitsMeta = unitsRes.units || [];
+
+        // Use unit_code from metadata in the order provided by backend (sorted by unit_index)
+        const units = unitsMeta.map(u => u.unit_code);
+
+        // Create mapping: unit_code -> unit_name
+        const unitNames = {};
+        unitsMeta.forEach(u => {
+          unitNames[u.unit_code] = u.unit_name;
+        });
+
+        // Fetch mastery statistics
+        const statsRes = await apiJSON(`/api/students/${studentId}/bases/${b.base_id}/mastery-stats`);
+        const masteryStats = statsRes.stats || [];
+        const unitMasteryStats = statsRes.unit_stats || [];
+        const masteryThreshold = statsRes.mastery_threshold || 2;
+
+        return {...b, units, unitNames, masteryStats, unitMasteryStats, masteryThreshold};
       }catch(e){
-        return {...b, units: []};
+        return {...b, units: [], unitNames: {}, masteryStats: [], unitMasteryStats: [], masteryThreshold: 2};
       }
     }));
 
-    const html = basesWithUnits.map(b => {
-      const displayName = b.custom_name || b.base_name;
-      const typeTag = b.base_is_system ? '[系统]' : '[自定义]';
-      const activeStatus = b.is_active ? '启用' : '禁用';
+    window.currentStudentId = studentId;
+    window._basesById = {};
+    basesWithData.forEach(b => {
+      window._basesById[b.id] = b;
+    });
+    const html = basesWithData.map(b => renderLearningBase(b, studentId)).join('');
+    document.getElementById('myLearningBases').innerHTML = html;
+    basesWithData.forEach(b => renderMasterySection(b));
+  }catch(e){
+    document.getElementById('myLearningBases').innerHTML = `<div class="empty-state" style="color:#dc2626">加载失败: ${e.message}</div>`;
+  }
+}
 
-      // Generate unit options
-      let unitOptions = '<option value="">未设置</option>';
-      unitOptions += '<option value="__ALL__"' + (b.current_unit === '__ALL__' ? ' selected' : '') + '>全部/不分单元</option>';
-      b.units.forEach(unit => {
-        unitOptions += `<option value="${unit}"${b.current_unit === unit ? ' selected' : ''}>${unit}</option>`;
-      });
+const masteryState = {};
+const typeLabels = {WORD: '单词', PHRASE: '短语', SENTENCE: '句子'};
+const diffLabels = {write: '会写', recognize: '会认', read: '会认'};
+const typeOrder = ['WORD', 'PHRASE', 'SENTENCE'];
+const typeOrderIndex = {WORD: 0, PHRASE: 1, SENTENCE: 2};
+const diffOrderIndex = {write: 0, read: 1, recognize: 1};
+
+function ensureMasteryState(baseId){
+  if(!masteryState[baseId]){
+    masteryState[baseId] = {unit: '__ALL__', expanded: false, cache: {}};
+  }
+  return masteryState[baseId];
+}
+
+function getUnitLabel(base, unit){
+  if(!unit || unit === '__ALL__' || unit === 'all'){
+    return '全部';
+  }
+  const unitName = base.unitNames && base.unitNames[unit] ? base.unitNames[unit] : '';
+  return unitName ? `${unit} - ${unitName}` : unit;
+}
+
+function buildMasteryRows(stats){
+  const groupedByType = {};
+  stats.forEach(stat => {
+    const type = stat.item_type || 'UNKNOWN';
+    if(!groupedByType[type]) groupedByType[type] = [];
+    groupedByType[type].push(stat);
+  });
+
+  return typeOrder.map(type => {
+    if(!groupedByType[type]) return '';
+    return groupedByType[type].map(stat => {
+      const typeLabel = typeLabels[stat.item_type] || stat.item_type;
+      const diffLabel = stat.difficulty_tag ? diffLabels[stat.difficulty_tag] || stat.difficulty_tag : '不分要求';
+      const masteryRate = stat.total > 0 ? Math.round((stat.mastered / stat.total) * 100) : 0;
+      return `
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid #f3f4f6">
+            <span style="font-weight:600;color:#1a202c">${typeLabel}</span>
+            ${stat.difficulty_tag ? `<span style="margin-left:6px;font-size:11px;padding:2px 8px;border-radius:6px;background:${stat.difficulty_tag === 'write' ? '#fee2e2' : '#dbeafe'};color:${stat.difficulty_tag === 'write' ? '#991b1b' : '#1e40af'}">${diffLabel}</span>` : `<span style="margin-left:6px;font-size:11px;color:#9ca3af">${diffLabel}</span>`}
+          </td>
+          <td style="padding:8px;border-bottom:1px solid #f3f4f6;text-align:center;font-weight:600;color:#1a202c">${stat.total}</td>
+          <td style="padding:8px;border-bottom:1px solid #f3f4f6;text-align:center;font-weight:600;color:#10b981">${stat.mastered}</td>
+          <td style="padding:8px;border-bottom:1px solid #f3f4f6;text-align:center;font-weight:600;color:#f59e0b">${stat.learning}</td>
+          <td style="padding:8px;border-bottom:1px solid #f3f4f6;text-align:center;font-weight:600;color:#6b7280">${stat.not_started}</td>
+          <td style="padding:8px;border-bottom:1px solid #f3f4f6;text-align:center">
+            <div style="display:flex;align-items:center;gap:6px;justify-content:center">
+              <div style="flex:1;background:#e5e7eb;height:6px;border-radius:3px;overflow:hidden;max-width:100px">
+                <div style="width:${masteryRate}%;background:#10b981;height:100%"></div>
+              </div>
+              <span style="font-size:12px;font-weight:600;color:#1a202c;min-width:36px">${masteryRate}%</span>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }).join('');
+}
+
+function buildMasteryTable(stats){
+  const rows = buildMasteryRows(stats);
+  if(!rows){
+    return '<div class="muted" style="padding:8px 0">暂无统计数据</div>';
+  }
+  return `
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+        <thead>
+          <tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb">
+            <th style="padding:10px 8px;text-align:left;font-weight:600;color:#4a5568;font-size:12px">类型/要求</th>
+            <th style="padding:10px 8px;text-align:center;font-weight:600;color:#4a5568;font-size:12px">总数</th>
+            <th style="padding:10px 8px;text-align:center;font-weight:600;color:#4a5568;font-size:12px">已掌握</th>
+            <th style="padding:10px 8px;text-align:center;font-weight:600;color:#4a5568;font-size:12px">学习中</th>
+            <th style="padding:10px 8px;text-align:center;font-weight:600;color:#4a5568;font-size:12px">未开始</th>
+            <th style="padding:10px 8px;text-align:center;font-weight:600;color:#4a5568;font-size:12px">掌握率</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function getStatsForUnit(base, unit){
+  if(!unit || unit === '__ALL__' || unit === 'all'){
+    return base.masteryStats || [];
+  }
+  return (base.unitMasteryStats || []).filter(stat => stat.unit === unit);
+}
+
+function buildMasteryUnitCounts(base){
+  const counts = {};
+  let allTotal = 0;
+  (base.masteryStats || []).forEach(stat => {
+    allTotal += Number(stat.total) || 0;
+  });
+  counts.__ALL__ = allTotal;
+  (base.unitMasteryStats || []).forEach(stat => {
+    if(!stat.unit) return;
+    counts[stat.unit] = (counts[stat.unit] || 0) + (Number(stat.total) || 0);
+  });
+  return counts;
+}
+
+function renderMasteryUnitTabs(base, state){
+  if(!window.ELUnitTabs || !window.ELUnitTabs.render) return;
+  const containerId = `masteryUnitTabs-${base.id}`;
+  const counts = buildMasteryUnitCounts(base);
+  window.ELUnitTabs.render(containerId, {
+    units: base.units || [],
+    unitNames: base.unitNames || {},
+    counts,
+    currentUnit: state.unit,
+    onChange: (unit) => {
+      const nextUnit = unit || '__ALL__';
+      const nextState = ensureMasteryState(base.id);
+      nextState.unit = nextUnit;
+      renderMasterySection(base);
+    },
+    includeAll: true,
+    allValue: '__ALL__',
+    allLabel: '全部'
+  });
+}
+
+function renderMasterySection(base){
+  const wrap = document.getElementById(`masteryWrap-${base.id}`);
+  if(!wrap) return;
+  const state = ensureMasteryState(base.id);
+  const unitLabel = getUnitLabel(base, state.unit);
+  const stats = getStatsForUnit(base, state.unit);
+
+  const detailHtml = state.expanded ? `
+    <div style="margin-top:12px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <span style="font-size:12px;color:#4a5568">查看单元</span>
+      </div>
+      <div id="masteryUnitTabs-${base.id}" class="tabs"></div>
+      <div id="masteryDetail-${base.id}" class="mastery-detail" style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;background:#fff">
+        <div class="muted">加载中...</div>
+      </div>
+    </div>
+  ` : '';
+
+  wrap.innerHTML = `
+    <div style="margin-bottom:20px">
+      <div style="font-size:13px;font-weight:600;color:#4a5568;margin-bottom:12px;display:flex;align-items:center;gap:10px;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span>掌握情况（${unitLabel}）</span>
+          <span style="font-size:11px;font-weight:500;color:#718096;background:#f7fafc;padding:3px 8px;border-radius:6px">连续正确 ${base.masteryThreshold}+ 次为掌握</span>
+        </div>
+        <button class="small mastery-detail-toggle" data-base-id="${base.id}" style="padding:6px 12px">${state.expanded ? '收起详情' : '详情'}</button>
+      </div>
+      ${buildMasteryTable(stats)}
+      ${detailHtml}
+    </div>
+  `;
+
+  if(state.expanded){
+    renderMasteryUnitTabs(base, state);
+    loadMasteryDetail(base, state.unit);
+  }
+}
+
+async function loadMasteryDetail(base, unit){
+  const state = ensureMasteryState(base.id);
+  const cacheKey = unit || '__ALL__';
+  const target = document.getElementById(`masteryDetail-${base.id}`);
+  if(!target) return;
+  if(state.cache[cacheKey]){
+    target.innerHTML = state.cache[cacheKey];
+    return;
+  }
+  const studentId = window.currentStudentId;
+  if(!studentId){
+    target.innerHTML = '<div class="muted">缺少学生信息</div>';
+    return;
+  }
+  try{
+    const url = new URL(`/api/students/${studentId}/bases/${base.base_id}/items`, window.location.origin);
+    if(unit && unit !== '__ALL__'){
+      url.searchParams.set('unit', unit);
+    }
+    const res = await apiJSON(url.pathname + url.search);
+    const items = res.items || [];
+    const detailHtml = buildMasteryDetailTable(base, items);
+    state.cache[cacheKey] = detailHtml;
+    target.innerHTML = detailHtml;
+  }catch(e){
+    target.innerHTML = `<div class="muted">加载失败：${e.message}</div>`;
+  }
+}
+
+function buildMasteryDetailTable(base, items){
+  if(!items.length){
+    return '<div class="muted">暂无知识点</div>';
+  }
+  const sorted = items
+    .map((it, idx) => ({it, idx}))
+    .sort((a, b) => {
+      const typeA = typeOrderIndex[a.it.item_type] ?? 99;
+      const typeB = typeOrderIndex[b.it.item_type] ?? 99;
+      if(typeA !== typeB) return typeA - typeB;
+      const diffA = diffOrderIndex[a.it.difficulty_tag] ?? 2;
+      const diffB = diffOrderIndex[b.it.difficulty_tag] ?? 2;
+      if(diffA !== diffB) return diffA - diffB;
+      return a.idx - b.idx;
+    })
+    .map(entry => entry.it);
+
+  const typeMap = {WORD: 'word', PHRASE: 'phrase', SENTENCE: 'sentence'};
+  const masteryLabel = {
+    mastered: {color: '#10b981'},
+    learning: {color: '#ef4444'},
+    not_started: {color: '#6b7280'}
+  };
+  const rows = sorted.map(it => {
+    const unitLabel = getUnitLabel(base, it.unit);
+    const mastery = masteryLabel[it.mastery_status] || masteryLabel.not_started;
+    const practiceText = `${it.correct_attempts || 0}/${it.total_attempts || 0}`;
+    return `
+      <tr>
+        <td><span class="badge ${typeMap[it.item_type] || 'word'}">${typeLabels[it.item_type] || it.item_type}</span></td>
+        <td>${unitLabel}</td>
+        <td>${it.zh_text || '-'}</td>
+        <td>${it.en_text || '-'}</td>
+        <td><span style="font-weight:600;color:${mastery.color}">${practiceText}</span></td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <table class="mastery-table">
+      <thead>
+        <tr>
+          <th style="width:80px">类型</th>
+          <th style="width:140px">单元</th>
+          <th>中文提示</th>
+          <th>英文原文</th>
+          <th style="width:120px">掌握情况</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+  `;
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest && e.target.closest('.mastery-detail-toggle');
+  if(!btn) return;
+  const baseId = btn.getAttribute('data-base-id');
+  const base = window._basesById ? window._basesById[baseId] : null;
+  if(!base) return;
+  const state = ensureMasteryState(baseId);
+  if(state.expanded){
+    state.expanded = false;
+    state.unit = '__ALL__';
+  }else{
+    state.expanded = true;
+  }
+  renderMasterySection(base);
+});
+
+function renderLearningBase(base, studentId){
+  const displayName = base.custom_name || base.base_name;
+  const typeTag = base.base_is_system ? 'system' : 'custom';
+  const typeLabel = base.base_is_system ? '系统' : '自定义';
+
+  // Build metadata string
+  const metaParts = [];
+  if(base.base_education_stage) metaParts.push(base.base_education_stage);
+  if(base.base_grade) metaParts.push(base.base_grade);
+  if(base.base_term) metaParts.push(base.base_term);
+  if(base.base_version) metaParts.push(base.base_version);
+  if(base.base_publisher) metaParts.push(base.base_publisher);
+  const metaStr = metaParts.length > 0 ? metaParts.join(' · ') : '';
+
+  // Small cover image (no zoom - user preference)
+  const coverHtml = base.base_cover_image
+    ? `<img src="${base.base_cover_image}" alt="封面" style="width:60px;height:80px;object-fit:cover;border-radius:6px;margin-right:16px;border:1px solid #e2e8f0" />`
+    : '';
+
+  // Calculate progress
+  const totalUnits = base.units.length;
+  const hasUnits = totalUnits > 0;
+  let currentIndex = -1;
+  let progressPercent = 0;
+
+  if(hasUnits && base.current_unit){
+    if(base.current_unit === '__ALL__'){
+      currentIndex = base.units.length;
+      progressPercent = 100;
+    }else{
+      currentIndex = base.units.indexOf(base.current_unit);
+      if(currentIndex >= 0){
+        progressPercent = Math.round(((currentIndex + 1) / totalUnits) * 100);
+      }
+    }
+  }
+
+  const masteryHtml = `<div id="masteryWrap-${base.id}"></div>`;
+
+  // Render unit progress (simplified)
+  let statsHtml = '';
+  if(hasUnits){
+    const completedUnits = currentIndex >= 0 ? currentIndex : 0;
+    statsHtml = `
+      <div class="progress-stats" style="margin-bottom:16px">
+        <div class="stat-item">
+          <div class="stat-label">总单元数</div>
+          <div class="stat-value">${totalUnits}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">当前学习</div>
+          <div class="stat-value accent">${base.current_unit === '__ALL__' ? '全部' : (base.current_unit || '未设置')}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">学习进度</div>
+          <div class="stat-value accent">${progressPercent}%</div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Render unit navigation
+  let unitsHtml = '';
+  if(hasUnits){
+    let unitCards = base.units.map((unit, idx) => {
+      let cardClass = 'unit-card';
+      let statusText = '未开始';
+      let icon = '○';
+
+      if(base.current_unit === unit){
+        cardClass += ' current';
+        statusText = '进行中';
+        icon = '▶';
+      }else if(base.current_unit === '__ALL__' || (currentIndex >= 0 && idx < currentIndex)){
+        cardClass += ' completed';
+        statusText = '已完成';
+        icon = '✓';
+      }
 
       return `
-        <div style="padding:12px;background:#f8f9fa;border-radius:8px;margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
-            <div>
-              <span style="font-weight:500">${displayName}</span>
-              <span class="muted" style="font-size:11px">${typeTag} #${b.base_id}</span>
-            </div>
-            <button class="secondary" onclick="removeLearningBase(${b.id}, ${studentId})" style="padding:4px 10px;font-size:12px">移除</button>
-          </div>
-          <div class="muted" style="font-size:12px">
-            当前进度: ${b.current_unit || '未设置'} | 状态: ${activeStatus}
-          </div>
-          <div style="margin-top:8px;display:flex;gap:6px">
-            <select id="progress_${b.id}" style="flex:1;padding:6px;font-size:12px;border:1px solid #ddd;border-radius:6px">
-              ${unitOptions}
-            </select>
-            <button onclick="updateProgress(${b.id}, ${studentId})" style="padding:6px 12px;font-size:12px">更新进度</button>
-          </div>
+        <div class="${cardClass}" onclick="updateUnitProgress(${base.id}, '${unit}', ${studentId})">
+          <div class="unit-icon">${icon}</div>
+          <div class="unit-name">${unit}${base.unitNames && base.unitNames[unit] ? ' - ' + base.unitNames[unit] : ''}</div>
+          <div class="unit-status">${statusText}</div>
         </div>
       `;
     }).join('');
-    document.getElementById('myLearningBases').innerHTML = html;
-  }catch(e){
-    document.getElementById('myLearningBases').innerHTML = `<div class="muted" style="color:#d00">加载失败: ${e.message}</div>`;
+
+    // Add "全部完成" card
+    const allCompleteClass = base.current_unit === '__ALL__' ? 'unit-card current' : 'unit-card';
+    const allCompleteIcon = base.current_unit === '__ALL__' ? '✓' : '○';
+    const allCompleteStatus = base.current_unit === '__ALL__' ? '已完成' : '标记完成';
+
+    unitCards += `
+      <div class="${allCompleteClass}" onclick="updateUnitProgress(${base.id}, '__ALL__', ${studentId})">
+        <div class="unit-icon">${allCompleteIcon}</div>
+        <div class="unit-name">全部完成</div>
+        <div class="unit-status">${allCompleteStatus}</div>
+      </div>
+    `;
+
+    unitsHtml = `
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#4a5568;margin-bottom:12px">单元进度</div>
+        <div class="unit-nav">${unitCards}</div>
+      </div>
+    `;
+  }else{
+    unitsHtml = '<div class="muted" style="padding:12px;background:#f7fafc;border-radius:8px">该资料库没有设置单元</div>';
   }
+
+  return `
+    <div class="learning-base-item">
+      <div class="base-header">
+        ${coverHtml}
+        <div style="flex:1">
+          <div class="base-title">
+            ${displayName}
+            <span class="badge ${typeTag}">${typeLabel}</span>
+          </div>
+          <div class="base-meta">#${base.base_id} ${base.is_active ? '· 已启用' : '· 已禁用'}</div>
+          ${metaStr ? `<div class="base-meta" style="margin-top:4px">${metaStr}</div>` : ''}
+        </div>
+        <button class="danger small" onclick="removeLearningBase(${base.id}, ${studentId})">移除</button>
+      </div>
+
+      ${masteryHtml}
+      ${statsHtml}
+      ${unitsHtml}
+    </div>
+  `;
 }
 
 async function loadAvailableBases(studentId){
   try{
-    // Load learning library to know which bases are already added
     const lbRes = await apiJSON(`/api/students/${studentId}/learning-bases`);
     const addedBaseIds = new Set((lbRes.learning_bases || []).map(b => b.base_id));
 
     // Load system bases
     const sysRes = await apiJSON(`/api/knowledge-bases?is_system=true`);
     const sysBases = (sysRes.bases || []).filter(b => !addedBaseIds.has(b.id));
+
     if(sysBases.length === 0){
-      document.getElementById('systemBases').innerHTML = '<div class="muted">所有系统课本已添加到学习库</div>';
+      document.getElementById('systemBases').innerHTML = '<div class="empty-state" style="padding:24px">所有系统课本已添加到学习库</div>';
     }else{
-      const html = sysBases.map(b => `
-        <div style="padding:8px;background:#fff;border:1px solid #ddd;border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:13px">${b.name}</span>
-          <button onclick="addToLibrary(${b.id}, ${studentId})" style="padding:4px 10px;font-size:12px">添加</button>
-        </div>
-      `).join('');
+      const html = sysBases.map(b => renderAvailableBase(b, studentId)).join('');
       document.getElementById('systemBases').innerHTML = html;
     }
 
     // Load custom bases
     const custRes = await apiJSON(`/api/knowledge-bases?is_system=false`);
     const custBases = (custRes.bases || []).filter(b => !addedBaseIds.has(b.id));
+
     if(custBases.length === 0){
-      document.getElementById('customBases').innerHTML = '<div class="muted">没有自定义资料库（可通过导入文件创建）</div>';
+      document.getElementById('customBases').innerHTML = '<div class="empty-state" style="padding:24px">没有可添加的自定义资料库</div>';
     }else{
-      const html = custBases.map(b => `
-        <div style="padding:8px;background:#fff;border:1px solid #ddd;border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:13px">${b.name}</span>
-          <button onclick="addToLibrary(${b.id}, ${studentId})" style="padding:4px 10px;font-size:12px">添加</button>
-        </div>
-      `).join('');
+      const html = custBases.map(b => renderAvailableBase(b, studentId)).join('');
       document.getElementById('customBases').innerHTML = html;
     }
   }catch(e){
-    document.getElementById('systemBases').innerHTML = `<div class="muted" style="color:#d00">${e.message}</div>`;
+    document.getElementById('systemBases').innerHTML = `<div class="empty-state" style="color:#dc2626">${e.message}</div>`;
   }
 }
 
-async function loadBasesForImport(){
-  try{
-    const res = await apiJSON(`/api/knowledge-bases`);
-    const bases = res.bases || [];
-    const sel = document.getElementById('baseForImport');
-    sel.innerHTML = bases.map(b => {
-      const typeTag = b.is_system ? '[系统]' : '[自定义]';
-      return `<option value="${b.id}">${typeTag} ${b.name}</option>`;
-    }).join('');
-    if(bases.length === 0){
-      sel.innerHTML = '<option value="">（暂无资料库）</option>';
-    }
-  }catch(e){
-    // ignore
+function renderAvailableBase(base, studentId){
+  // Build metadata tags
+  const metaTags = [];
+  if(base.education_stage && base.grade){
+    metaTags.push(`${base.education_stage} ${base.grade}`);
+  }else if(base.education_stage){
+    metaTags.push(base.education_stage);
+  }else if(base.grade){
+    metaTags.push(base.grade);
   }
+  if(base.term) metaTags.push(base.term);
+  if(base.version) metaTags.push(base.version);
+  if(base.publisher) metaTags.push(base.publisher);
+  if(base.editor) metaTags.push(`主编: ${base.editor}`);
+
+  const metaHtml = metaTags.length > 0
+    ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">
+        ${metaTags.map(tag => `<span style="font-size:11px;color:#6b7280;background:#f3f4f6;padding:3px 8px;border-radius:6px;font-weight:500">${tag}</span>`).join('')}
+      </div>`
+    : '';
+
+  // Cover image - clickable to enlarge
+  const coverHtml = base.cover_image
+    ? `<img src="${base.cover_image}" alt="封面" onclick="showCoverImage('${base.cover_image}')" style="width:80px;height:106px;object-fit:cover;border-radius:8px;cursor:pointer;border:2px solid #e2e8f0;transition:all 0.2s" onmouseover="this.style.borderColor='#0b5fff'" onmouseout="this.style.borderColor='#e2e8f0'" />`
+    : `<div style="width:80px;height:106px;background:#f0f0f0;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:11px;text-align:center;border:2px dashed #e2e8f0;flex-shrink:0">暂无<br/>封面</div>`;
+
+  const typeTag = base.is_system ? 'system' : 'custom';
+  const typeLabel = base.is_system ? '系统' : '自定义';
+
+  return `
+    <div style="border:1.5px solid #e2e8f0;border-radius:12px;padding:20px;background:#fff;transition:all 0.2s;margin-bottom:12px" onmouseover="this.style.borderColor='#cbd5e0';this.style.boxShadow='0 4px 8px rgba(0,0,0,.08)'" onmouseout="this.style.borderColor='#e2e8f0';this.style.boxShadow='none'">
+      <div style="display:flex;gap:16px;align-items:flex-start">
+        ${coverHtml}
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="font-weight:600;font-size:15px;color:#1a202c">${base.name}</span>
+            <span class="badge ${typeTag}">${typeLabel}</span>
+          </div>
+          ${base.description ? `<div style="color:#718096;font-size:13px;line-height:1.5;margin-bottom:8px">${base.description}</div>` : ''}
+          ${metaHtml}
+        </div>
+        <button class="small" onclick="addToLibrary(${base.id}, ${studentId})" style="flex-shrink:0">添加</button>
+      </div>
+    </div>
+  `;
 }
 
 async function addToLibrary(baseId, studentId){
   try{
     await apiJSON(`/api/students/${studentId}/learning-bases`, {
       method: 'POST',
-      body: JSON.stringify({base_id: baseId, current_unit: '__ALL__'})
+      body: JSON.stringify({base_id: baseId, current_unit: null})
     });
     await loadAll();
   }catch(e){
@@ -284,12 +884,11 @@ async function removeLearningBase(lbId, studentId){
   }
 }
 
-async function updateProgress(lbId, studentId){
-  const val = document.getElementById(`progress_${lbId}`).value;
+async function updateUnitProgress(lbId, unit, studentId){
   try{
     await apiJSON(`/api/students/${studentId}/learning-bases/${lbId}`, {
       method: 'PUT',
-      body: JSON.stringify({current_unit: val || null})
+      body: JSON.stringify({current_unit: unit})
     });
     await loadAll();
   }catch(e){
@@ -297,91 +896,20 @@ async function updateProgress(lbId, studentId){
   }
 }
 
-function loadSample(){
-  const sample = [
-    {type:'WORD',en_text:'swim',zh_hint:'游泳',unit_code:'Unit 1',difficulty_tag:'write'},
-    {type:'PHRASE',en_text:'play football',zh_hint:'踢足球',unit_code:'Unit 1',difficulty_tag:'write'},
-    {type:'SENTENCE',en_text:'What can you do?',zh_hint:'你会做什么？',unit_code:'Unit 1',difficulty_tag:'write'}
-  ];
-  document.getElementById('payload').value = JSON.stringify(sample, null, 2);
+// Cover image zoom modal
+function showCoverImage(url){
+  const modal = document.getElementById('coverModal');
+  const img = document.getElementById('coverModalImg');
+  img.src = url;
+  modal.style.display = 'flex';
 }
 
-async function doImportPaste(){
-  const cfg = getCfg();
-  const baseId = parseInt(document.getElementById('baseForImport').value, 10);
-  if(!baseId){
-    alert('请选择一个资料库');
-    return;
-  }
-
-  let items;
-  try{ items = JSON.parse(document.getElementById('payload').value||'[]'); }
-  catch(e){ alert('JSON 解析失败'); return; }
-
-  const mode = document.getElementById('mode').value;
-  const r = await apiJSON('/api/knowledge-items/import',{
-    method:'POST',
-    body: JSON.stringify({base_id: baseId, mode, items})
-  });
-  document.getElementById('msg').innerText = `导入完成：${JSON.stringify(r)}`;
+function hideCoverImage(){
+  const modal = document.getElementById('coverModal');
+  modal.style.display = 'none';
 }
 
-async function doImportFile(){
-  const cfg = getCfg();
-  if(!cfg.student_id){
-    alert('请先在引导页完成初始化（创建 student_id）');
-    location.href = '/';
-    return;
-  }
-  const f = document.getElementById('kbFile').files[0];
-  if(!f){ alert('请选择一个 JSON 文件'); return; }
-
-  const mode = document.getElementById('fileMode').value;
-  const msg = document.getElementById('fileMsg');
-  msg.innerText = '上传中...';
-
-  const form = new FormData();
-  form.append('file', f);
-  const res = await fetch(`/api/knowledge-bases/import-file?mode=${encodeURIComponent(mode)}`, {method:'POST', body: form});
-  const txt = await res.text();
-  if(!res.ok){
-    msg.innerText = '导入失败：' + txt;
-    return;
-  }
-  const data = JSON.parse(txt);
-  msg.innerText = `导入成功：${JSON.stringify(data)}。资料库已创建，可在上方"添加资料库到学习库"中找到它。`;
-  await loadAll();
-}
-
-function showSpec(){
-  alert(
-`文件格式（EL_KB_V1）示例：
-{
-  "schema_version": "EL_KB_V1",
-  "base": {
-    "name": "四年级上英语（Unit1-6）",
-    "grade_code": "G4"
-  },
-  "items": [
-    {"type":"WORD","unit_code":"Unit 1","en_text":"star","zh_hint":"明星","difficulty_tag":"write"},
-    {"type":"PHRASE","unit_code":"Unit 1","en_text":"play football","zh_hint":"踢足球","difficulty_tag":"write"}
-  ]
-}
-
-说明：
-- 提交到 /api/knowledge-bases/import-file （multipart/form-data）。
-- 若 payload 中包含 base，则会创建新资料库并导入 items；响应会返回 base_id。
-- 新创建的资料库会显示在"我的自定义资料库"列表中，可手动添加到学习库。`
-  );
-}
-
-window.addEventListener('DOMContentLoaded', ()=>{
-  loadAll();
-  document.getElementById('sampleBtn').addEventListener('click', loadSample);
-  document.getElementById('importBtn').addEventListener('click', doImportPaste);
-  document.getElementById('importFileBtn').addEventListener('click', doImportFile);
-  document.getElementById('downloadSpecBtn').addEventListener('click', showSpec);
-});
+window.addEventListener('DOMContentLoaded', loadAll);
 </script>
 </body>
 </html>

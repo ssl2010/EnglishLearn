@@ -1,0 +1,3263 @@
+{
+  "format": "EL_KB_V1_UNITMETA",
+  "base": {
+    "name": "英语",
+    "education_stage": "小学",
+    "grade": "4年级",
+    "term": "上学期",
+    "version": "2025年秋",
+    "publisher": "外语教学与研究出版社（外研社）",
+    "editor": "刘兆义",
+    "description": "系统知识库(含单词、短语、句型)"
+  },
+  "items": [
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "star",
+      "zh_hint": "明星，名角",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "ping-pong",
+      "zh_hint": "乒乓球运动",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "very",
+      "zh_hint": "很，非常",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "fast",
+      "zh_hint": "快地，快速地",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "sure",
+      "zh_hint": "肯定的，确信的，有把握的",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "hurt",
+      "zh_hint": "（身体部位）感到疼痛",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "think",
+      "zh_hint": "想，思考",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "far",
+      "zh_hint": "远",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "from",
+      "zh_hint": "来自",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "band",
+      "zh_hint": "圈，箍，带",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "really",
+      "zh_hint": "真的",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "wind",
+      "zh_hint": "风",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "ride",
+      "zh_hint": "骑，骑自行车",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "report",
+      "zh_hint": "报告；汇报",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U1",
+      "en_text": "wheelchair",
+      "zh_hint": "轮椅",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "train",
+      "zh_hint": "火车，列车",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "supermarket",
+      "zh_hint": "超级市场，超市",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "cinema",
+      "zh_hint": "电影院",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "bus",
+      "zh_hint": "公交车，公共汽车",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "stop",
+      "zh_hint": "车站",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "hospital",
+      "zh_hint": "医院",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "police",
+      "zh_hint": "警察",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "shop",
+      "zh_hint": "商店",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "first",
+      "zh_hint": "先，首先",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "left",
+      "zh_hint": "向左，朝左",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "then",
+      "zh_hint": "接下来，然后",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "turn",
+      "zh_hint": "转弯；（使）改变方向",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "there",
+      "zh_hint": "在那里",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "way",
+      "zh_hint": "路，道路",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "us",
+      "zh_hint": "我们",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "thanks",
+      "zh_hint": "谢谢你，多谢",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "buy",
+      "zh_hint": "买，购买",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "our",
+      "zh_hint": "我们的",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "writer",
+      "zh_hint": "作家；作者",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "often",
+      "zh_hint": "经常，时常",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "street",
+      "zh_hint": "大街，街道",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "live",
+      "zh_hint": "住，居住",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "place",
+      "zh_hint": "地方，地点，场所",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "near",
+      "zh_hint": "接近（地），靠近（地）",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "map",
+      "zh_hint": "地图",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "town",
+      "zh_hint": "镇，城镇，市镇",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "station",
+      "zh_hint": "车站；所，局",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "train station",
+      "zh_hint": "火车站",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "bus stop",
+      "zh_hint": "公交车站，公共汽车站",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "police station",
+      "zh_hint": "警察（分）局，派出所",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "straight",
+      "zh_hint": "笔直地，成直线地",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "surprise",
+      "zh_hint": "意想不到的事；不同寻常的事",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "restaurant",
+      "zh_hint": "饭店，餐馆",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U2",
+      "en_text": "excuse me",
+      "zh_hint": "劳驾",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "work",
+      "zh_hint": "工作，干活",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "hard",
+      "zh_hint": "费劲地；费力地",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "teacher",
+      "zh_hint": "教师",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "driver",
+      "zh_hint": "司机，驾驶员",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "worker",
+      "zh_hint": "工作者",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "doctor",
+      "zh_hint": "医生，大夫",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "nurse",
+      "zh_hint": "护士",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "gardener",
+      "zh_hint": "园丁，花匠",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "garden",
+      "zh_hint": "花园，园子",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "tall",
+      "zh_hint": "高的，高大的",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "cleaner",
+      "zh_hint": "清洁工人",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "fire",
+      "zh_hint": "火；失火，火灾",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "animal",
+      "zh_hint": "动物",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "taxi",
+      "zh_hint": "出租车",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "farmer",
+      "zh_hint": "农民",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "science",
+      "zh_hint": "科学",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "ask",
+      "zh_hint": "问，提问",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "question",
+      "zh_hint": "问题；疑问",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "astronaut",
+      "zh_hint": "宇航员，太空人",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "learn",
+      "zh_hint": "学习；学到；学会",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "space",
+      "zh_hint": "太空",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "moon",
+      "zh_hint": "月亮，月球",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "because",
+      "zh_hint": "因为",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "panda",
+      "zh_hint": "大熊猫",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "keeper",
+      "zh_hint": "饲养员",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "healthy",
+      "zh_hint": "健康的，健壮的",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "strong",
+      "zh_hint": "强健的，健壮的；力气大的",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "everyone",
+      "zh_hint": "每个人，人人",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "firefighter",
+      "zh_hint": "消防队员",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "policeman",
+      "zh_hint": "男警察",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "teach",
+      "zh_hint": "教授，讲授",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "sick",
+      "zh_hint": "生病的，患病的",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "centre",
+      "zh_hint": "中心",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "shape",
+      "zh_hint": "形状，外形",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "grow",
+      "zh_hint": "种植",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "drive",
+      "zh_hint": "驾车送（人）",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "around",
+      "zh_hint": "到处，四处",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "scientist",
+      "zh_hint": "科学家",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U3",
+      "en_text": "team",
+      "zh_hint": "工作队，工作组",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "zookeeper",
+      "zh_hint": "动物园饲养员",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "bee",
+      "zh_hint": "蜜蜂",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "early",
+      "zh_hint": "在早期，在初期",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "fifty",
+      "zh_hint": "五十",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "thirty-three",
+      "zh_hint": "三十三",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "forty-four",
+      "zh_hint": "四十四",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "thirteen",
+      "zh_hint": "十三",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "seventy",
+      "zh_hint": "七十",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "eleven",
+      "zh_hint": "十一",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "thirty",
+      "zh_hint": "三十",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "eighteen",
+      "zh_hint": "十八",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "eighty",
+      "zh_hint": "八十",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "nineteen",
+      "zh_hint": "十九",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "sixteen",
+      "zh_hint": "十六",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "sixty-six",
+      "zh_hint": "六十六",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "twenty",
+      "zh_hint": "二十",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "twelve",
+      "zh_hint": "十二",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "hundred",
+      "zh_hint": "一百",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "forty-three",
+      "zh_hint": "四十三",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "friend",
+      "zh_hint": "朋友，友人",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "flower",
+      "zh_hint": "花，花朵",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "toy",
+      "zh_hint": "玩具",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "pair",
+      "zh_hint": "一双，一对",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "give",
+      "zh_hint": "赠送，给予",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "box",
+      "zh_hint": "盒；匣；箱",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "use",
+      "zh_hint": "使用",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "holiday",
+      "zh_hint": "假期，休假日",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "share",
+      "zh_hint": "共享",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "money",
+      "zh_hint": "钱",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "should",
+      "zh_hint": "应当，应（该）",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "house",
+      "zh_hint": "房屋，房子",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "prepare",
+      "zh_hint": "准备（食物，物品）",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "kind",
+      "zh_hint": "种，类",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "dream job",
+      "zh_hint": "梦想中的工作",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "yuan",
+      "zh_hint": "元",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "carrot",
+      "zh_hint": "胡萝卜",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "flea market",
+      "zh_hint": "跳蚤市场",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "skateboard",
+      "zh_hint": "滑板",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "noon",
+      "zh_hint": "正午，中午",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "skateboarding",
+      "zh_hint": "滑板运动",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "bakery",
+      "zh_hint": "面包店",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "spend",
+      "zh_hint": "花销，花费",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "save",
+      "zh_hint": "储蓄，存（钱）",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "a lot",
+      "zh_hint": "大量，许多",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "its",
+      "zh_hint": "它的",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U4",
+      "en_text": "line",
+      "zh_hint": "线，线条",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U5",
+      "en_text": "chocolate",
+      "zh_hint": "巧克力糖；巧克力",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U5",
+      "en_text": "triangle",
+      "zh_hint": "三角形；三角形物体",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U5",
+      "en_text": "circle",
+      "zh_hint": "圆（形）",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U5",
+      "en_text": "rectangle",
+      "zh_hint": "长方形，矩形",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U5",
+      "en_text": "square",
+      "zh_hint": "正方形，四方形",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U5",
+      "en_text": "tummy",
+      "zh_hint": "肚子",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U5",
+      "en_text": "yummy",
+      "zh_hint": "美味的",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U5",
+      "en_text": "wheel",
+      "zh_hint": "车轮",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U5",
+      "en_text": "another",
+      "zh_hint": "另一，又一",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U5",
+      "en_text": "into",
+      "zh_hint": "进入，到……里面",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "zoo",
+      "zh_hint": "动物园",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "heavy",
+      "zh_hint": "重的",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "lion",
+      "zh_hint": "狮子",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "elephant",
+      "zh_hint": "象",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "horse",
+      "zh_hint": "马",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "pig",
+      "zh_hint": "猪",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "sheep",
+      "zh_hint": "羊，绵羊",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "cow",
+      "zh_hint": "牛；奶牛",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "slow",
+      "zh_hint": "慢的，缓慢的",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "pet",
+      "zh_hint": "宠物",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "boy",
+      "zh_hint": "男孩，少年",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "girl",
+      "zh_hint": "女孩，小姑娘",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "cute",
+      "zh_hint": "漂亮的，惹人喜爱的",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "talk",
+      "zh_hint": "说话",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "catch",
+      "zh_hint": "接住；接（球等）",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "grass",
+      "zh_hint": "草，青草",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "farm",
+      "zh_hint": "农场；养殖场",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "tail",
+      "zh_hint": "尾巴",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "sky",
+      "zh_hint": "天，天空",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "neck",
+      "zh_hint": "颈，脖子",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "brave",
+      "zh_hint": "勇敢的，无畏的",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "giraffe",
+      "zh_hint": "长颈鹿",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "climb",
+      "zh_hint": "攀登，爬",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "perfect",
+      "zh_hint": "完美的",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "hamster",
+      "zh_hint": "仓鼠",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "parrot",
+      "zh_hint": "鹦鹉",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U6",
+      "en_text": "animal shelter",
+      "zh_hint": "动物收容所",
+      "difficulty_tag": "recognize"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "city",
+      "zh_hint": "城市，都市",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "party",
+      "zh_hint": "聚会，宴会",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "gift",
+      "zh_hint": "礼物",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "address",
+      "zh_hint": "地址",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "snow",
+      "zh_hint": "雪",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "knock",
+      "zh_hint": "敲门（窗）",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "wolf",
+      "zh_hint": "狼",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "paw",
+      "zh_hint": "（动物的）爪子",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "hunter",
+      "zh_hint": "猎人",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "bag",
+      "zh_hint": "袋；包；囊",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "life",
+      "zh_hint": "生命",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "story",
+      "zh_hint": "故事",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "tie",
+      "zh_hint": "把……系起来",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "never",
+      "zh_hint": "决不，永不",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "trust",
+      "zh_hint": "信任，信赖，相信",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "bad",
+      "zh_hint": "（道德品质）坏的，不好的",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "WORD",
+      "unit_code": "U7",
+      "en_text": "guy",
+      "zh_hint": "家伙",
+      "difficulty_tag": "recognize",
+      "unit_code_legacy": "Plays"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "ball game star",
+      "zh_hint": "球类运动明星",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "stay at home",
+      "zh_hint": "呆在家",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "do kung fu",
+      "zh_hint": "练功夫；练武术",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "play football",
+      "zh_hint": "踢足球",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "play basketball",
+      "zh_hint": "打篮球",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "play ping-pong",
+      "zh_hint": "打乒乓球",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "well done",
+      "zh_hint": "干得好",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "thank you for ...",
+      "zh_hint": "感谢你/您……",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "be from ...",
+      "zh_hint": "来自……",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "ride one’s wheelchair",
+      "zh_hint": "骑轮椅",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "ride a bike",
+      "zh_hint": "骑自行车",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "put on",
+      "zh_hint": "穿上；戴上",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "stand on one’s hands",
+      "zh_hint": "倒立",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "turn off",
+      "zh_hint": "关闭（设备/流体的运作）",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "kung fu star",
+      "zh_hint": "功夫明星",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "try one’s best",
+      "zh_hint": "尽最大努力",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "play sports",
+      "zh_hint": "做运动，进行体育运动",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "next week",
+      "zh_hint": "下周",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "fly a kite",
+      "zh_hint": "放风筝",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "magic band",
+      "zh_hint": "魔法腕带",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "like a horse",
+      "zh_hint": "像马一样",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U1",
+      "en_text": "like a tiger",
+      "zh_hint": "像老虎一样",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "I’m a ball game star.",
+      "zh_hint": "我是一名球类运动明星。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "I can play football/basketball/ping-pong.",
+      "zh_hint": "我会踢足球/打篮球/打乒乓球。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "I’m not a ball game star.",
+      "zh_hint": "我不是一名球类运动明星。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "I can’t play football/basketball/ping-pong.",
+      "zh_hint": "我不会踢足球/打篮球/打乒乓球。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "I can stand on my head.",
+      "zh_hint": "我会倒立。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "I’m a kung fu star.",
+      "zh_hint": "我是一名功夫明星。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "--What can you do, Ben? --I can run and swim. --",
+      "zh_hint": "本，你会做什么？ --跑步和游泳。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "--What's your favourite sport, Li Shuai? --Kung fu. --",
+      "zh_hint": "李帅，你最喜欢的运动是什么？ --功夫。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "--What can you do, Wu Yu? --I can kick and jump. --",
+      "zh_hint": "吴宇，你会做什么？ --踢腿和跳跃。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "--What’s your favourite sport, Mia? --Ping-pong. --",
+      "zh_hint": "米娅，你最喜欢的运动是什么？ --乒乓球。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "What’s the matter, Nana?",
+      "zh_hint": "娜娜，怎么了？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "It’s Sports Day next week.",
+      "zh_hint": "下周是运动会。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "I can’t run very fast.",
+      "zh_hint": "我跑不快。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "Put on this magic band, and you can run fast.",
+      "zh_hint": "戴上这个魔法腕带，你就能跑得快了。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "--Are you sure? --Yes, I’m sure. --",
+      "zh_hint": "你确定吗？ --是的，我确定。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "I can run fast!",
+      "zh_hint": "我能跑得很快！",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "It’s windy today. You can stay at home, Nana.",
+      "zh_hint": "今天刮风了，娜娜，你可以待在家里。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "Thank you for the magic band!",
+      "zh_hint": "谢谢你的魔法腕带！",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "Try your best! You can do anything!",
+      "zh_hint": "尽你最大的努力！你可以做任何事！",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "What is Nana thinking?",
+      "zh_hint": "娜娜在想什么？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "We can’t play ping-pong outside on a windy day, but we can fly a kite.",
+      "zh_hint": "刮风天我们不能在外面打乒乓球，但我们可以放风筝。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "--Xia Lin, can you swim / play football? --Yes, I can. / No, I can’t. --",
+      "zh_hint": "夏琳，你会游泳吗？/会踢足球吗？ --是的，我会。/不，我不会。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "She can’t run, but she can ride her wheelchair very fast.",
+      "zh_hint": "她不能跑，但她能很快地骑轮椅。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "He can’t see, but he can jump very far.",
+      "zh_hint": "他看不见，但他能跳得很远。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "She can’t run fast, but she can swim really fast.",
+      "zh_hint": "她不能跑得很快，但她游得真的很快。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "He’s from China.",
+      "zh_hint": "他来自中国。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U1",
+      "en_text": "He can’t walk, but he can ski.",
+      "zh_hint": "他不能走路，但他会滑雪。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "train station",
+      "zh_hint": "火车站",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "bus stop",
+      "zh_hint": "公交车站",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "police station",
+      "zh_hint": "警察局",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "be here",
+      "zh_hint": "在这里",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "excuse me",
+      "zh_hint": "打扰一下；劳驾",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "the way to ...",
+      "zh_hint": "去……的路",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "come out of ...",
+      "zh_hint": "从……出来",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "next to ...",
+      "zh_hint": "靠近……；在……旁边",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "go left / right",
+      "zh_hint": "向左走 / 向右走",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "on your left / right",
+      "zh_hint": "在你的左边 / 右边",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "live on ...",
+      "zh_hint": "居住在……（某条街道等）",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "go straight on",
+      "zh_hint": "直走",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "buy books",
+      "zh_hint": "买书",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "on one’s side of the street ……",
+      "zh_hint": "所在街道的一侧",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "turn left / right",
+      "zh_hint": "左转 / 右转",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "thank you for ...",
+      "zh_hint": "感谢你……",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "get to ...",
+      "zh_hint": "到达……",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "Rainbow Bookshop",
+      "zh_hint": "彩虹书店",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "Chinese restaurant",
+      "zh_hint": "中餐厅",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "have some fun",
+      "zh_hint": "玩得开心",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U2",
+      "en_text": "go to ...",
+      "zh_hint": "去到……",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "See you at Toby’s.",
+      "zh_hint": "在托比店见。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "You can get the best ice cream.",
+      "zh_hint": "你能买到最好的冰淇淋。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "See you there at eight. Bye-bye!",
+      "zh_hint": "八点在那里见，再见！",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Let’s go to the Rainbow Bookshop today.",
+      "zh_hint": "今天我们去彩虹书店吧。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Jane Smith is going to be there.",
+      "zh_hint": "简·史密斯会去那里。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "We love her books!",
+      "zh_hint": "我们喜欢她的书！",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Can you tell me the way to the Rainbow Bookshop, please?",
+      "zh_hint": "你能告诉我去彩虹书店的路吗？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Go straight on to the supermarket and turn right.",
+      "zh_hint": "直走到超市，然后右转。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Turn left at the cinema.",
+      "zh_hint": "在电影院处左转。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "The bookshop is on your left.",
+      "zh_hint": "书店就在你的左边。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "We are going there, too.",
+      "zh_hint": "我们也正要去那里。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Why don’t you go with us?",
+      "zh_hint": "为什么不和我们一起去呢？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Are you going there to buy books?",
+      "zh_hint": "你们是去那里买书吗？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "We want to meet Jane Smith.",
+      "zh_hint": "我们想见简·史密斯。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "She’s our favourite writer.",
+      "zh_hint": "她是我们最喜欢的作家。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Her book *A Big Surprise* is my favourite book.",
+      "zh_hint": "她的书《一个大惊喜》是我最喜欢的书。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Do you want to meet Jane Smith, too?",
+      "zh_hint": "你也想见简·史密斯吗？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Well… I can see her very often.",
+      "zh_hint": "嗯……我经常能见到她。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "What a big surprise!",
+      "zh_hint": "真是个大惊喜！",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Thank you for showing me the way.",
+      "zh_hint": "谢谢你们给我指路。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Why do Pit and Pat want to go to the Rainbow Bookshop?",
+      "zh_hint": "皮特和帕特为什么想去彩虹书店？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Why does Jane Smith say thank you to Pit and Pat?",
+      "zh_hint": "简·史密斯为什么向皮特和帕特说谢谢？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Come out of the Rainbow Bookshop and turn right.",
+      "zh_hint": "从彩虹书店出来然后向右转。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Go straight on and then turn right at the cinema.",
+      "zh_hint": "直走，然后在电影院处右转。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Mr Grey lives next to the bus stop.",
+      "zh_hint": "格雷先生住在公交站旁边。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Mr Black lives opposite Mr Grey.",
+      "zh_hint": "布莱克先生住在格雷先生对面。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Mr Blue lives on Mr Black’s side of the street.",
+      "zh_hint": "布鲁先生住在布莱克先生所在的街道一侧。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "Mr Green does not live on Mr White’s side of the street.",
+      "zh_hint": "格林先生不住在怀特先生所在的街道一侧。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "This is my map. My home is here.",
+      "zh_hint": "这是我的地图，我家在这里。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U2",
+      "en_text": "How can I get to ...?",
+      "zh_hint": "我怎么去……？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "work hard",
+      "zh_hint": "努力工作",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "a fun job",
+      "zh_hint": "有趣的工作",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "driving people around",
+      "zh_hint": "载人出行",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "work in ...",
+      "zh_hint": "在……工作",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "work on ...",
+      "zh_hint": "从事……工作；在……上工作",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "work with ...",
+      "zh_hint": "与……一起工作",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "help people",
+      "zh_hint": "帮助人们",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "help students",
+      "zh_hint": "帮助学生们",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "make beautiful gardens",
+      "zh_hint": "打造美丽花园",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "keep people safe",
+      "zh_hint": "保证人们的安全",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "cut different shapes",
+      "zh_hint": "剪出不同的形状",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "ask questions",
+      "zh_hint": "提问",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "teach English",
+      "zh_hint": "教英语",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "run fast",
+      "zh_hint": "跑很快",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "learn about ...",
+      "zh_hint": "了解……",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "make good food",
+      "zh_hint": "制作美食",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "how/what about ...? ……",
+      "zh_hint": "怎么样？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "look after",
+      "zh_hint": "照顾",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "help sick people",
+      "zh_hint": "帮助生病的人",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "clean things",
+      "zh_hint": "清理物品",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "panda carer",
+      "zh_hint": "熊猫饲养员",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "job centre",
+      "zh_hint": "职业介绍中心",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "window cleaner",
+      "zh_hint": "窗户清洁工",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "join our team",
+      "zh_hint": "加入我们的团队",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "look for",
+      "zh_hint": "寻找",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "why not ...?",
+      "zh_hint": "为什么不……？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "be good with ...",
+      "zh_hint": "善于与……相处",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "the perfect job",
+      "zh_hint": "完美的工作",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "put out fire(s)",
+      "zh_hint": "扑灭火灾",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "a morning person",
+      "zh_hint": "一个早起的人",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "come to ...",
+      "zh_hint": "来到……",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "find a job",
+      "zh_hint": "找一份工作",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "dream job",
+      "zh_hint": "梦想工作",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "be good at ...",
+      "zh_hint": "擅长……",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "grow vegetables",
+      "zh_hint": "种菜",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U3",
+      "en_text": "can’t wait to do (something)",
+      "zh_hint": "等不及要做某事",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "I see people in my town.",
+      "zh_hint": "我看到我镇上的人们。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "Everyone works hard.",
+      "zh_hint": "每个人都努力工作。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "They all love their jobs!",
+      "zh_hint": "他们都热爱自己的工作！",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "My mother works in a school.",
+      "zh_hint": "我的妈妈在学校工作。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "She teaches English.",
+      "zh_hint": "她教英语。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "What does my mother do?",
+      "zh_hint": "我的妈妈是做什么的？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "My father works in a restaurant.",
+      "zh_hint": "我的爸爸在餐馆工作。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "He makes good food.",
+      "zh_hint": "他制作美味的食物。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "What is my father’s job?",
+      "zh_hint": "我的爸爸是什么职业？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "My sister works in a hospital.",
+      "zh_hint": "我的姐姐在医院工作。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "She works with a doctor.",
+      "zh_hint": "她和医生一起工作。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "They help sick people.",
+      "zh_hint": "他们帮助病人。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "Looking for the perfect job?",
+      "zh_hint": "在寻找完美的工作吗？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "We can help you!",
+      "zh_hint": "我们可以帮助你！",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "Come to Taby’s Job Centre!",
+      "zh_hint": "来托比的职业中心吧！",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "I’m looking for a fun job.",
+      "zh_hint": "我在找一份有趣的工作。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "What are you good at?",
+      "zh_hint": "你擅长什么？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "You can be a gardener.",
+      "zh_hint": "你可以成为一名园丁。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "You can make beautiful gardens.",
+      "zh_hint": "你可以建造美丽的花园。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "What do you like doing?",
+      "zh_hint": "你喜欢做什么？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "I like helping people. I can run fast, too.",
+      "zh_hint": "我喜欢帮助人们，我也能跑得很快。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "How about being a firefighter?",
+      "zh_hint": "成为一名消防员怎么样？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "What job can I do?",
+      "zh_hint": "我能做什么工作呢？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "What about being a window cleaner?",
+      "zh_hint": "成为一名窗户清洁工怎么样？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "What a lovely job I’ve got!",
+      "zh_hint": "我找到了一份多么可爱的工作！",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "I like growing vegetables.",
+      "zh_hint": "我喜欢种植蔬菜。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "I like driving people around.",
+      "zh_hint": "我喜欢载人出行。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "I like keeping people safe.",
+      "zh_hint": "我喜欢守护人们的安全。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "I want to be a policeman / ....",
+      "zh_hint": "我想成为一名警察/……。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "I like science. And I like asking questions.",
+      "zh_hint": "我喜欢科学，也喜欢提问。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "I love learning about space. I want to go to the moon!",
+      "zh_hint": "我热爱学习太空知识，我想去月球！",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "I like helping sick children. I want to look after them.",
+      "zh_hint": "我喜欢帮助生病的孩子，我想照顾他们。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "Clean the pandas’ houses.",
+      "zh_hint": "清洁熊猫的房子。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "Prepare food for the pandas.",
+      "zh_hint": "为熊猫准备食物。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "Tell people about the pandas.",
+      "zh_hint": "向人们介绍熊猫。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "Want to know more? Get in touch with us.",
+      "zh_hint": "想了解更多？与我们取得联系。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U3",
+      "en_text": "What kind of people do they want?",
+      "zh_hint": "他们想要什么样的人？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "go shopping",
+      "zh_hint": "去购物",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "a pair of socks",
+      "zh_hint": "一双袜子",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "a pair of shoes",
+      "zh_hint": "一双鞋子",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "a pair of shorts",
+      "zh_hint": "一条短裤",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "a pair of trousers",
+      "zh_hint": "一条长裤",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "How much is ...?",
+      "zh_hint": "……多少钱？（单数）",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "How much are ...?",
+      "zh_hint": "……多少钱？（复数）",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "It’s ... yuan/pounds.",
+      "zh_hint": "它是……元/英镑。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "They’re ... yuan/pounds.",
+      "zh_hint": "它们是……元/英镑。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "spend money",
+      "zh_hint": "花钱",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "save money",
+      "zh_hint": "存钱",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "share money",
+      "zh_hint": "分钱；分享钱",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "use money in right ways",
+      "zh_hint": "正确地使用钱",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "make a plan",
+      "zh_hint": "制定一个计划",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "a flea market",
+      "zh_hint": "跳蚤市场",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "so many people",
+      "zh_hint": "这么多人",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "so many things",
+      "zh_hint": "这么多东西",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "by the way",
+      "zh_hint": "顺便说一句",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U4",
+      "en_text": "here you are",
+      "zh_hint": "给你",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "How much is this kite?",
+      "zh_hint": "这只风筝多少钱？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "How much is a pair of trousers?",
+      "zh_hint": "一条长裤多少钱？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "How much are three pairs of socks?",
+      "zh_hint": "三双袜子多少钱？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "How much are two pairs of shoes?",
+      "zh_hint": "两双鞋子多少钱？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "How much are a pair of shorts and a pair of trousers?",
+      "zh_hint": "一条短裤和一条长裤一共多少钱？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "It’s eighty yuan.",
+      "zh_hint": "它是80元。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "They’re twenty yuan.",
+      "zh_hint": "它们是20元。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "Wow! So many people and so many things!",
+      "zh_hint": "哇！这么多人，这么多东西！",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "Dad, I like this skateboard.",
+      "zh_hint": "爸爸，我喜欢这个滑板。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "How much is the skateboard?",
+      "zh_hint": "这个滑板多少钱？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "Can I have it for twenty yuan? It’s all I have.",
+      "zh_hint": "我能用20元买它吗？这是我所有的钱了。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "I can buy it for you.",
+      "zh_hint": "我可以给你买。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "No, thanks, Dad. I can work it out.",
+      "zh_hint": "不用了，谢谢爸爸。我可以自己想办法。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "Now I have the money to buy that skateboard.",
+      "zh_hint": "现在我有钱买那个滑板了。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "Hi. Here is seventy yuan for the skateboard.",
+      "zh_hint": "嗨，这是给滑板的70元。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "By the way, do you want to go skateboarding with me?",
+      "zh_hint": "顺便问一下，你想和我一起去玩滑板吗？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "Now Tutu has a new skateboard and a new friend.",
+      "zh_hint": "现在图图有了一个新滑板和一个新朋友。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "Early in the morning, I go shopping.",
+      "zh_hint": "一大早我就去买东西。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "Then I buy fifty bananas for one hundred yuan.",
+      "zh_hint": "然后我花100元买50根香蕉。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "I draw a cat and a strawberry.",
+      "zh_hint": "我画了一只猫和一颗草莓。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "Dew wants to buy a few new toys.",
+      "zh_hint": "迪乌想买几个新玩具。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "How many brown cows can you see?",
+      "zh_hint": "你能看到多少头棕色的牛？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "She plays Snow White in the show.",
+      "zh_hint": "她在表演里扮演白雪公主。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "Now I can say numbers from eleven to one hundred.",
+      "zh_hint": "现在我会说11到100的数字了。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U4",
+      "en_text": "We should use our money in right ways.",
+      "zh_hint": "我们应该正确地使用我们的钱。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "a circle / a square / a triangle",
+      "zh_hint": "一个圆形/一个正方形/一个三角形",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "a rectangle / a star / a heart",
+      "zh_hint": "一个长方形/一颗星形/一个心形图案",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "How many ... are there?",
+      "zh_hint": "有多少……？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "There is a ...",
+      "zh_hint": "有一个……",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "There are ...",
+      "zh_hint": "有一些……",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "in the middle of ...",
+      "zh_hint": "在……中间",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "at the top / at the bottom",
+      "zh_hint": "在上方/在下方",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "on the left / on the right",
+      "zh_hint": "在左边/在右边",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "a piece of cake",
+      "zh_hint": "一块蛋糕",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "a slice of pizza",
+      "zh_hint": "一片披萨",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "a glass of milk",
+      "zh_hint": "一杯牛奶",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "a bottle of juice",
+      "zh_hint": "一瓶果汁",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "healthy food",
+      "zh_hint": "健康食品",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "fast food",
+      "zh_hint": "快餐",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U5",
+      "en_text": "Shapes are fun.",
+      "zh_hint": "形状很有趣。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U5",
+      "en_text": "How many triangles are there in the picture?",
+      "zh_hint": "图里有多少个三角形？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U5",
+      "en_text": "There are three circles and two squares.",
+      "zh_hint": "有三个圆和两个正方形。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U5",
+      "en_text": "The big star is in the middle.",
+      "zh_hint": "那颗大星星在中间。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U5",
+      "en_text": "At the top of the cake, there is a heart.",
+      "zh_hint": "蛋糕最上面有一个心形。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U5",
+      "en_text": "I’d like a slice of pizza, please.",
+      "zh_hint": "我想要一片披萨，谢谢。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U5",
+      "en_text": "I’d like some salad and a glass of milk.",
+      "zh_hint": "我想要一些沙拉和一杯牛奶。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U5",
+      "en_text": "Pizza is tasty, but it’s not very healthy.",
+      "zh_hint": "披萨很好吃，但不是很健康。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U5",
+      "en_text": "Let’s make a shape picture.",
+      "zh_hint": "让我们做一幅形状画吧。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U5",
+      "en_text": "Can you find a triangle and a rectangle?",
+      "zh_hint": "你能找到一个三角形和一个长方形吗？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U5",
+      "en_text": "Shapes can make pictures of food.",
+      "zh_hint": "形状可以拼出食物的图案。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "at the zoo",
+      "zh_hint": "在动物园",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "our animal friends",
+      "zh_hint": "我们的动物朋友",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "a big elephant / a small cat",
+      "zh_hint": "一头大象/一只小猫",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "a tall giraffe / a cute panda",
+      "zh_hint": "一只高高的长颈鹿/一只可爱的熊猫",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "a long nose / a long neck",
+      "zh_hint": "长鼻子/长脖子",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "black and white",
+      "zh_hint": "黑白相间",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "climb trees",
+      "zh_hint": "爬树",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "run fast",
+      "zh_hint": "跑得快",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "sleep all day",
+      "zh_hint": "整天睡觉",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "feed the animals",
+      "zh_hint": "喂动物",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "have a pet",
+      "zh_hint": "养一只宠物",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "take care of ...",
+      "zh_hint": "照顾……",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "play with my dog",
+      "zh_hint": "和我的狗玩",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "clean the cage",
+      "zh_hint": "清理笼子",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "PHRASE",
+      "unit_code": "U6",
+      "en_text": "walk the dog",
+      "zh_hint": "遛狗",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U6",
+      "en_text": "Look! The elephants are so big and strong.",
+      "zh_hint": "看！大象又大又强壮。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U6",
+      "en_text": "The giraffe has a very long neck.",
+      "zh_hint": "长颈鹿有很长的脖子。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U6",
+      "en_text": "Pandas are black and white.",
+      "zh_hint": "熊猫是黑白相间的。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U6",
+      "en_text": "Monkeys can climb trees and jump.",
+      "zh_hint": "猴子会爬树和跳跃。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U6",
+      "en_text": "I have a new pet hamster.",
+      "zh_hint": "我有一只新的宠物仓鼠。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U6",
+      "en_text": "I feed it and clean its cage every day.",
+      "zh_hint": "我每天喂它并打扫它的笼子。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U6",
+      "en_text": "We must be kind to animals.",
+      "zh_hint": "我们要善待动物。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U6",
+      "en_text": "Don’t touch the animals at the zoo.",
+      "zh_hint": "不要在动物园随便摸动物。",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U6",
+      "en_text": "What’s your favourite animal?",
+      "zh_hint": "你最喜欢的动物是什么？",
+      "difficulty_tag": "write"
+    },
+    {
+      "type": "SENTENCE",
+      "unit_code": "U6",
+      "en_text": "I like cats because they are cute.",
+      "zh_hint": "我喜欢猫，因为它们很可爱。",
+      "difficulty_tag": "write"
+    }
+  ],
+  "unit_meta": [
+    {
+      "unit_code": "U1",
+      "unit_index": 1,
+      "unit_name": "I love sports!",
+      "descriptions": []
+    },
+    {
+      "unit_code": "U2",
+      "unit_index": 2,
+      "unit_name": "In town",
+      "descriptions": []
+    },
+    {
+      "unit_code": "U3",
+      "unit_index": 3,
+      "unit_name": "Cool jobs",
+      "descriptions": []
+    },
+    {
+      "unit_code": "U4",
+      "unit_index": 4,
+      "unit_name": "Let’s shop!",
+      "descriptions": []
+    },
+    {
+      "unit_code": "U5",
+      "unit_index": 5,
+      "unit_name": "Shapes are fun!",
+      "descriptions": []
+    },
+    {
+      "unit_code": "U6",
+      "unit_index": 6,
+      "unit_name": "Our animal friends",
+      "descriptions": []
+    },
+    {
+      "unit_code": "U7",
+      "unit_index": 7,
+      "unit_name": "Play",
+      "descriptions": [
+        "课本末尾的 Play 板块（原 unit_code=Plays）。"
+      ]
+    }
+  ]
+}

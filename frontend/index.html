@@ -12,11 +12,16 @@
     h2{margin:0 0 10px;font-size:16px}
     .muted{color:#666;font-size:12px}
     label{font-size:12px;color:#444;display:block;margin:10px 0 6px}
-    input,select,button{width:100%;padding:10px;border-radius:10px;border:1px solid #ddd;font-size:14px}
+    input,select,button{width:100%;padding:10px;border-radius:10px;border:1px solid #ddd;font-size:14px;box-sizing:border-box}
     button{cursor:pointer;border:none;background:#111;color:#fff}
     button.secondary{background:#fff;color:#111;border:1px solid #ddd}
-    .row{display:flex;gap:12px;flex-wrap:wrap}
-    .row > *{flex:1;min-width:220px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}
+    .row > *{flex:1 1 0;min-width:0}
+    @media (min-width: 640px) {
+      .row > * {
+        min-width:200px;
+      }
+    }
     .btns a{display:inline-block;padding:10px 12px;border-radius:10px;background:#111;color:#fff;text-decoration:none;margin-right:10px;margin-top:8px}
     .btns a.secondary{background:#fff;color:#111;border:1px solid #ddd}
     .kpi{font-size:13px;color:#333}
@@ -39,9 +44,29 @@
         <div>
           <label>年级</label>
           <select id="gradeCode">
-            <option value="G4">G4（四年级）</option>
-            <option value="G3">G3（三年级）</option>
-            <option value="G5">G5（五年级）</option>
+            <optgroup label="幼儿园">
+              <option value="K1">小班</option>
+              <option value="K2">中班</option>
+              <option value="K3">大班</option>
+            </optgroup>
+            <optgroup label="小学">
+              <option value="G1">一年级</option>
+              <option value="G2">二年级</option>
+              <option value="G3">三年级</option>
+              <option value="G4" selected>四年级</option>
+              <option value="G5">五年级</option>
+              <option value="G6">六年级</option>
+            </optgroup>
+            <optgroup label="初中">
+              <option value="G7">初一</option>
+              <option value="G8">初二</option>
+              <option value="G9">初三</option>
+            </optgroup>
+            <optgroup label="高中">
+              <option value="G10">高一</option>
+              <option value="G11">高二</option>
+              <option value="G12">高三</option>
+            </optgroup>
           </select>
         </div>
       </div>
@@ -85,7 +110,10 @@
       <div class="btns" style="margin-top:16px">
         <a href="generate.html">生成默写单</a>
         <a href="submit.html">提交 / 批改</a>
+        <a href="practice.html">练习单管理</a>
         <a href="dashboard.html">家长看板</a>
+        <a href="profile.html" class="secondary">学生信息</a>
+        <a href="library.html" class="secondary">资料库维护</a>
       </div>
 
       <div style="margin-top:12px">
@@ -174,8 +202,21 @@ async function loadOverview(){
     learningBasesDiv.innerHTML = `<div class="muted" style="color:#d00">加载学习库失败: ${e.message}</div>`;
   }
 
+  // Helper function to get grade with stage
+  function getGradeWithStage(gradeCode){
+    const gradeMap = {
+      'K1': '幼儿园 小班', 'K2': '幼儿园 中班', 'K3': '幼儿园 大班',
+      'G1': '小学 一年级', 'G2': '小学 二年级', 'G3': '小学 三年级',
+      'G4': '小学 四年级', 'G5': '小学 五年级', 'G6': '小学 六年级',
+      'G7': '初中 初一', 'G8': '初中 初二', 'G9': '初中 初三',
+      'G10': '高中 高一', 'G11': '高中 高二', 'G12': '高中 高三'
+    };
+    return gradeMap[gradeCode] || gradeCode;
+  }
+
   // status
-  let statusTxt = `学生：${cfg.student_name}（${cfg.grade_code}）`;
+  const gradeDisplay = getGradeWithStage(cfg.grade_code);
+  let statusTxt = `学生：${cfg.student_name}（${gradeDisplay}）`;
   try{
     const lb = await api(`/api/students/${cfg.student_id}/learning-bases?is_active=true`);
     const activeCount = (lb.learning_bases || []).length;
