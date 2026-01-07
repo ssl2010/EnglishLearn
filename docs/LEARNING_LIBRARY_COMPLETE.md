@@ -199,11 +199,10 @@ submissions                -- 提交记录
 - `frontend/generate.html` - 默写单生成（更新）
 
 ### 文档
-- `DATABASE.md` - 数据库管理指南
-- `PHASE1_SUMMARY.md` - Phase 1 总结（已删除，合并到此文档）
-- `PHASE2_SUMMARY.md` - Phase 2 总结（已删除，合并到此文档）
-- `PHASE3_SUMMARY.md` - Phase 3 总结（已删除，合并到此文档）
-- `LEARNING_LIBRARY_COMPLETE.md` - 本文档
+- `backend/DATABASE.md` - 数据库管理指南
+- `docs/PHASE2_SUMMARY.md` - Phase 2 总结（归档）
+- `docs/PHASE3_SUMMARY.md` - Phase 3 总结（归档）
+- `docs/LEARNING_LIBRARY_COMPLETE.md` - 本文档
 
 ## 技术亮点
 

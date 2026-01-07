@@ -36,8 +36,15 @@ EnglishLearn/
 │   └── unit_tabs_shared.js    # 单元切换共享组件
 │
 ├── docs/                       # 文档
+│   ├── CHANGELOG.md           # 变更日志
+│   ├── FEATURES.md            # 功能要点清单
+│   ├── LEARNING_LIBRARY_COMPLETE.md # 学习库系统完整文档
+│   ├── PHASE2_SUMMARY.md      # Phase 2 总结
+│   ├── PHASE3_SUMMARY.md      # Phase 3 总结
+│   ├── PROJECT_STRUCTURE.md   # 本文件
 │   ├── SPEC.md                # 功能规格说明
 │   ├── TEST_AI_GRADING.md     # AI批改测试文档
+│   ├── UUID_DUPLICATE_DETECTION.md # UUID重复检测说明
 │   └── development/           # 开发文档
 │       ├── OCR_MATCHING_FIX.md
 │       ├── PROMPT_OPTIMIZATION.md
@@ -62,10 +69,6 @@ EnglishLearn/
 ├── .env.example               # 环境变量模板
 ├── .gitignore                 # Git忽略配置
 ├── CLAUDE.md                  # Claude Code项目指南
-├── CHANGELOG.md               # 变更日志
-├── FEATURES.md                # 功能要点清单
-├── UUID_DUPLICATE_DETECTION.md# UUID重复检测说明
-├── PROJECT_STRUCTURE.md       # 本文件
 └── README.md                  # 项目说明
 ```
 

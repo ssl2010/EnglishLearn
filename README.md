@@ -201,16 +201,17 @@ python3 test_ai_grading.py
 
 ## 项目结构
 
-详见 `PROJECT_STRUCTURE.md` 文档。
+详见 `docs/PROJECT_STRUCTURE.md` 文档。
 
 ## 文档
 
 - `README.md` - 本文件，项目概述和使用指南
-- `PROJECT_STRUCTURE.md` - 项目结构说明
-- `LEARNING_LIBRARY_COMPLETE.md` - 学习库系统完整文档
-- `FEATURES.md` - 功能要点清单
+- `docs/PROJECT_STRUCTURE.md` - 项目结构说明
+- `docs/LEARNING_LIBRARY_COMPLETE.md` - 学习库系统完整文档
+- `docs/FEATURES.md` - 功能要点清单
 - `backend/DATABASE.md` - 数据库说明
-- `UUID_DUPLICATE_DETECTION.md` - UUID识别与重复检测说明
+- `docs/UUID_DUPLICATE_DETECTION.md` - UUID识别与重复检测说明
+- `docs/CHANGELOG.md` - 变更日志
 - `docs/SPEC.md` - 功能规格说明
 - `docs/TEST_AI_GRADING.md` - AI批改测试文档
 - `docs/development/` - 开发文档和技术笔记
