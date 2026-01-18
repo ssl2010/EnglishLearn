@@ -76,6 +76,10 @@ BAIDU_OCR_SECRET_KEY=your_secret
 # 调试模式（保存AI识别原始数据）
 EL_AI_DEBUG_SAVE=1
 
+# 管理员账号（首次启动需设置）
+EL_ADMIN_USER=admin
+EL_ADMIN_PASS=your_admin_password
+
 # AI配置文件（默认使用仓库根目录的 ai_config.json）
 EL_AI_CONFIG_PATH=./ai_config.json
 
@@ -102,9 +106,9 @@ uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ### 5. 访问系统
 
-打开浏览器访问：http://localhost:8000
+打开浏览器访问：http://localhost:8000/login.html
 
-- **首页**：学生信息和学习库概览
+- **应用壳**：统一导航入口（顶部选择学生/学习库）
 - **学习库管理**：添加/管理资料库，设置学习进度
 - **生成练习单**：创建默写练习并导出PDF
 - **提交与批改**：上传试卷照片进行AI批改

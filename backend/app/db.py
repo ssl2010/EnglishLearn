@@ -110,10 +110,13 @@ def get_student(conn: sqlite3.Connection, student_id: int) -> Optional[Dict]:
     return row_to_dict(row)
 
 
-def create_student(conn: sqlite3.Connection, name: str, grade: str = None) -> int:
+def create_student(conn: sqlite3.Connection, name: str, grade: str = None, avatar: str = None) -> int:
     """创建学生"""
-    sql = "INSERT INTO students (name, grade) VALUES (?, ?)"
-    return exec1(conn, sql, (name, grade))
+    if avatar is None:
+        sql = "INSERT INTO students (name, grade) VALUES (?, ?)"
+        return exec1(conn, sql, (name, grade))
+    sql = "INSERT INTO students (name, grade, avatar) VALUES (?, ?, ?)"
+    return exec1(conn, sql, (name, grade, avatar))
 
 
 def update_student(conn: sqlite3.Connection, student_id: int, name: str = None, grade: str = None, avatar: str = None) -> None:
@@ -138,6 +141,11 @@ def update_student(conn: sqlite3.Connection, student_id: int, name: str = None, 
 
         sql = f"UPDATE students SET {', '.join(updates)} WHERE id = ?"
         conn.execute(sql, args)
+
+
+def delete_student(conn: sqlite3.Connection, student_id: int) -> None:
+    """删除学生"""
+    conn.execute("DELETE FROM students WHERE id = ?", (student_id,))
 
 
 # ============================================================

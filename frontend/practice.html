@@ -33,17 +33,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
-    <div>
-      <h1 style="margin:0 0 6px 0">练习单管理</h1>
-      <div class="muted" id="ctx"></div>
-    </div>
-    <div>
-      <a href="/">← 返回引导页</a>
-    </div>
-  </div>
-
-  <div class="card" style="margin-top:14px">
+  <div class="card">
     <div class="card-title">查询条件</div>
     <div class="row">
       <div style="flex:1 1 180px">
@@ -117,7 +107,15 @@ async function api(path, opts){
 
 const cfg = getCfg();
 if(!cfg){ location.href = '/'; }
-document.getElementById('ctx').textContent = `孩子：${cfg.student_name || cfg.student_id}｜资料库：${cfg.base_name || cfg.base_id}`;
+const isAllStudents = !cfg.student_id;
+if(!cfg.base_id && !isAllStudents){
+  document.getElementById('listHint').textContent = '该学生暂无资料库，请先在学习库管理中添加资料库。';
+  document.getElementById('searchBtn').disabled = true;
+  document.getElementById('prevPage').disabled = true;
+  document.getElementById('nextPage').disabled = true;
+}else if(isAllStudents){
+  document.getElementById('listHint').textContent = '当前为全部学生';
+}
 
 function statusPill(status){
   if(status === 'CORRECTED'){ return '<span class="pill ok">已入库</span>'; }
@@ -168,6 +166,15 @@ function renderPager(total, page){
 }
 
 async function searchSessions(page){
+  if(!cfg.base_id && !isAllStudents){
+    const listHint = document.getElementById('listHint');
+    if(listHint){
+      listHint.textContent = '该学生暂无资料库，请先在学习库管理中添加资料库。';
+    }
+    document.querySelector('#sessionTable tbody').innerHTML = '';
+    renderPager(0, 1);
+    return {sessions: [], total: 0};
+  }
   const filters = lastFilters || getFilters();
   const start = filters.start;
   const end = filters.end;
@@ -175,11 +182,15 @@ async function searchSessions(page){
   const keyword = filters.keyword;
   const pageNum = page || 1;
   const params = new URLSearchParams({
-    student_id: String(cfg.student_id),
-    base_id: String(cfg.base_id),
     page: String(pageNum),
     page_size: String(PAGE_SIZE),
   });
+  if(!isAllStudents){
+    params.append('student_id', String(cfg.student_id));
+    if(cfg.base_id){
+      params.append('base_id', String(cfg.base_id));
+    }
+  }
   if(start) params.append('start_date', start);
   if(end) params.append('end_date', end);
   if(uuid) params.append('practice_uuid', uuid);

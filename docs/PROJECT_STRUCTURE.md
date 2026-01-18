@@ -21,7 +21,9 @@ EnglishLearn/
 │   └── media/                 # 运行时生成的媒体文件（gitignore）
 │
 ├── frontend/                   # 前端页面
+│   ├── app.html               # 应用壳（导航 + iframe）
 │   ├── index.html             # 引导页
+│   ├── login.html             # 登录页
 │   ├── generate.html          # 练习单生成
 │   ├── submit.html            # 提交与AI批改
 │   ├── practice.html          # 练习单管理

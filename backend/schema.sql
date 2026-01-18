@@ -188,6 +188,34 @@ CREATE TABLE IF NOT EXISTS system_settings (
 );
 
 -- ============================================================
+-- 认证与会话
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    is_super_admin BOOLEAN DEFAULT 0,
+    is_active BOOLEAN DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    session_token_hash TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    last_seen_at TIMESTAMP,
+    ip_addr TEXT,
+    user_agent TEXT,
+    current_student_id INTEGER,
+    current_base_id INTEGER,
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+);
+
+-- ============================================================
 -- 索引
 -- ============================================================
 
@@ -208,3 +236,6 @@ CREATE INDEX IF NOT EXISTS idx_practice_results_session ON practice_results(sess
 CREATE INDEX IF NOT EXISTS idx_practice_results_submission ON practice_results(submission_id);
 CREATE INDEX IF NOT EXISTS idx_submissions_session ON submissions(session_id);
 CREATE INDEX IF NOT EXISTS idx_submissions_item ON submissions(item_id);
+
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_account_id ON auth_sessions(account_id);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at ON auth_sessions(expires_at);

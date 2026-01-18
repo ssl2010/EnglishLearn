@@ -7,7 +7,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request, Form
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -15,12 +16,15 @@ from pydantic import BaseModel, Field
 _DOTENV_PATH = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
 load_dotenv(_DOTENV_PATH, override=False)
 
+from .auth import create_session, delete_session, ensure_super_admin, get_account_by_session, verify_password
 from .db import init_db
 from .services import (
     bootstrap_single_child,
     create_base,
     generate_practice_session,
     get_dashboard,
+    get_dashboard_overview,
+    get_dashboard_student,
     get_system_status,
     list_bases,
     list_sessions,
@@ -45,6 +49,8 @@ from .services import (
 
 app = FastAPI(title="English Learning MVP", version="0.1.0")
 _cleanup_thread_started = False
+_auth_cleanup_counter = 0
+SESSION_COOKIE_NAME = "el_session"
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,9 +61,65 @@ app.add_middleware(
 )
 
 
+def _get_session_ttl() -> int:
+    try:
+        return int(os.environ.get("EL_SESSION_TTL_SECONDS", "604800") or 604800)
+    except ValueError:
+        return 604800
+
+
+def _get_max_students() -> int:
+    try:
+        value = int(os.environ.get("EL_MAX_STUDENTS_PER_ACCOUNT", "3") or 3)
+    except ValueError:
+        value = 3
+    return max(1, value)
+
+
+def _account_from_request(request: Request) -> Optional[Dict]:
+    return getattr(request.state, "account", None)
+
+
+def _require_super_admin(request: Request) -> None:
+    account = _account_from_request(request)
+    if not account or not account.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    account = None
+    if token:
+        account = get_account_by_session(token)
+        if account:
+            request.state.account = account
+
+    if path.startswith("/api/"):
+        public_api = {
+            "/api/auth/login",
+            "/api/auth/logout",
+            "/api/auth/me",
+            "/api/system/status",
+        }
+        if path not in public_api and not account:
+            return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    elif path == "/" or path.endswith(".html"):
+        if path != "/login.html" and not account:
+            return RedirectResponse("/login.html", status_code=302)
+    response = await call_next(request)
+    return response
+
+
 class BootstrapReq(BaseModel):
     student_name: str
     grade_code: str
+
+
+class LoginReq(BaseModel):
+    username: str
+    password: str
 
 
 class CreateBaseReq(BaseModel):
@@ -162,6 +224,7 @@ def _next_cleanup_time(hour: int, minute: int, interval_days: int) -> datetime:
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
+    ensure_super_admin()
     _start_cleanup_task()
 
 
@@ -222,7 +285,80 @@ class AIConfirmReq(BaseModel):
 
 @app.post("/api/bootstrap")
 def api_bootstrap(req: BootstrapReq):
+    from .db import db
+    with db() as conn:
+        row = conn.execute("SELECT COUNT(1) AS c FROM students").fetchone()
+        count = int(row["c"]) if row else 0
+        if count >= _get_max_students():
+            raise HTTPException(status_code=400, detail="学生数量已达到上限")
     return bootstrap_single_child(req.student_name, req.grade_code)
+
+
+# ============================================================
+# Auth API Endpoints
+# ============================================================
+
+@app.post("/api/auth/login")
+def api_auth_login(req: LoginReq, request: Request):
+    from .db import db, qone
+    with db() as conn:
+        row = qone(conn, "SELECT * FROM accounts WHERE username = ?", (req.username,))
+    if not row or row["is_active"] == 0:
+        raise HTTPException(status_code=401, detail="账号或密码错误")
+    if not verify_password(req.password, row["password_hash"]):
+        raise HTTPException(status_code=401, detail="账号或密码错误")
+
+    ttl = _get_session_ttl()
+    token = create_session(
+        row["id"],
+        request.client.host if request.client else None,
+        request.headers.get("user-agent"),
+        ttl,
+    )
+    resp = JSONResponse(
+        {
+            "ok": True,
+            "account": {"id": row["id"], "username": row["username"], "is_super_admin": bool(row["is_super_admin"])},
+            "context": {"student_id": None, "base_id": None},
+        }
+    )
+    resp.set_cookie(
+        SESSION_COOKIE_NAME,
+        token,
+        httponly=True,
+        samesite="lax",
+        max_age=ttl,
+        path="/",
+    )
+    return resp
+
+
+@app.post("/api/auth/logout")
+def api_auth_logout(request: Request):
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if token:
+        delete_session(token)
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie(SESSION_COOKIE_NAME, "", max_age=0, path="/")
+    return resp
+
+
+@app.get("/api/auth/me")
+def api_auth_me(request: Request):
+    account = _account_from_request(request) or get_account_by_session(request.cookies.get(SESSION_COOKIE_NAME))
+    if not account:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {
+        "account": {
+            "id": account["id"],
+            "username": account["username"],
+            "is_super_admin": bool(account.get("is_super_admin")),
+        },
+        "context": {
+            "student_id": account.get("current_student_id"),
+            "base_id": account.get("current_base_id"),
+        },
+    }
 
 
 # ============================================================
@@ -252,6 +388,7 @@ def api_get_student(student_id: int):
 class CreateStudentReq(BaseModel):
     name: str
     grade: Optional[str] = None
+    avatar: Optional[str] = None
 
 
 @app.post("/api/students")
@@ -259,7 +396,11 @@ def api_create_student(req: CreateStudentReq):
     """Create new student"""
     from .db import db, create_student
     with db() as conn:
-        student_id = create_student(conn, req.name, req.grade)
+        row = conn.execute("SELECT COUNT(1) AS c FROM students").fetchone()
+        count = int(row["c"]) if row else 0
+        if count >= _get_max_students():
+            raise HTTPException(status_code=400, detail="学生数量已达到上限")
+        student_id = create_student(conn, req.name, req.grade, req.avatar)
     return {"student_id": student_id}
 
 
@@ -279,6 +420,53 @@ def api_update_student(student_id: int, req: UpdateStudentReq):
     return student
 
 
+@app.post("/api/students/{student_id}/avatar")
+async def api_upload_student_avatar(student_id: int, file: UploadFile = File(...)):
+    """Upload custom avatar for student"""
+    import os
+    import uuid
+    import shutil
+    from .db import db, update_student, get_student
+    from .services import MEDIA_DIR, ensure_media_dir
+
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=422, detail="File must be an image")
+
+    ensure_media_dir()
+    avatar_dir = os.path.join(MEDIA_DIR, "uploads", "avatars")
+    os.makedirs(avatar_dir, exist_ok=True)
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in {".png", ".jpg", ".jpeg", ".webp"}:
+        ext = ".jpg"
+    filename = f"student_{student_id}_{uuid.uuid4().hex[:12]}{ext}"
+    filepath = os.path.join(avatar_dir, filename)
+    with open(filepath, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    rel_path = os.path.join("uploads", "avatars", filename).replace(os.sep, "/")
+    with db() as conn:
+        student = get_student(conn, student_id)
+        if not student:
+            raise HTTPException(status_code=404, detail="Student not found")
+        update_student(conn, student_id, avatar=rel_path)
+        student = get_student(conn, student_id)
+
+    return {"avatar": rel_path, "student": student}
+
+
+@app.delete("/api/students/{student_id}")
+def api_delete_student(student_id: int):
+    """Delete student"""
+    from .db import db, delete_student, get_student
+    with db() as conn:
+        student = get_student(conn, student_id)
+        if not student:
+            raise HTTPException(status_code=404, detail="Student not found")
+        delete_student(conn, student_id)
+    return {"ok": True}
+
+
 @app.get("/api/system/status")
 def api_status(student_id: int, base_id: int):
     return get_system_status(student_id, base_id)
@@ -294,7 +482,9 @@ def api_list_bases(grade_code: Optional[str] = None, is_system: Optional[bool] =
 
 
 @app.post("/api/knowledge-bases")
-def api_create_base(req: CreateBaseReq):
+def api_create_base(req: CreateBaseReq, request: Request):
+    if req.is_system:
+        _require_super_admin(request)
     base_id = create_base(
         name=req.name,
         grade_code=req.grade_code,
@@ -378,7 +568,7 @@ async def api_upload_base_cover(base_id: int, file: UploadFile = File(...)):
 
 
 @app.delete("/api/knowledge-bases/{base_id}")
-def api_delete_base(base_id: int, force: bool = False):
+def api_delete_base(base_id: int, request: Request, force: bool = False):
     """Delete base
 
     Checks if base is used in any student's learning library.
@@ -389,6 +579,8 @@ def api_delete_base(base_id: int, force: bool = False):
         force: Admin override flag (future feature, currently disabled)
     """
     from .db import db, delete_base, get_base
+
+    _require_super_admin(request)
 
     with db() as conn:
         # Check if base exists
@@ -753,8 +945,10 @@ def api_import_items(req: ImportItemsReq):
 
 @app.post("/api/knowledge-bases/import-file")
 async def api_import_base_file(
+    request: Request,
     file: UploadFile = File(...),
     mode: str = "skip",
+    is_system: bool = Form(False),
 ):
     """Import a knowledge base from an uploaded JSON file.
 
@@ -847,10 +1041,13 @@ async def api_import_base_file(
     if mode not in ("skip", "update"):
         raise HTTPException(status_code=422, detail="mode must be skip or update")
 
+    if is_system:
+        _require_super_admin(request)
+
     base_id = create_base(
         name=str(name),
         grade_code=str(grade_code),
-        is_system=False,
+        is_system=is_system,
         education_stage=education_stage,
         grade=grade,
         term=term,
@@ -979,7 +1176,7 @@ def api_list_sessions(student_id: int, base_id: int, limit: int = 30):
 
 @app.get("/api/practice-sessions/search")
 def api_search_sessions(
-    student_id: int,
+    student_id: Optional[int] = None,
     base_id: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -1204,8 +1401,8 @@ def api_submit_marked_photo(
 
 @app.post("/api/ai/grade-photos")
 def api_ai_grade_photos(
-    student_id: int,
-    base_id: int,
+    student_id: Optional[int] = None,
+    base_id: Optional[int] = None,
     files: List[UploadFile] = File(...),
 ):
     return analyze_ai_photos(student_id, base_id, files)
@@ -1253,6 +1450,19 @@ def api_manual_correct(session_id: int, req: ManualCorrectReq):
 @app.get("/api/dashboard")
 def api_dashboard(student_id: int, base_id: int, days: int = 30):
     return get_dashboard(student_id, base_id, days=days)
+
+
+@app.get("/api/dashboard/overview")
+def api_dashboard_overview(days: int = 30):
+    return get_dashboard_overview(days=days)
+
+
+@app.get("/api/dashboard/student")
+def api_dashboard_student(student_id: int, days: int = 30, max_bases: int = 6):
+    try:
+        return get_dashboard_student(student_id, days=days, max_bases=max_bases)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 

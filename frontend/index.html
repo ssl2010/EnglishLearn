@@ -6,7 +6,7 @@
   <title>英语学习系统 · 引导页</title>
   <style>
     body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
-    .wrap{max-width:980px;margin:0 auto;padding:24px}
+    .wrap{max-width:1280px;margin:0 auto;padding:24px}
     .card{background:#fff;border-radius:14px;padding:18px;margin-bottom:16px}
     h1{margin:0 0 8px}
     h2{margin:0 0 10px;font-size:16px}
@@ -28,6 +28,19 @@
   </style>
 </head>
 <body>
+  <script>
+    if(window.top === window){
+      fetch('/api/auth/me').then(res => {
+        if(res.ok){
+          window.location.replace('/app.html');
+        }else{
+          window.location.replace('/login.html');
+        }
+      }).catch(() => {
+        window.location.replace('/login.html');
+      });
+    }
+  </script>
   <div class="wrap">
     <div class="card">
       <h1>英语学习系统</h1>

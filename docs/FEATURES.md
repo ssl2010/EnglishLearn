@@ -5,6 +5,10 @@ English Learning 是一个面向小学生的英语默写练习与智能批改系
 
 ## 一、学生管理
 
+### 1.0 账号登录
+- 超级管理员账号登录（Cookie 会话）
+- 统一导航壳（app.html）承载各子页面
+
 ### 1.1 学生信息
 - 创建学生账户（姓名、年级）
 - 更新学生信息
@@ -205,10 +209,10 @@ English Learning 是一个面向小学生的英语默写练习与智能批改系
 - 每周目标设置
 
 ### 7.5 看板展示
-- 学习概览卡片
-- 掌握度进度条
-- 易错Top词汇
-- 最近练习记录
+- 全部学生概览（最多3个学生卡片）
+- 单学生详情（学习库汇总、资料库掌握列表）
+- 近期练习与易错Top10
+- 本周练习频率与学习进度条
 
 ## 八、系统配置
 
@@ -271,6 +275,8 @@ English Learning 是一个面向小学生的英语默写练习与智能批改系
 
 ### 11.1 页面列表
 - `index.html` - 首页（学生信息、学习库概览）
+- `login.html` - 登录页
+- `app.html` - 应用壳（导航 + iframe）
 - `knowledge.html` - 学习库管理
 - `generate.html` - 练习单生成
 - `practice.html` - 练习单管理
@@ -297,6 +303,11 @@ English Learning 是一个面向小学生的英语默写练习与智能批改系
 - GET /api/students/{id} - 获取单个学生
 - POST /api/students - 创建学生
 - PUT /api/students/{id} - 更新学生
+
+### 12.0 认证
+- POST /api/auth/login - 登录
+- POST /api/auth/logout - 退出
+- GET /api/auth/me - 当前账号
 
 ### 12.2 资料库管理
 - GET /api/knowledge-bases - 获取资料库列表
@@ -336,7 +347,9 @@ English Learning 是一个面向小学生的英语默写练习与智能批改系
 - POST /api/practice-sessions/{id}/submit-marked-photo - 上传批改图
 
 ### 12.7 统计分析
-- GET /api/dashboard - 获取统计看板
+- GET /api/dashboard - 获取统计看板（旧版）
+- GET /api/dashboard/overview - 全部学生概览
+- GET /api/dashboard/student - 单学生详情看板
 - GET /api/students/{id}/bases/{base_id}/mastery-stats - 掌握度统计
 - GET /api/students/{id}/bases/{base_id}/items - 掌握详情列表
 

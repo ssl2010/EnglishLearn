@@ -5,82 +5,573 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>家长看板</title>
   <style>
-    body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
-    .wrap{max-width:960px;margin:0 auto;padding:24px}
-    a{color:#0b5fff;text-decoration:none}
-    .row{display:flex;gap:12px;flex-wrap:wrap}
-    .card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,.06);flex:1;min-width:240px}
-    .muted{color:#666}
-    .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#eef2ff;font-size:12px}
+    :root{
+      --bg:#f6f7fb;
+      --card:#ffffff;
+      --text:#0f172a;
+      --muted:#64748b;
+      --line:#e2e8f0;
+      --accent:#2563eb;
+      --accent-soft:#e0e7ff;
+      --success:#16a34a;
+      --warning:#ea580c;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,Segoe UI,Arial,sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+    a{color:var(--accent);text-decoration:none}
+    .wrap{max-width:1280px;margin:0 auto;padding:24px}
+    .hidden{display:none}
+    .muted{color:var(--muted)}
+    .page-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    h1{margin:0 0 6px 0;font-size:26px}
+    h2{margin:0;font-size:18px}
+    .section{margin-top:18px}
+    .card{
+      background:var(--card);
+      border-radius:16px;
+      padding:16px;
+      border:1px solid var(--line);
+      box-shadow:0 2px 10px rgba(15,23,42,.04);
+    }
+    .btn{
+      border:1px solid var(--line);
+      background:#fff;
+      color:var(--text);
+      padding:8px 12px;
+      border-radius:10px;
+      font-size:13px;
+      cursor:pointer;
+    }
+    .btn.ghost{background:transparent}
+    .btn.primary{background:var(--text);color:#fff;border-color:var(--text)}
+    .btn.link{border-color:transparent;background:transparent;color:var(--accent);padding:0}
+    .overview-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+    .student-card{display:flex;flex-direction:column;gap:12px;cursor:pointer;transition:transform .15s ease, box-shadow .15s ease}
+    .student-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(15,23,42,.08)}
+    .student-head{display:flex;align-items:center;gap:12px}
+    .avatar{
+      width:44px;height:44px;border-radius:50%;
+      background:#fff;border:1px solid var(--line);
+      display:flex;align-items:center;justify-content:center;font-size:22px;
+      overflow:hidden;
+    }
+    .avatar img{width:100%;height:100%;object-fit:cover}
+    .student-name{font-weight:700;font-size:16px}
+    .student-meta{font-size:12px;color:var(--muted)}
+    .tag{
+      display:inline-flex;align-items:center;gap:6px;
+      font-size:12px;padding:4px 8px;border-radius:999px;
+      background:#fff7ed;color:var(--warning);border:1px solid #fed7aa;
+    }
+    .metric{display:flex;flex-direction:column;gap:6px}
+    .metric-row{display:flex;align-items:center;justify-content:space-between;font-size:13px}
+    .metric-value{font-weight:600}
+    .progress{width:100%;height:8px;border-radius:999px;background:#eef2ff;overflow:hidden}
+    .progress span{display:block;height:100%;background:var(--accent);border-radius:999px}
+    .week{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;flex:1}
+    .week-cell{height:10px;border-radius:4px;background:#e2e8f0}
+    .week-cell.active{background:var(--success)}
+    .overview-footer{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted)}
+    .kpi-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+    .kpi{
+      padding:12px;border-radius:12px;border:1px solid var(--line);
+      background:#f8fafc;display:flex;flex-direction:column;gap:6px
+    }
+    .kpi-value{font-size:20px;font-weight:700}
+    .library-meta{margin-top:12px;font-size:13px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap}
+    .base-list{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+    .base-row{display:grid;grid-template-columns:2.2fr 1.3fr 1.3fr 1fr;gap:12px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:12px}
+    .base-title{font-weight:600}
+    .base-sub{font-size:12px;color:var(--muted)}
+    .detail-grid{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-top:12px}
     table{width:100%;border-collapse:collapse}
-    th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;font-size:14px}
+    th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
+    th{color:var(--muted);font-weight:600}
+    .pill{display:inline-flex;align-items:center;border-radius:999px;padding:2px 8px;font-size:12px;background:var(--accent-soft);color:#1d4ed8}
+    .empty{padding:12px;border-radius:12px;background:#f8fafc;color:var(--muted);font-size:13px}
+    .error{margin-top:12px;color:#b91c1c;font-size:13px}
+    @media (max-width:1100px){
+      .overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .detail-grid{grid-template-columns:1fr}
+    }
+    @media (max-width:720px){
+      .overview-grid{grid-template-columns:1fr}
+      .page-header{flex-direction:column;align-items:flex-start}
+      .kpi-grid{grid-template-columns:1fr}
+      .base-row{grid-template-columns:1fr}
+      .detail-grid{grid-template-columns:1fr}
+    }
   </style>
 </head>
 <body>
-<div class="wrap">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
-    <div>
-      <h1 style="margin:0 0 6px 0">家长看板</h1>
-      <div id="ctx" class="muted"></div>
-    </div>
-    <div>
-      <a href="/">← 返回引导页</a>
-    </div>
-  </div>
+  <div class="wrap">
+    <div id="loading" class="section muted">加载中...</div>
+    <div id="error" class="error hidden"></div>
 
-  <div class="row" style="margin-top:14px">
-    <div class="card"><div class="muted">已学习</div><div style="font-size:28px" id="learned">-</div></div>
-    <div class="card"><div class="muted">已掌握（连续正确≥2）</div><div style="font-size:28px" id="mastered">-</div></div>
-    <div class="card"><div class="muted">近30天练习天数</div><div style="font-size:28px" id="days">-</div></div>
-  </div>
+    <section id="overviewSection" class="section hidden">
+      <div id="overviewGrid" class="overview-grid"></div>
+    </section>
 
-  <div class="row" style="margin-top:12px">
-    <div class="card" style="flex:2">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h2 style="margin:0">近期练习</h2>
-        <a href="/submit.html">去提交/批改 →</a>
+    <section id="detailSection" class="section hidden">
+      <div class="card">
+        <h2>学习库总览</h2>
+        <div id="kpiGrid" class="kpi-grid"></div>
+        <div id="libraryMeta" class="library-meta"></div>
       </div>
-      <table id="sessions"><thead><tr><th>时间</th><th>状态</th><th>题数</th><th>链接</th></tr></thead><tbody></tbody></table>
-    </div>
-    <div class="card" style="flex:1">
-      <h2 style="margin:0 0 8px 0">易错 Top 10</h2>
-      <div class="muted" style="font-size:13px;margin-bottom:8px">仅展示英文知识点本体</div>
-      <div id="topwrong"></div>
-    </div>
+
+      <div class="card section">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <h2>资料库掌握概览</h2>
+          <button id="toggleBasesBtn" class="btn ghost hidden" type="button">展开全部</button>
+        </div>
+        <div id="basesList" class="base-list"></div>
+      </div>
+
+      <div class="detail-grid section">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <h2>近期练习</h2>
+          </div>
+          <table>
+            <thead>
+              <tr><th>时间</th><th>资料库</th><th>状态</th><th>题数</th><th>链接</th></tr>
+            </thead>
+            <tbody id="sessionsBody"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h2>易错 Top 10</h2>
+          <div class="muted" style="font-size:12px;margin-top:6px">统计近 30 天跨资料库错题</div>
+          <div id="topWrongList" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </section>
   </div>
-</div>
-<script>
-const cfg = JSON.parse(localStorage.getItem('el_cfg')||'null');
-if(!cfg){ location.href = '/'; }
-const api = (p, opt={})=>fetch(p, {...opt, headers:{'Content-Type':'application/json', ...(opt.headers||{})}});
 
-async function load(){
-  document.getElementById('ctx').innerText = `孩子：${cfg.student_name}（${cfg.grade_code}）｜资料库：${cfg.base_name||cfg.base_id}`;
-  const d = await (await api(`/api/dashboard?student_id=${cfg.student_id}&base_id=${cfg.base_id}&days=30`)).json();
-  document.getElementById('learned').innerText = d.learned_count;
-  document.getElementById('mastered').innerText = d.mastered_count;
-  document.getElementById('days').innerText = d.practice_days;
+  <script>
+    const DAYS = 30;
+    const MAX_BASES = 6;
+    const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
+    const AVATAR_MAP = {
+      rabbit: '🐰', fox: '🦊', lion: '🦁', tiger: '🐯', panda: '🐼',
+      koala: '🐨', dog: '🐶', cat: '🐱'
+    };
 
-  const tbody = document.querySelector('#sessions tbody');
-  tbody.innerHTML='';
-  const statusLabel = (status)=> status === 'CORRECTED' ? '已入库' : '待提交';
-  (d.recent_sessions||[]).forEach(s=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML = `<td>${(s.created_at||'').slice(0,19).replace('T',' ')}</td><td><span class="pill">${statusLabel(s.status)}</span></td><td>${s.item_count||'-'}</td>`+
-      `<td>${s.pdf_url?`<a href="${s.pdf_url}" target="_blank">默写单</a> `:''}${s.answer_pdf_url?`<a href="${s.answer_pdf_url}" target="_blank">答案</a>`:''}</td>`;
-    tbody.appendChild(tr);
-  });
+    const state = {
+      currentStudentId: null,
+      basesExpanded: false
+    };
 
-  const tw = document.getElementById('topwrong');
-  tw.innerHTML='';
-  (d.top_wrong||[]).forEach(it=>{
-    const div=document.createElement('div');
-    div.style.padding='6px 0';
-    div.innerHTML = `<div><b>${it.en_text}</b></div><div class="muted" style="font-size:12px">错 ${it.wrong_attempts} 次</div>`;
-    tw.appendChild(div);
-  })
-}
-load();
-</script>
+    function apiJSON(path){
+      return fetch(path, {headers: {'Content-Type': 'application/json'}})
+        .then(async res => {
+          if(!res.ok){
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || '请求失败');
+          }
+          return res.json();
+        });
+    }
+
+    function getCfg(){
+      const raw = localStorage.getItem('el_cfg');
+      if(!raw) return null;
+      try{ return JSON.parse(raw); }catch(e){ return null; }
+    }
+
+    function getInitialStudentId(){
+      const mode = sessionStorage.getItem('dashboard_view');
+      if(mode === 'overview'){
+        return null;
+      }
+      const saved = parseInt(sessionStorage.getItem('dashboard_student_id') || '', 10);
+      if(mode === 'student' && Number.isFinite(saved)){
+        return saved;
+      }
+      const cfg = getCfg();
+      const id = cfg && cfg.student_id ? parseInt(cfg.student_id, 10) : null;
+      return Number.isFinite(id) ? id : null;
+    }
+
+    function setLoading(isLoading){
+      document.getElementById('loading').classList.toggle('hidden', !isLoading);
+    }
+
+    function setError(message){
+      const el = document.getElementById('error');
+      if(!message){
+        el.classList.add('hidden');
+        el.textContent = '';
+        return;
+      }
+      el.textContent = message;
+      el.classList.remove('hidden');
+    }
+
+    function setView(mode){
+      const overview = document.getElementById('overviewSection');
+      const detail = document.getElementById('detailSection');
+      overview.classList.toggle('hidden', mode !== 'overview');
+      detail.classList.toggle('hidden', mode !== 'detail');
+    }
+
+    function formatRatio(numerator, denominator){
+      if(denominator === 0) return '0 / 0';
+      return `${numerator} / ${denominator}`;
+    }
+
+    function ratioPercent(ratio){
+      if(ratio === null || ratio === undefined) return 0;
+      return Math.max(0, Math.min(100, Math.round(ratio * 100)));
+    }
+
+    function createProgress(ratio){
+      const percent = ratioPercent(ratio);
+      return `<div class="progress"><span style="width:${percent}%"></span></div>`;
+    }
+
+    function parseWeekBits(bits){
+      const raw = String(bits || '').padEnd(7, '0').slice(0, 7);
+      return raw.split('').map(ch => ch === '1');
+    }
+
+    function renderWeekGrid(bits){
+      const states = parseWeekBits(bits);
+      const wrap = document.createElement('div');
+      wrap.className = 'week-grid';
+      states.forEach((active, idx) => {
+        const cell = document.createElement('div');
+        cell.className = 'week-cell' + (active ? ' active' : '');
+        cell.title = `周${WEEK_LABELS[idx]}`;
+        wrap.appendChild(cell);
+      });
+      return wrap;
+    }
+
+    function renderOverviewCard(student, weeklyTargetDays){
+      const card = document.createElement('div');
+      card.className = 'card student-card';
+      card.tabIndex = 0;
+
+      const avatarValue = student.avatar || 'rabbit';
+      const avatarNode = document.createElement('div');
+      avatarNode.className = 'avatar';
+      if(avatarValue.startsWith('http') || avatarValue.startsWith('/media/')){
+        const img = document.createElement('img');
+        img.src = avatarValue;
+        img.alt = student.student_name || '学生';
+        avatarNode.appendChild(img);
+      }else{
+        avatarNode.textContent = AVATAR_MAP[avatarValue] || '🙂';
+      }
+
+      const head = document.createElement('div');
+      head.className = 'student-head';
+      const nameWrap = document.createElement('div');
+      const name = document.createElement('div');
+      name.className = 'student-name';
+      name.textContent = student.student_name || '学生';
+      const meta = document.createElement('div');
+      meta.className = 'student-meta';
+      const grade = student.grade ? `${student.grade}` : '未设置年级';
+      meta.textContent = `${grade} · ${student.active_bases_count || 0} 个资料库`;
+      nameWrap.appendChild(name);
+      nameWrap.appendChild(meta);
+      head.appendChild(avatarNode);
+      head.appendChild(nameWrap);
+
+      const progress = document.createElement('div');
+      progress.className = 'metric';
+      progress.innerHTML = `
+        <div class="metric-row"><span>学习进度</span><span class="metric-value">${formatRatio(student.learned_items, student.total_items)}</span></div>
+        ${createProgress(student.coverage_rate)}
+      `;
+
+      const mastery = document.createElement('div');
+      mastery.className = 'metric';
+      mastery.innerHTML = `
+        <div class="metric-row"><span>掌握情况</span><span class="metric-value">${student.learned_items ? formatRatio(student.mastered_items, student.learned_items) : '-'}</span></div>
+        ${createProgress(student.mastery_rate_in_learned)}
+      `;
+
+      const week = document.createElement('div');
+      week.className = 'metric';
+      const weekRow = document.createElement('div');
+      weekRow.className = 'metric-row';
+      weekRow.innerHTML = `<span>本周练习</span><span class="metric-value">${student.week_practice_days || 0} / ${weeklyTargetDays}</span>`;
+      week.appendChild(weekRow);
+      const weekWrap = document.createElement('div');
+      weekWrap.className = 'week';
+      weekWrap.appendChild(renderWeekGrid(student.week_bits));
+      week.appendChild(weekWrap);
+
+      const wrong = document.createElement('div');
+      wrong.className = 'metric';
+      wrong.innerHTML = `
+        <div class="metric-row"><span>错题（30天）</span><span class="metric-value">${student.wrong_items_30d || 0}</span></div>
+      `;
+
+      const footer = document.createElement('div');
+      footer.className = 'overview-footer';
+      footer.innerHTML = `<span>最近练习：${student.last_practice_at || '-'}</span>`;
+
+      card.appendChild(head);
+      if((student.active_bases_count || 0) === 0){
+        const warn = document.createElement('div');
+        warn.className = 'tag';
+        warn.textContent = '未配置学习库';
+        card.appendChild(warn);
+
+        const action = document.createElement('a');
+        action.href = '/knowledge.html';
+        action.className = 'btn link';
+        action.textContent = '去学习库管理 →';
+        action.addEventListener('click', (event) => event.stopPropagation());
+        card.appendChild(action);
+      }
+      card.appendChild(progress);
+      card.appendChild(mastery);
+      card.appendChild(week);
+      card.appendChild(wrong);
+      card.appendChild(footer);
+
+      card.addEventListener('click', () => selectStudent(student.student_id));
+      card.addEventListener('keydown', (event) => {
+        if(event.key === 'Enter' || event.key === ' '){
+          selectStudent(student.student_id);
+        }
+      });
+      return card;
+    }
+
+    async function renderOverview(){
+      setLoading(true);
+      setError('');
+      setView('overview');
+      try{
+        const data = await apiJSON(`/api/dashboard/overview?days=${DAYS}`);
+        const grid = document.getElementById('overviewGrid');
+        grid.innerHTML = '';
+        const students = data.students || [];
+        if(students.length === 0){
+          grid.innerHTML = '<div class="empty">暂无学生数据，请先创建学生。</div>';
+          return;
+        }
+        students.forEach(student => {
+          grid.appendChild(renderOverviewCard(student, data.weekly_target_days || 0));
+        });
+      }catch(err){
+        setError(err.message || '加载失败');
+      }finally{
+        setLoading(false);
+      }
+    }
+
+    function renderKpi(card){
+      const wrapper = document.createElement('div');
+      wrapper.className = 'kpi';
+      wrapper.innerHTML = `
+        <div class="muted" style="font-size:12px">${card.label}</div>
+        <div class="kpi-value">${card.value}</div>
+      `;
+      if(card.progress !== null && card.progress !== undefined){
+        wrapper.insertAdjacentHTML('beforeend', createProgress(card.progress));
+      }
+      if(card.extra){
+        wrapper.appendChild(card.extra);
+      }
+      return wrapper;
+    }
+
+    function renderBaseRow(base){
+      const row = document.createElement('div');
+      row.className = 'base-row';
+      const title = document.createElement('div');
+      const baseIdLabel = base.base_id ? `资料库#${base.base_id}` : '';
+      title.innerHTML = `<div class="base-title">${base.label}</div><div class="base-sub">${baseIdLabel}</div>`;
+      const coverage = document.createElement('div');
+      coverage.innerHTML = `
+        <div class="metric-row"><span class="muted">学习进度</span><span class="metric-value">${formatRatio(base.learned, base.total)}</span></div>
+        ${createProgress(base.coverage_rate)}
+      `;
+      const mastery = document.createElement('div');
+      mastery.innerHTML = `
+        <div class="metric-row"><span class="muted">掌握情况</span><span class="metric-value">${base.learned ? formatRatio(base.mastered, base.learned) : '-'}</span></div>
+        ${createProgress(base.mastery_rate_in_learned)}
+      `;
+      const hint = document.createElement('div');
+      hint.className = 'muted';
+      hint.style.fontSize = '12px';
+      hint.textContent = base.current_unit ? `当前单元：${base.current_unit}` : '当前单元：-';
+
+      row.appendChild(title);
+      row.appendChild(coverage);
+      row.appendChild(mastery);
+      row.appendChild(hint);
+      return row;
+    }
+
+    function renderRecentSessions(rows){
+      const tbody = document.getElementById('sessionsBody');
+      tbody.innerHTML = '';
+      if(!rows || rows.length === 0){
+        tbody.innerHTML = '<tr><td colspan="5" class="muted">暂无近期练习记录</td></tr>';
+        return;
+      }
+      const statusLabel = (status) => {
+        if(status === 'CORRECTED') return '已入库';
+        if(status === 'DRAFT') return '草稿';
+        if(status === 'PUBLISHED') return '待提交';
+        if(status === 'COMPLETED') return '待批改';
+        return status || '-';
+      };
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        const created = row.created_at ? row.created_at.slice(0, 19).replace('T', ' ') : '-';
+        const links = `<a href="practice-view.html?session_id=${row.id}" target="_blank">默写单</a>`;
+        tr.innerHTML = `
+          <td>${created}</td>
+          <td>${row.base_label || '-'}</td>
+          <td><span class="pill">${statusLabel(row.status)}</span></td>
+          <td>${row.item_count || '-'}</td>
+          <td>${links || '-'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderTopWrong(rows){
+      const container = document.getElementById('topWrongList');
+      container.innerHTML = '';
+      if(!rows || rows.length === 0){
+        container.innerHTML = '<div class="empty">暂无易错数据</div>';
+        return;
+      }
+      rows.forEach(item => {
+        const div = document.createElement('div');
+        div.style.padding = '8px 0';
+        div.innerHTML = `
+          <div style="font-weight:600">${item.en_text || '-'}</div>
+          <div class="muted" style="font-size:12px">错 ${item.wrong_count || 0} 次 · ${item.base_label || '-'}</div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    async function renderStudent(studentId, maxBases){
+      setLoading(true);
+      setError('');
+      setView('detail');
+
+      try{
+        const maxParam = maxBases || (state.basesExpanded ? 999 : MAX_BASES);
+        const data = await apiJSON(`/api/dashboard/student?student_id=${studentId}&days=${DAYS}&max_bases=${maxParam}`);
+        const kpiGrid = document.getElementById('kpiGrid');
+        kpiGrid.innerHTML = '';
+        const library = data.library || {};
+        const weekWrap = document.createElement('div');
+        weekWrap.className = 'week';
+        weekWrap.appendChild(renderWeekGrid(library.week_bits));
+        const kpis = [
+          {label: '学习库总量', value: library.total_items ?? 0},
+          {label: '已练', value: formatRatio(library.learned_items ?? 0, library.total_items ?? 0), progress: library.coverage_rate},
+          {label: '已掌握', value: library.learned_items ? formatRatio(library.mastered_items ?? 0, library.learned_items ?? 0) : '-', progress: library.mastery_rate_in_learned},
+          {label: '本周练习', value: `${library.week_practice_days || 0} / ${data.weekly_target_days || 0}`, extra: weekWrap}
+        ];
+        kpis.forEach(kpi => kpiGrid.appendChild(renderKpi(kpi)));
+
+        const libraryMeta = document.getElementById('libraryMeta');
+        libraryMeta.innerHTML = `
+          <div>近30天练习天数：${library.practice_days_30d ?? 0}</div>
+          <div>近30天错题数：${library.wrong_items_30d ?? 0}</div>
+          <div>最近练习：${library.last_practice_at || '-'}</div>
+        `;
+
+        const basesList = document.getElementById('basesList');
+        basesList.innerHTML = '';
+        const bases = (data.bases && data.bases.rows) ? data.bases.rows : [];
+        if((library.active_bases_count || 0) === 0){
+          basesList.innerHTML = '<div class="empty">该学生尚未配置资料库，请先在学习库管理中添加。</div>';
+        }else if(bases.length === 0){
+          basesList.innerHTML = '<div class="empty">暂无资料库数据</div>';
+        }else{
+          bases.forEach(base => basesList.appendChild(renderBaseRow(base)));
+        }
+
+        const toggleBtn = document.getElementById('toggleBasesBtn');
+        const totalBases = library.active_bases_count || bases.length;
+        const showToggle = totalBases > MAX_BASES;
+        toggleBtn.classList.toggle('hidden', !showToggle);
+        if(showToggle){
+          toggleBtn.textContent = state.basesExpanded ? '收起' : '展开全部';
+          toggleBtn.onclick = () => {
+            state.basesExpanded = !state.basesExpanded;
+            renderStudent(studentId);
+          };
+        }
+
+        renderRecentSessions(data.recent_sessions || []);
+        renderTopWrong(data.top_wrong_30d || []);
+      }catch(err){
+        setError(err.message || '加载失败');
+      }finally{
+        setLoading(false);
+      }
+    }
+
+    function selectStudent(studentId, notifyParent = true){
+      if(!studentId) return;
+      state.currentStudentId = studentId;
+      sessionStorage.setItem('dashboard_view', 'student');
+      sessionStorage.setItem('dashboard_student_id', String(studentId));
+      renderStudent(studentId);
+      if(notifyParent && window.parent){
+        window.parent.postMessage({type:'selectStudent', student_id: studentId}, '*');
+      }
+    }
+
+    function selectAllStudents(notifyParent = true){
+      state.currentStudentId = null;
+      state.basesExpanded = false;
+      sessionStorage.setItem('dashboard_view', 'overview');
+      sessionStorage.removeItem('dashboard_student_id');
+      renderOverview();
+      if(notifyParent && window.parent){
+        window.parent.postMessage({type:'selectAllStudents'}, '*');
+      }
+    }
+
+    async function init(){
+      state.currentStudentId = getInitialStudentId();
+      if(state.currentStudentId){
+        await renderStudent(state.currentStudentId);
+      }else{
+        await renderOverview();
+      }
+    }
+
+    window.addEventListener('message', (event) => {
+      if(event.source !== window.parent){
+        return;
+      }
+      if(window.location.origin !== 'null' && event.origin !== window.location.origin){
+        return;
+      }
+      const data = event.data || {};
+      if(data.type === 'selectStudent' && data.student_id){
+        selectStudent(Number(data.student_id), false);
+      }else if(data.type === 'selectAllStudents'){
+        selectAllStudents(false);
+      }
+    });
+
+    init();
+  </script>
 </body>
 </html>

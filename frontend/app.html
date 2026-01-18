@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EnglishLearn</title>
+  <style>
+    * { box-sizing: border-box; }
+    body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:#f6f7fb;color:#1a202c;height:100vh}
+    .app{display:flex;height:100vh}
+    .sidebar{width:220px;background:#0f172a;color:#e2e8f0;display:flex;flex-direction:column;padding:20px 16px}
+    .brand{font-weight:700;font-size:18px;margin-bottom:20px}
+    .menu{display:flex;flex-direction:column;gap:6px}
+    .menu button{background:transparent;border:0;color:#cbd5e1;text-align:left;padding:10px 12px;border-radius:10px;font-size:14px;cursor:pointer}
+    .menu button.active{background:#1e293b;color:#fff}
+    .menu button:hover{background:#1e293b;color:#fff}
+    .main{flex:1;display:flex;flex-direction:column}
+    .topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:#fff;border-bottom:1px solid #e2e8f0;gap:16px}
+    .topbar-left{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+    select{min-width:180px;padding:8px 10px;border-radius:10px;border:1px solid #e2e8f0;font-size:13px}
+    .top-actions{display:flex;align-items:center;gap:10px}
+    .btn{border:1px solid #e2e8f0;background:#fff;color:#0f172a;padding:8px 12px;border-radius:10px;font-size:13px;cursor:pointer}
+    .btn.primary{background:#0f172a;color:#fff;border-color:#0f172a}
+    .content{flex:1;position:relative}
+    iframe{width:100%;height:100%;border:0;background:#fff}
+    .hidden{display:none}
+    .page-title{font-size:18px;font-weight:700;color:#0f172a}
+    .student-picker{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .student-cards{display:flex;gap:10px;flex-wrap:wrap}
+    .student-card{display:flex;align-items:center;gap:10px;border:1px solid #e2e8f0;background:#fff;border-radius:999px;padding:6px 12px;cursor:pointer}
+    .student-card.active{border-color:#0f172a;box-shadow:0 0 0 2px rgba(15,23,42,.08)}
+    .student-avatar{width:44px;height:44px;border-radius:50%;border:1px solid #e2e8f0;background:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden}
+    .student-avatar img{width:100%;height:100%;object-fit:cover}
+    .student-text{display:flex;flex-direction:column;align-items:flex-start;line-height:1.1}
+    .student-name{font-size:14px;font-weight:600;color:#0f172a}
+    .student-grade{font-size:12px;color:#64748b}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">EnglishLearn</div>
+      <div id="menu" class="menu"></div>
+    </aside>
+    <div class="main">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div id="pageTitle" class="page-title hidden"></div>
+          <div id="studentPicker" class="student-picker hidden">
+            <div id="studentCards" class="student-cards hidden"></div>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button id="libraryCreateBtn" class="btn primary hidden">+ 手动创建</button>
+          <button id="libraryImportBtn" class="btn hidden">从文件导入</button>
+          <button id="newStudentBtn" class="btn primary hidden">新建学生</button>
+          <button id="logoutBtn" class="btn">退出登录</button>
+        </div>
+      </div>
+      <div class="content">
+        <iframe id="appFrame" title="app-frame"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const menuItems = [
+      {label: '概览', src: 'dashboard.html'},
+      {label: '生成练习单', src: 'generate.html'},
+      {label: '提交 / 批改', src: 'submit.html'},
+      {label: '练习单管理', src: 'practice.html'},
+      {label: '学习库管理', src: 'knowledge.html'},
+      {label: '资料库维护', src: 'library.html'},
+      {label: '学生管理', src: 'profile.html'}
+    ];
+
+    const AVATARS = [
+      {id: 'rabbit', name: '兔子', emoji: '🐰'},
+      {id: 'fox', name: '狐狸', emoji: '🦊'},
+      {id: 'lion', name: '狮子', emoji: '🦁'},
+      {id: 'tiger', name: '老虎', emoji: '🐯'},
+      {id: 'panda', name: '熊猫', emoji: '🐼'},
+      {id: 'koala', name: '考拉', emoji: '🐨'},
+      {id: 'dog', name: '小狗', emoji: '🐶'},
+      {id: 'cat', name: '小猫', emoji: '🐱'}
+    ];
+
+    const GRADES = [
+      {code: '', label: '未设置'},
+      {code: 'K1', label: '幼儿园 小班'},
+      {code: 'K2', label: '幼儿园 中班'},
+      {code: 'K3', label: '幼儿园 大班'},
+      {code: 'G1', label: '小学 一年级'},
+      {code: 'G2', label: '小学 二年级'},
+      {code: 'G3', label: '小学 三年级'},
+      {code: 'G4', label: '小学 四年级'},
+      {code: 'G5', label: '小学 五年级'},
+      {code: 'G6', label: '小学 六年级'},
+      {code: 'G7', label: '初中 初一'},
+      {code: 'G8', label: '初中 初二'},
+      {code: 'G9', label: '初中 初三'},
+      {code: 'G10', label: '高中 高一'},
+      {code: 'G11', label: '高中 高二'},
+      {code: 'G12', label: '高中 高三'}
+    ];
+
+    const AVATAR_MAP = Object.fromEntries(AVATARS.map(a => [a.id, a]));
+    const GRADE_MAP = Object.fromEntries(GRADES.map(g => [g.code, g.label]));
+
+    const pageMeta = {
+      'dashboard.html': {title: '家长看板'},
+      'generate.html': {title: '生成默写单'},
+      'submit.html': {title: '提交与批改'},
+      'practice.html': {title: '练习单管理'},
+      'knowledge.html': {title: '学习库管理'},
+      'library.html': {title: '资料库维护'},
+      'profile.html': {title: '学生管理'}
+    };
+
+    const state = {
+      students: [],
+      bases: [],
+      currentStudentId: null,
+      currentBaseId: null,
+      currentPage: 'dashboard.html'
+    };
+
+    function apiJSON(path, opts){
+      return fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts || {}))
+        .then(async res => {
+          if(!res.ok){
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || '请求失败');
+          }
+          return res.json();
+        });
+    }
+
+    function getGradeLabel(code){
+      if(!code) return '未设置';
+      return GRADE_MAP[code] || code;
+    }
+
+    function isCustomAvatar(value){
+      return value && !AVATAR_MAP[value];
+    }
+
+    function getAvatarUrl(value){
+      if(!value) return '';
+      if(value.startsWith('http') || value.startsWith('/media/')){
+        return value;
+      }
+      return `/media/${value}`;
+    }
+
+    function getBaseLabel(base){
+      return base.custom_name || base.base_name || `资料库#${base.base_id || base.id}`;
+    }
+
+    function writeCfg(student, base){
+      if(!student){
+        localStorage.setItem('el_cfg', JSON.stringify({student_id: null}));
+        return;
+      }
+      const cfg = {
+        student_id: student.id,
+        student_name: student.name,
+        base_id: base ? base.base_id : null,
+        base_name: base ? getBaseLabel(base) : '',
+        grade_code: student.grade || ''
+      };
+      localStorage.setItem('el_cfg', JSON.stringify(cfg));
+    }
+
+    function renderMenu(){
+      const menu = document.getElementById('menu');
+      menu.innerHTML = '';
+      const current = localStorage.getItem('el_app_page') || 'dashboard.html';
+      menuItems.forEach(item => {
+        const btn = document.createElement('button');
+        btn.textContent = item.label;
+        if(item.src === current){
+          btn.classList.add('active');
+        }
+        btn.addEventListener('click', () => setPage(item.src));
+        menu.appendChild(btn);
+      });
+      setPage(current, true);
+    }
+
+    function normalizePage(src){
+      if(!src) return 'dashboard.html';
+      const trimmed = src.split('?')[0].split('#')[0];
+      const parts = trimmed.split('/');
+      return parts[parts.length - 1] || 'dashboard.html';
+    }
+
+    function isLibraryPage(page){
+      return page === 'library.html' || page === 'library-edit.html' || page === 'library-items.html';
+    }
+
+    function getCurrentPage(){
+      const frame = document.getElementById('appFrame');
+      try{
+        if(frame && frame.contentWindow){
+          return normalizePage(frame.contentWindow.location.pathname);
+        }
+      }catch(e){}
+      return state.currentPage || normalizePage(localStorage.getItem('el_app_page') || 'dashboard.html');
+    }
+
+    function pageRequiresStudent(page){
+      return page === 'generate.html' || page === 'knowledge.html';
+    }
+
+    function pageSupportsAll(page){
+      return page === 'dashboard.html' || page === 'submit.html' || page === 'practice.html';
+    }
+
+    function updateTopbarForPage(src){
+      const page = normalizePage(src);
+      state.currentPage = page;
+      const meta = pageMeta[page];
+      const pageTitle = document.getElementById('pageTitle');
+      const studentPicker = document.getElementById('studentPicker');
+      const isProfile = page === 'profile.html';
+      const isLibrary = page === 'library.html';
+      if(pageTitle && meta){
+        pageTitle.textContent = meta.title || '';
+        pageTitle.classList.remove('hidden');
+      }else if(pageTitle){
+        pageTitle.classList.add('hidden');
+      }
+      if(studentPicker){
+        const hidePicker = isProfile || isLibraryPage(page) || state.students.length === 0;
+        studentPicker.classList.toggle('hidden', hidePicker);
+        if(hidePicker){
+          const cards = document.getElementById('studentCards');
+          if(cards){
+            cards.classList.add('hidden');
+            cards.innerHTML = '';
+          }
+        }
+      }
+      const libraryCreateBtn = document.getElementById('libraryCreateBtn');
+      const libraryImportBtn = document.getElementById('libraryImportBtn');
+      if(libraryCreateBtn && libraryImportBtn){
+        const showLibraryActions = isLibrary;
+        libraryCreateBtn.classList.toggle('hidden', !showLibraryActions);
+        libraryImportBtn.classList.toggle('hidden', !showLibraryActions);
+      }
+      const newBtn = document.getElementById('newStudentBtn');
+      if(newBtn){
+        newBtn.classList.toggle('hidden', !isProfile);
+      }
+    }
+
+    function setPage(src, skipStore){
+      const targetPage = normalizePage(src);
+      if(pageRequiresStudent(targetPage) && state.currentStudentId === null){
+        if((targetPage === 'generate.html' || targetPage === 'knowledge.html') && state.students.length){
+          selectStudent(state.students[0].id, targetPage);
+          return;
+        }
+        alert('请先选择一个学生');
+        return;
+      }
+      if(targetPage === 'dashboard.html'){
+        if(state.currentStudentId === null){
+          sessionStorage.setItem('dashboard_view', 'overview');
+          sessionStorage.removeItem('dashboard_student_id');
+        }else{
+          sessionStorage.setItem('dashboard_view', 'student');
+          sessionStorage.setItem('dashboard_student_id', String(state.currentStudentId));
+        }
+      }
+      const frame = document.getElementById('appFrame');
+      frame.src = src;
+      updateTopbarForPage(src);
+      if(!skipStore){
+        localStorage.setItem('el_app_page', src);
+      }
+      document.querySelectorAll('.menu button').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent === menuItems.find(m => m.src === src)?.label);
+      });
+    }
+
+    function notifyDashboardSelection(payload){
+      const frame = document.getElementById('appFrame');
+      if(!frame || !frame.contentWindow){
+        return;
+      }
+      let page = '';
+      try{
+        page = normalizePage(frame.contentWindow.location.pathname);
+      }catch(e){
+        page = state.currentPage;
+      }
+      if(page !== 'dashboard.html'){
+        return;
+      }
+      frame.contentWindow.postMessage(payload, '*');
+    }
+
+    async function loadStudents(){
+      const res = await apiJSON('/api/students');
+      state.students = res.students || [];
+    }
+
+    async function loadBases(studentId){
+      const res = await apiJSON(`/api/students/${studentId}/learning-bases?is_active=true`);
+      state.bases = res.learning_bases || [];
+    }
+
+    function setContextHint(message, showButton){
+      const hint = document.getElementById('contextHint');
+      if(!hint) return;
+      if(!message){
+        hint.textContent = '';
+        return;
+      }
+      hint.innerHTML = '';
+      const text = document.createElement('span');
+      text.textContent = message;
+      hint.appendChild(text);
+      if(showButton){
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.style.marginLeft = '8px';
+        btn.textContent = '去添加资料库';
+        btn.addEventListener('click', () => setPage('library.html'));
+        hint.appendChild(btn);
+      }
+    }
+
+    function renderStudentCards(){
+      const cards = document.getElementById('studentCards');
+      if(!cards) return;
+      cards.innerHTML = '';
+      const page = getCurrentPage();
+      if(pageSupportsAll(page)){
+        const allBtn = document.createElement('button');
+        allBtn.type = 'button';
+        allBtn.className = 'student-card';
+        allBtn.dataset.id = 'all';
+        if(state.currentStudentId === null){
+          allBtn.classList.add('active');
+        }
+        const allAvatar = document.createElement('span');
+        allAvatar.className = 'student-avatar';
+        allAvatar.textContent = 'ALL';
+        const allText = document.createElement('span');
+        allText.className = 'student-text';
+        const allName = document.createElement('span');
+        allName.className = 'student-name';
+        allName.textContent = '全部学生';
+        const allMeta = document.createElement('span');
+        allMeta.className = 'student-grade';
+        allMeta.textContent = '概览';
+        allText.appendChild(allName);
+        allText.appendChild(allMeta);
+        allBtn.appendChild(allAvatar);
+        allBtn.appendChild(allText);
+        allBtn.addEventListener('click', () => selectAllStudents());
+        cards.appendChild(allBtn);
+      }
+
+      state.students.forEach(student => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'student-card';
+        btn.dataset.id = String(student.id);
+        if(student.id === state.currentStudentId){
+          btn.classList.add('active');
+        }
+
+        const avatar = document.createElement('span');
+        avatar.className = 'student-avatar';
+        const avatarValue = student.avatar || 'rabbit';
+        if(isCustomAvatar(avatarValue)){
+          const img = document.createElement('img');
+          img.src = getAvatarUrl(avatarValue);
+          img.alt = student.name || '学生';
+          avatar.appendChild(img);
+        }else{
+          const meta = AVATAR_MAP[avatarValue] || AVATAR_MAP.rabbit;
+          avatar.textContent = meta ? meta.emoji : '🙂';
+        }
+
+        const text = document.createElement('span');
+        text.className = 'student-text';
+        const name = document.createElement('span');
+        name.className = 'student-name';
+        name.textContent = student.name || '学生';
+        const grade = document.createElement('span');
+        grade.className = 'student-grade';
+        grade.textContent = getGradeLabel(student.grade || '');
+        text.appendChild(name);
+        text.appendChild(grade);
+
+        btn.appendChild(avatar);
+        btn.appendChild(text);
+        btn.addEventListener('click', () => selectStudent(student.id));
+        cards.appendChild(btn);
+      });
+    }
+
+    function syncStudentPicker(){
+      document.querySelectorAll('.student-card').forEach(card => {
+        const rawId = card.dataset.id || '';
+        if(rawId === 'all'){
+          card.classList.toggle('active', state.currentStudentId === null);
+          return;
+        }
+        const id = parseInt(rawId, 10);
+        card.classList.toggle('active', id === state.currentStudentId);
+      });
+    }
+
+    function renderStudentPicker(){
+      const picker = document.getElementById('studentPicker');
+      if(!picker) return;
+      const page = state.currentPage || getCurrentPage();
+      const hidePicker = page === 'profile.html' || isLibraryPage(page) || state.students.length === 0;
+      picker.classList.toggle('hidden', hidePicker);
+      if(hidePicker){
+        return;
+      }
+      const cards = document.getElementById('studentCards');
+      if(cards){
+        cards.classList.remove('hidden');
+      }
+      renderStudentCards();
+      syncStudentPicker();
+    }
+
+    async function selectStudent(studentId, targetPage){
+      if(!studentId || studentId === state.currentStudentId){
+        syncStudentPicker();
+        return;
+      }
+      state.currentStudentId = studentId;
+      sessionStorage.setItem('dashboard_view', 'student');
+      sessionStorage.setItem('dashboard_student_id', String(studentId));
+      notifyDashboardSelection({type: 'selectStudent', student_id: studentId});
+      syncStudentPicker();
+      await loadBases(state.currentStudentId);
+      const student = state.students.find(s => s.id === state.currentStudentId);
+      if(!student){
+        return;
+      }
+      if(state.bases.length === 0){
+        setContextHint('该学生暂无资料库，请先添加资料库。', true);
+        state.currentBaseId = null;
+        writeCfg(student, null);
+        setPage(targetPage || state.currentPage, !targetPage);
+        return;
+      }
+      state.currentBaseId = state.bases[0].base_id;
+      const base = state.bases.find(b => b.base_id === state.currentBaseId);
+      writeCfg(student, base);
+      setContextHint('');
+      setPage(targetPage || state.currentPage, !targetPage);
+    }
+
+    function setAllStudentsState(){
+      state.currentStudentId = null;
+      state.currentBaseId = null;
+      state.bases = [];
+      writeCfg(null, null);
+      setContextHint('');
+      syncStudentPicker();
+    }
+
+    function selectAllStudents(){
+      setAllStudentsState();
+      sessionStorage.setItem('dashboard_view', 'overview');
+      sessionStorage.removeItem('dashboard_student_id');
+      notifyDashboardSelection({type: 'selectAllStudents'});
+      const current = state.currentPage || getCurrentPage();
+      if(pageSupportsAll(current)){
+        setPage(current, true);
+      }else{
+        setPage('dashboard.html');
+      }
+    }
+
+    async function init(){
+      try{
+        await apiJSON('/api/auth/me');
+      }catch(e){
+        window.location.href = '/login.html';
+        return;
+      }
+
+      localStorage.setItem('el_app_page', 'dashboard.html');
+      renderMenu();
+      await loadStudents();
+
+      if(state.students.length === 0){
+        setContextHint('暂无学生，请先在引导页创建。', true);
+        setPage('index.html');
+        renderStudentPicker();
+        return;
+      }
+
+      setAllStudentsState();
+      renderStudentPicker();
+    }
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await fetch('/api/auth/logout', {method: 'POST'});
+      window.location.href = '/login.html';
+    });
+
+    document.getElementById('newStudentBtn').addEventListener('click', () => {
+      const frame = document.getElementById('appFrame');
+      if(frame && frame.contentWindow){
+        frame.contentWindow.postMessage({type: 'openCreateStudent'}, '*');
+      }
+    });
+
+    document.getElementById('libraryCreateBtn').addEventListener('click', () => {
+      const frame = document.getElementById('appFrame');
+      if(frame && frame.contentWindow){
+        frame.contentWindow.postMessage({type: 'openCreateBase'}, '*');
+      }
+    });
+
+    document.getElementById('libraryImportBtn').addEventListener('click', () => {
+      const frame = document.getElementById('appFrame');
+      if(frame && frame.contentWindow){
+        frame.contentWindow.postMessage({type: 'openImportBase'}, '*');
+      }
+    });
+
+    document.getElementById('appFrame').addEventListener('load', () => {
+      const frame = document.getElementById('appFrame');
+      try{
+        if(frame && frame.contentWindow){
+          updateTopbarForPage(frame.contentWindow.location.pathname);
+          renderStudentPicker();
+        }
+      }catch(e){}
+    });
+
+    window.addEventListener('message', (event) => {
+      if(event.source !== document.getElementById('appFrame')?.contentWindow){
+        return;
+      }
+      if(window.location.origin !== 'null' && event.origin !== window.location.origin){
+        return;
+      }
+      const data = event.data || {};
+      if(data.type === 'appPage' && data.page){
+        updateTopbarForPage(data.page);
+        renderStudentPicker();
+        return;
+      }
+      if(data.type === 'selectStudent' && data.student_id){
+        selectStudent(Number(data.student_id));
+        return;
+      }
+      if(data.type === 'selectAllStudents'){
+        selectAllStudents();
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

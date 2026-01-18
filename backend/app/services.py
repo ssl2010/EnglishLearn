@@ -7,6 +7,7 @@ import difflib
 import time
 import logging
 import random
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from .db import db, utcnow_iso
@@ -609,6 +610,27 @@ def _match_session_by_items(conn, student_id: int, base_id: int, items: List[Dic
     }
 
 
+def _resolve_session_by_uuid(conn, worksheet_uuid: str) -> Optional[Dict[str, Any]]:
+    row = conn.execute(
+        """
+        SELECT
+          ps.id,
+          ps.student_id,
+          ps.base_id,
+          s.name AS student_name,
+          b.name AS base_name
+        FROM practice_sessions ps
+        LEFT JOIN students s ON s.id = ps.student_id
+        LEFT JOIN bases b ON b.id = ps.base_id
+        WHERE ps.practice_uuid = ?
+        ORDER BY ps.id DESC
+        LIMIT 1
+        """,
+        (worksheet_uuid,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
 def _bbox_to_abs(bbox: List[float], w: int, h: int) -> Optional[Tuple[int, int, int, int]]:
     try:
         x1, y1, x2, y2 = [float(v) for v in bbox]
@@ -801,6 +823,13 @@ def get_mastery_threshold() -> int:
         return max(1, int(get_setting("mastery_threshold", "2")))
     except Exception:
         return 2
+
+def get_weekly_target_days() -> int:
+    try:
+        value = int(get_setting("weekly_target_days", "4"))
+        return max(1, min(7, value))
+    except Exception:
+        return 4
 
 def ensure_media_dir() -> None:
     os.makedirs(MEDIA_DIR, exist_ok=True)
@@ -1724,7 +1753,7 @@ def analyze_ai_photos_from_debug(student_id: int, base_id: int) -> Dict:
     }
 
 
-def analyze_ai_photos(student_id: int, base_id: int = None, uploads: List[UploadFile] = None) -> Dict:
+def analyze_ai_photos(student_id: Optional[int], base_id: Optional[int] = None, uploads: List[UploadFile] = None) -> Dict:
     """LLM analysis + Baidu OCR recognition with merging.
 
     Args:
@@ -1749,12 +1778,21 @@ def analyze_ai_photos(student_id: int, base_id: int = None, uploads: List[Upload
 
     logger = logging.getLogger("uvicorn.error")
 
+    student_id = int(student_id) if student_id else None
+    base_id = int(base_id) if base_id else None
+    resolved_student_id = student_id
+    resolved_base_id = base_id
+    resolved_student_name = None
+    resolved_base_name = None
+    resolved_session_id = None
+
     img_bytes_list: List[bytes] = []
     saved_paths: List[str] = []
+    file_student_id = resolved_student_id or 0
     for idx, upload in enumerate(uploads, start=1):
         raw_bytes = upload.file.read()
         img_bytes, ext = _normalize_upload_image(raw_bytes, upload.filename or "")
-        fname = f"ai_sheet_{student_id}_{idx}_{uuid.uuid4().hex}{ext}"
+        fname = f"ai_sheet_{file_student_id}_{idx}_{uuid.uuid4().hex}{ext}"
         out_path = os.path.join(MEDIA_DIR, "uploads", fname)
         img_bytes_list.append(img_bytes)
         saved_paths.append(out_path)
@@ -2501,7 +2539,7 @@ def analyze_ai_photos(student_id: int, base_id: int = None, uploads: List[Upload
                 else:
                     # Incorrect: draw red ellipse around the answer
                     draw_red_circle(draw, abs_bbox, color="#ef4444", width=6)
-            graded_fname = f"graded_{student_id}_{page_idx + 1}_{uuid.uuid4().hex}.jpg"
+            graded_fname = f"graded_{file_student_id}_{page_idx + 1}_{uuid.uuid4().hex}.jpg"
             graded_path = os.path.join(MEDIA_DIR, "uploads", "graded", graded_fname)
             img.save(graded_path, format="JPEG", quality=90)
             graded_image_urls.append(f"/media/uploads/graded/{graded_fname}")
@@ -2509,20 +2547,34 @@ def analyze_ai_photos(student_id: int, base_id: int = None, uploads: List[Upload
             logger.error(f"[AI GRADING] Failed to generate graded image: {e}")
             graded_image_urls.append("")
 
+    # Extract UUID from OCR results
+    uuid_info = _extract_uuid_from_ocr(ocr_raw)
+    if uuid_info.get("uuid"):
+        logger.info(f"[AI GRADING] Extracted UUID: {uuid_info['uuid']} (conf={uuid_info['confidence']:.2f}, consistent={uuid_info['consistent']})")
+
+    if resolved_student_id is None or resolved_base_id is None:
+        if uuid_info.get("uuid"):
+            with db() as conn:
+                resolved = _resolve_session_by_uuid(conn, uuid_info["uuid"])
+            if resolved:
+                resolved_session_id = int(resolved.get("id"))
+                resolved_student_id = int(resolved.get("student_id"))
+                resolved_base_id = int(resolved.get("base_id"))
+                resolved_student_name = resolved.get("student_name")
+                resolved_base_name = resolved.get("base_name")
+        if resolved_student_id is None or resolved_base_id is None:
+            raise ValueError("未能匹配练习单编号对应的学生，请确认练习单编号清晰且已生成。")
+
     # Match to existing session
     matched_session = None
-    with db() as conn:
-        matched_session = _match_session_by_items(conn, student_id, base_id, items)
+    if resolved_student_id is not None and resolved_base_id is not None:
+        with db() as conn:
+            matched_session = _match_session_by_items(conn, resolved_student_id, resolved_base_id, items)
 
     # Extract date from OCR results
     extracted_date = _extract_date_from_ocr(ocr_raw)
     if extracted_date:
         logger.info(f"[AI GRADING] Extracted date from OCR: {extracted_date}")
-
-    # Extract UUID from OCR results
-    uuid_info = _extract_uuid_from_ocr(ocr_raw)
-    if uuid_info.get("uuid"):
-        logger.info(f"[AI GRADING] Extracted UUID: {uuid_info['uuid']} (conf={uuid_info['confidence']:.2f}, consistent={uuid_info['consistent']})")
 
     if os.environ.get("EL_AI_DEBUG_SAVE", "1") == "1":
         _save_debug_bundle(img_bytes_list, llm_raw or {}, ocr_raw or {})
@@ -2541,6 +2593,11 @@ def analyze_ai_photos(student_id: int, base_id: int = None, uploads: List[Upload
         "worksheet_uuid": uuid_info.get("uuid"),
         "uuid_info": uuid_info,
         "bundle_id": bundle_id,
+        "resolved_student_id": resolved_student_id,
+        "resolved_base_id": resolved_base_id,
+        "resolved_student_name": resolved_student_name,
+        "resolved_base_name": resolved_base_name,
+        "resolved_session_id": resolved_session_id,
     }
 
 
@@ -3652,7 +3709,7 @@ def list_sessions(student_id: int, base_id: int, limit: int = 30) -> List[Dict]:
 
 
 def search_practice_sessions(
-    student_id: int,
+    student_id: Optional[int],
     base_id: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -3664,10 +3721,14 @@ def search_practice_sessions(
     base_sql = """
         FROM practice_sessions ps
         LEFT JOIN bases b ON ps.base_id = b.id
-        WHERE ps.student_id = ?
+        WHERE 1 = 1
     """
-    params: List[Any] = [student_id]
+    params: List[Any] = []
     filters: List[str] = []
+
+    if student_id is not None:
+        filters.append("ps.student_id = ?")
+        params.append(student_id)
 
     if base_id is not None:
         filters.append("ps.base_id = ?")
@@ -4256,6 +4317,217 @@ def get_system_status(student_id: int, base_id: int) -> Dict:
     }
 
 
+_TZ_UTC8 = timezone(timedelta(hours=8))
+
+
+def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        text = str(value)
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        try:
+            dt = datetime.fromisoformat(text)
+        except Exception:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _to_utc8_date(value: Optional[str]) -> Optional[datetime.date]:
+    dt = _parse_iso_datetime(value)
+    if not dt:
+        return None
+    return dt.astimezone(_TZ_UTC8).date()
+
+
+def _format_utc8_date(value: Optional[str]) -> Optional[str]:
+    d = _to_utc8_date(value)
+    return d.isoformat() if d else None
+
+
+def _normalize_base_label(custom_name: Optional[str], base_name: Optional[str], base_id: int) -> str:
+    custom = (custom_name or "").strip()
+    base = (base_name or "").strip()
+    return custom or base or f"资料库#{base_id}"
+
+
+def _get_active_learning_bases(conn, student_id: int) -> List[Dict]:
+    rows = conn.execute(
+        """
+        SELECT
+          slb.base_id,
+          slb.custom_name,
+          slb.current_unit,
+          slb.display_order,
+          b.name AS base_name
+        FROM student_learning_bases slb
+        JOIN bases b ON b.id = slb.base_id
+        WHERE slb.student_id = ? AND slb.is_active = 1
+        ORDER BY slb.display_order, slb.id
+        """,
+        (student_id,),
+    ).fetchall()
+
+    bases = []
+    for row in rows:
+        data = dict(row)
+        base_id = int(data.get("base_id") or 0)
+        data["label"] = _normalize_base_label(data.get("custom_name"), data.get("base_name"), base_id)
+        bases.append(data)
+    return bases
+
+
+def _get_week_bits(conn, student_id: int, base_ids: List[int]) -> Tuple[str, int]:
+    if not base_ids:
+        return "0000000", 0
+    placeholders = ",".join(["?"] * len(base_ids))
+    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    rows = conn.execute(
+        f"""
+        SELECT created_at
+        FROM practice_sessions
+        WHERE student_id = ?
+          AND base_id IN ({placeholders})
+          AND created_at >= ?
+        """,
+        [student_id, *base_ids, cutoff.isoformat()],
+    ).fetchall()
+
+    practice_dates = set()
+    for row in rows:
+        d = _to_utc8_date(row["created_at"])
+        if d:
+            practice_dates.add(d)
+
+    today = datetime.now(_TZ_UTC8).date()
+    week_start = today - timedelta(days=today.weekday())
+    week_days = [week_start + timedelta(days=i) for i in range(7)]
+    bits = "".join("1" if d in practice_dates else "0" for d in week_days)
+    return bits, sum(1 for d in week_days if d in practice_dates)
+
+
+def _get_library_stats(
+    conn,
+    student_id: int,
+    base_ids: List[int],
+    days: int,
+    mastery_threshold: int,
+) -> Dict[str, Any]:
+    stats = {
+        "total_items": 0,
+        "learned_items": 0,
+        "mastered_items": 0,
+        "coverage_rate": 0,
+        "mastery_rate_in_learned": None,
+        "practice_days_30d": 0,
+        "wrong_items_30d": 0,
+        "week_bits": "0000000",
+        "week_practice_days": 0,
+        "last_practice_at": None,
+    }
+    if not base_ids:
+        return stats
+
+    placeholders = ",".join(["?"] * len(base_ids))
+    total_row = conn.execute(
+        f"SELECT COUNT(1) AS c FROM items WHERE base_id IN ({placeholders})",
+        base_ids,
+    ).fetchone()
+    learned_row = conn.execute(
+        f"""
+        SELECT COUNT(1) AS c
+        FROM student_item_stats sis
+        JOIN items i ON i.id = sis.item_id
+        WHERE sis.student_id = ?
+          AND i.base_id IN ({placeholders})
+          AND sis.total_attempts > 0
+        """,
+        [student_id, *base_ids],
+    ).fetchone()
+    mastered_row = conn.execute(
+        f"""
+        SELECT COUNT(1) AS c
+        FROM student_item_stats sis
+        JOIN items i ON i.id = sis.item_id
+        WHERE sis.student_id = ?
+          AND i.base_id IN ({placeholders})
+          AND sis.consecutive_correct >= ?
+        """,
+        [student_id, *base_ids, mastery_threshold],
+    ).fetchone()
+
+    total = int(total_row["c"]) if total_row else 0
+    learned = int(learned_row["c"]) if learned_row else 0
+    mastered = int(mastered_row["c"]) if mastered_row else 0
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff_iso = cutoff.isoformat()
+
+    wrong_row = conn.execute(
+        f"""
+        SELECT COUNT(DISTINCT ei.item_id) AS c
+        FROM practice_results pr
+        JOIN practice_sessions ps ON ps.id = pr.session_id
+        JOIN exercise_items ei ON ei.id = pr.exercise_item_id
+        WHERE ps.student_id = ?
+          AND ps.base_id IN ({placeholders})
+          AND pr.is_correct = 0
+          AND pr.created_at >= ?
+          AND ei.item_id IS NOT NULL
+        """,
+        [student_id, *base_ids, cutoff_iso],
+    ).fetchone()
+
+    session_rows = conn.execute(
+        f"""
+        SELECT created_at
+        FROM practice_sessions
+        WHERE student_id = ?
+          AND base_id IN ({placeholders})
+          AND created_at >= ?
+        """,
+        [student_id, *base_ids, cutoff_iso],
+    ).fetchall()
+
+    practice_dates = set()
+    for row in session_rows:
+        d = _to_utc8_date(row["created_at"])
+        if d:
+            practice_dates.add(d)
+
+    last_row = conn.execute(
+        f"""
+        SELECT MAX(created_at) AS t
+        FROM practice_sessions
+        WHERE student_id = ? AND base_id IN ({placeholders})
+        """,
+        [student_id, *base_ids],
+    ).fetchone()
+
+    week_bits, week_days = _get_week_bits(conn, student_id, base_ids)
+
+    stats.update(
+        {
+            "total_items": total,
+            "learned_items": learned,
+            "mastered_items": mastered,
+            "coverage_rate": (learned / total) if total else 0,
+            "mastery_rate_in_learned": (mastered / learned) if learned else None,
+            "practice_days_30d": len(practice_dates),
+            "wrong_items_30d": int(wrong_row["c"]) if wrong_row else 0,
+            "week_bits": week_bits,
+            "week_practice_days": week_days,
+            "last_practice_at": _format_utc8_date(last_row["t"] if last_row else None),
+        }
+    )
+    return stats
+
+
 def get_dashboard(student_id: int, base_id: int, days: int = 30) -> Dict:
     """家长看板（基础版）：已学/已掌握/易错/最近练习/日历"""
     with db() as conn:
@@ -4339,6 +4611,200 @@ def get_dashboard(student_id: int, base_id: int, days: int = 30) -> Dict:
         "top_wrong": [dict(r) for r in wrong_top],
         "recent_sessions": sessions_out,
         "calendar_days": cal_rows,
+    }
+
+
+def _media_url(path: Optional[str]) -> Optional[str]:
+    if not path:
+        return None
+    return f"/media/{os.path.basename(path)}"
+
+
+def get_dashboard_overview(days: int = 30) -> Dict[str, Any]:
+    mastery_threshold = get_mastery_threshold()
+    weekly_target_days = get_weekly_target_days()
+    with db() as conn:
+        students = conn.execute(
+            "SELECT id, name, grade, avatar FROM students ORDER BY id LIMIT 3"
+        ).fetchall()
+
+        students_out = []
+        for row in students:
+            student = dict(row)
+            student_id = int(student["id"])
+            active_bases = _get_active_learning_bases(conn, student_id)
+            base_ids = [int(b["base_id"]) for b in active_bases]
+            stats = _get_library_stats(conn, student_id, base_ids, days, mastery_threshold)
+
+            students_out.append(
+                {
+                    "student_id": student_id,
+                    "student_name": student.get("name") or "",
+                    "grade": student.get("grade") or "",
+                    "avatar": student.get("avatar") or "",
+                    "active_bases_count": len(base_ids),
+                    "total_items": stats["total_items"],
+                    "learned_items": stats["learned_items"],
+                    "mastered_items": stats["mastered_items"],
+                    "coverage_rate": stats["coverage_rate"],
+                    "mastery_rate_in_learned": stats["mastery_rate_in_learned"],
+                    "week_bits": stats["week_bits"],
+                    "week_practice_days": stats["week_practice_days"],
+                    "wrong_items_30d": stats["wrong_items_30d"],
+                    "last_practice_at": stats["last_practice_at"],
+                }
+            )
+
+    return {
+        "days": days,
+        "weekly_target_days": weekly_target_days,
+        "mastery_threshold": mastery_threshold,
+        "students": students_out,
+    }
+
+
+def get_dashboard_student(student_id: int, days: int = 30, max_bases: int = 6) -> Dict[str, Any]:
+    mastery_threshold = get_mastery_threshold()
+    weekly_target_days = get_weekly_target_days()
+    with db() as conn:
+        student_row = conn.execute(
+            "SELECT id, name, grade, avatar FROM students WHERE id = ?",
+            (student_id,),
+        ).fetchone()
+        if not student_row:
+            raise ValueError("student not found")
+
+        student = dict(student_row)
+        active_bases = _get_active_learning_bases(conn, student_id)
+        base_ids = [int(b["base_id"]) for b in active_bases]
+        base_label_map = {int(b["base_id"]): b["label"] for b in active_bases}
+
+        library_stats = _get_library_stats(conn, student_id, base_ids, days, mastery_threshold)
+        library_stats["active_bases_count"] = len(base_ids)
+
+        bases_stats = {}
+        if base_ids:
+            placeholders = ",".join(["?"] * len(base_ids))
+            rows = conn.execute(
+                f"""
+                SELECT
+                  i.base_id AS base_id,
+                  COUNT(i.id) AS total,
+                  COUNT(CASE WHEN sis.total_attempts > 0 THEN 1 END) AS learned,
+                  COUNT(CASE WHEN sis.consecutive_correct >= ? THEN 1 END) AS mastered
+                FROM items i
+                LEFT JOIN student_item_stats sis
+                  ON sis.item_id = i.id AND sis.student_id = ?
+                WHERE i.base_id IN ({placeholders})
+                GROUP BY i.base_id
+                """,
+                [mastery_threshold, student_id, *base_ids],
+            ).fetchall()
+            bases_stats = {int(r["base_id"]): dict(r) for r in rows}
+
+        bases_rows = []
+        for base in active_bases:
+            if len(bases_rows) >= max_bases:
+                break
+            base_id = int(base["base_id"])
+            stat = bases_stats.get(base_id, {})
+            total = int(stat.get("total") or 0)
+            learned = int(stat.get("learned") or 0)
+            mastered = int(stat.get("mastered") or 0)
+            bases_rows.append(
+                {
+                    "base_id": base_id,
+                    "label": base.get("label") or f"资料库#{base_id}",
+                    "current_unit": base.get("current_unit"),
+                    "total": total,
+                    "learned": learned,
+                    "mastered": mastered,
+                    "coverage_rate": (learned / total) if total else 0,
+                    "mastery_rate_in_learned": (mastered / learned) if learned else None,
+                }
+            )
+
+        recent_sessions = []
+        if base_ids:
+            placeholders = ",".join(["?"] * len(base_ids))
+            rows = conn.execute(
+                f"""
+                SELECT
+                  ps.id,
+                  ps.status,
+                  ps.created_at,
+                  ps.corrected_at,
+                  ps.base_id,
+                  ps.pdf_path,
+                  ps.answer_pdf_path,
+                  (SELECT COUNT(1) FROM exercise_items ei WHERE ei.session_id = ps.id) AS item_count,
+                  (SELECT COUNT(1) FROM submissions s WHERE s.session_id = ps.id) AS submission_count
+                FROM practice_sessions ps
+                WHERE ps.student_id = ? AND ps.base_id IN ({placeholders})
+                ORDER BY ps.id DESC
+                LIMIT 10
+                """,
+                [student_id, *base_ids],
+            ).fetchall()
+
+            for row in rows:
+                data = dict(row)
+                base_id = int(data.get("base_id") or 0)
+                data["base_label"] = base_label_map.get(base_id, f"资料库#{base_id}")
+                data["pdf_url"] = _media_url(data.get("pdf_path"))
+                data["answer_pdf_url"] = _media_url(data.get("answer_pdf_path"))
+                recent_sessions.append(data)
+
+        top_wrong = []
+        if base_ids:
+            placeholders = ",".join(["?"] * len(base_ids))
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+            rows = conn.execute(
+                f"""
+                SELECT
+                  i.en_text,
+                  i.item_type,
+                  i.base_id,
+                  COUNT(1) AS wrong_count,
+                  MAX(pr.created_at) AS last_wrong_at
+                FROM practice_results pr
+                JOIN practice_sessions ps ON ps.id = pr.session_id
+                JOIN exercise_items ei ON ei.id = pr.exercise_item_id
+                JOIN items i ON i.id = ei.item_id
+                WHERE ps.student_id = ?
+                  AND ps.base_id IN ({placeholders})
+                  AND pr.is_correct = 0
+                  AND pr.created_at >= ?
+                GROUP BY i.id
+                ORDER BY wrong_count DESC, last_wrong_at DESC
+                LIMIT 10
+                """,
+                [student_id, *base_ids, cutoff.isoformat()],
+            ).fetchall()
+            for row in rows:
+                data = dict(row)
+                base_id = int(data.get("base_id") or 0)
+                data["base_label"] = base_label_map.get(base_id, f"资料库#{base_id}")
+                top_wrong.append(data)
+
+    return {
+        "student": {
+            "id": int(student.get("id")),
+            "name": student.get("name") or "",
+            "grade": student.get("grade") or "",
+            "avatar": student.get("avatar") or "",
+        },
+        "days": days,
+        "weekly_target_days": weekly_target_days,
+        "mastery_threshold": mastery_threshold,
+        "library": library_stats,
+        "bases": {
+            "truncated": len(base_ids) > max_bases,
+            "max_bases": max_bases,
+            "rows": bases_rows,
+        },
+        "recent_sessions": recent_sessions,
+        "top_wrong_30d": top_wrong,
     }
 
 

@@ -7,7 +7,7 @@
   <style>
     * { box-sizing: border-box; }
     body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;margin:0;background:#f6f7fb;color:#1a202c;line-height:1.5}
-    .wrap{max-width:1200px;margin:0 auto;padding:32px 24px}
+    .wrap{max-width:1280px;margin:0 auto;padding:32px 24px}
     .card{background:#fff;border-radius:16px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,.1),0 1px 2px rgba(0,0,0,.06);margin-bottom:24px}
     a{color:#0b5fff;text-decoration:none;transition:color 0.2s}
     a:hover{color:#0847cc}
@@ -58,6 +58,7 @@
     }
     .badge.system{background:#dbeafe;color:#1e40af}
     .badge.custom{background:#fef3c7;color:#92400e}
+    .badge.readonly{background:#f1f5f9;color:#475569}
 
     .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
     .modal.active{display:flex}
@@ -93,6 +94,9 @@
       font-size:20px;
       font-weight:700;
       color:#1a202c;
+    }
+    .section-meta{
+      margin-top:6px;
     }
 
     .btn-group{
@@ -144,32 +148,26 @@
       padding:48px 24px;
       color:#718096;
     }
+    .hidden{display:none}
   </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
-    <div class="page-header">
+    <div class="section-header">
       <div>
-        <h2>资料库维护</h2>
-        <div class="muted" style="margin-top:8px">管理资料库及其知识点内容。调试模式下具备全部管理功能。</div>
-      </div>
-      <div style="display:flex;gap:12px">
-        <a href="/" style="padding:11px 20px;background:#fff;color:#1a202c;border:1.5px solid #e2e8f0;border-radius:10px;text-decoration:none;font-size:14px;font-weight:500">← 返回引导页</a>
-        <a href="/knowledge.html" style="padding:11px 20px;background:#fff;color:#1a202c;border:1.5px solid #e2e8f0;border-radius:10px;text-decoration:none;font-size:14px;font-weight:500">学习库管理</a>
+        <h3>系统资料库列表</h3>
+        <div id="systemEditHint" class="muted section-meta hidden">仅管理员可编辑</div>
       </div>
     </div>
+    <div id="systemBasesList" class="muted">加载中...</div>
   </div>
 
   <div class="card">
     <div class="section-header">
-      <h3>资料库列表</h3>
-      <div class="btn-group">
-        <button onclick="openCreateBaseModal()">+ 手动创建</button>
-        <button class="secondary" onclick="openImportBaseModal()">📁 从文件导入</button>
-      </div>
+      <h3>自定义资料库列表</h3>
     </div>
-    <div id="basesList" class="muted">加载中...</div>
+    <div id="customBasesList" class="muted">加载中...</div>
   </div>
 </div>
 
@@ -236,6 +234,14 @@
         <strong>提示：</strong>系统将自动从文件中提取所有信息，无需手动填写。
       </div>
     </div>
+    <div class="form-group">
+      <label>类型 <span style="color:#dc2626">*</span></label>
+      <select id="importBaseIsSystem">
+        <option value="false">自定义资料库</option>
+        <option value="true">系统资料库</option>
+      </select>
+      <div class="form-hint">仅管理员可导入系统资料库</div>
+    </div>
 
     <div class="btn-group" style="justify-content:flex-end">
       <button class="secondary" onclick="closeImportBaseModal()">取消</button>
@@ -266,73 +272,131 @@ async function apiJSON(path, opts){
   return res.json();
 }
 
+let isSuperAdmin = false;
+let basesCache = [];
+
+async function loadAccount(){
+  try{
+    const res = await apiJSON('/api/auth/me');
+    isSuperAdmin = Boolean(res.account && res.account.is_super_admin);
+  }catch(e){
+    isSuperAdmin = false;
+  }
+  const hint = document.getElementById('systemEditHint');
+  if(hint){
+    hint.classList.toggle('hidden', isSuperAdmin);
+  }
+  const systemOption = document.querySelector('#baseIsSystem option[value="true"]');
+  if(systemOption){
+    systemOption.disabled = !isSuperAdmin;
+  }
+  const importSystemOption = document.querySelector('#importBaseIsSystem option[value="true"]');
+  if(importSystemOption){
+    importSystemOption.disabled = !isSuperAdmin;
+  }
+}
+
+function renderBaseItem(b, allowEdit){
+  const typeTag = b.is_system ? 'system' : 'custom';
+  const typeLabel = b.is_system ? '系统' : '自定义';
+  const allowExport = isSuperAdmin || !b.is_system;
+
+  const coverHtml = b.cover_image
+    ? `<img src="${b.cover_image}" alt="封面" style="width:60px;height:80px;object-fit:cover;border-radius:8px;margin-right:16px;border:1px solid #e2e8f0" />`
+    : `<div style="width:60px;height:80px;background:#f0f0f0;border-radius:8px;margin-right:16px;display:flex;align-items:center;justify-content:center;color:#999;font-size:11px;text-align:center;border:1px solid #e2e8f0">无封面</div>`;
+
+  const metaTags = [];
+  if(b.education_stage && b.grade){
+    metaTags.push(`${b.education_stage} ${b.grade}`);
+  }else if(b.education_stage){
+    metaTags.push(b.education_stage);
+  }else if(b.grade){
+    metaTags.push(b.grade);
+  }
+  if(b.term) metaTags.push(b.term);
+  if(b.version) metaTags.push(b.version);
+  if(b.publisher) metaTags.push(b.publisher);
+  if(b.editor) metaTags.push(`主编: ${b.editor}`);
+
+  const metaHtml = metaTags.length > 0
+    ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">
+        ${metaTags.map(tag => `<span style="font-size:12px;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:4px">${tag}</span>`).join('')}
+      </div>`
+    : '';
+
+  const readonlyBadge = !allowEdit && b.is_system
+    ? '<span class="badge readonly">只读</span>'
+    : '';
+  const exportButton = allowExport
+    ? `<button class="secondary" onclick="exportBase(${b.id}, this)" style="padding:8px 16px;font-size:13px">导出</button>`
+    : '';
+  const actions = allowEdit
+    ? `<div class="btn-group" style="flex-shrink:0">
+         ${exportButton}
+         <a href="library-edit.html?base_id=${b.id}" style="padding:8px 16px;font-size:13px;background:#1a202c;color:#fff;border-radius:10px;text-decoration:none;display:inline-block;font-weight:500">编辑</a>
+         <button class="danger" onclick="deleteBase(${b.id}, '${b.name}')" style="padding:8px 16px;font-size:13px">删除</button>
+       </div>`
+    : (allowExport
+      ? `<div class="btn-group" style="flex-shrink:0">${exportButton}</div>`
+      : `<div class="muted" style="flex-shrink:0">仅查看</div>`);
+
+  return `
+    <div class="base-item">
+      <div class="base-item-header">
+        ${coverHtml}
+        <div style="flex:1">
+          <div class="base-item-title">
+            ${b.name}
+            <span class="badge ${typeTag}">${typeLabel}</span>
+            ${readonlyBadge}
+          </div>
+          ${b.description ? `<div class="base-item-desc">${b.description}</div>` : ''}
+          ${metaHtml}
+        </div>
+        ${actions}
+      </div>
+    </div>
+  `;
+}
+
+function renderBaseList(listEl, bases, allowEdit, emptyText){
+  if(!listEl) return;
+  if(!bases.length){
+    listEl.innerHTML = `<div class="empty-state">${emptyText}</div>`;
+    return;
+  }
+  listEl.innerHTML = bases.map(b => renderBaseItem(b, allowEdit)).join('');
+}
+
 async function loadBases(){
+  const systemList = document.getElementById('systemBasesList');
+  const customList = document.getElementById('customBasesList');
   try{
     const res = await apiJSON('/api/knowledge-bases');
     const bases = res.bases || [];
-    if(bases.length === 0){
-      document.getElementById('basesList').innerHTML = '<div class="empty-state">暂无资料库，点击"+ 创建资料库"开始</div>';
-      return;
-    }
-
-    const html = bases.map(b => {
-      const typeTag = b.is_system ? 'system' : 'custom';
-      const typeLabel = b.is_system ? '系统' : '自定义';
-
-      // Cover image display
-      const coverHtml = b.cover_image
-        ? `<img src="${b.cover_image}" alt="封面" style="width:60px;height:80px;object-fit:cover;border-radius:8px;margin-right:16px;border:1px solid #e2e8f0" />`
-        : `<div style="width:60px;height:80px;background:#f0f0f0;border-radius:8px;margin-right:16px;display:flex;align-items:center;justify-content:center;color:#999;font-size:11px;text-align:center;border:1px solid #e2e8f0">无封面</div>`;
-
-      // Build metadata tags
-      const metaTags = [];
-      if(b.education_stage && b.grade){
-        metaTags.push(`${b.education_stage} ${b.grade}`);
-      }else if(b.education_stage){
-        metaTags.push(b.education_stage);
-      }else if(b.grade){
-        metaTags.push(b.grade);
-      }
-      if(b.term) metaTags.push(b.term);
-      if(b.version) metaTags.push(b.version);
-      if(b.publisher) metaTags.push(b.publisher);
-      if(b.editor) metaTags.push(`主编: ${b.editor}`);
-
-      const metaHtml = metaTags.length > 0
-        ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">
-            ${metaTags.map(tag => `<span style="font-size:12px;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:4px">${tag}</span>`).join('')}
-          </div>`
-        : '';
-
-      return `
-        <div class="base-item">
-          <div class="base-item-header">
-            ${coverHtml}
-            <div style="flex:1">
-              <div class="base-item-title">
-                ${b.name}
-                <span class="badge ${typeTag}">${typeLabel}</span>
-              </div>
-              ${b.description ? `<div class="base-item-desc">${b.description}</div>` : ''}
-              ${metaHtml}
-            </div>
-            <div class="btn-group" style="flex-shrink:0">
-              <a href="library-edit.html?base_id=${b.id}" style="padding:8px 16px;font-size:13px;background:#1a202c;color:#fff;border-radius:10px;text-decoration:none;display:inline-block;font-weight:500">编辑</a>
-              <button class="danger" onclick="deleteBase(${b.id}, '${b.name}')" style="padding:8px 16px;font-size:13px">删除</button>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-    document.getElementById('basesList').innerHTML = html;
+    basesCache = bases;
+    const systemBases = bases.filter(b => b.is_system);
+    const customBases = bases.filter(b => !b.is_system);
+    renderBaseList(systemList, systemBases, isSuperAdmin, '暂无系统资料库');
+    renderBaseList(customList, customBases, true, '暂无自定义资料库，点击"+ 手动创建"开始');
   }catch(e){
-    document.getElementById('basesList').innerHTML = `<div class="empty-state" style="color:#dc2626">加载失败: ${e.message}</div>`;
+    basesCache = [];
+    if(systemList){
+      systemList.innerHTML = `<div class="empty-state" style="color:#dc2626">加载失败: ${e.message}</div>`;
+    }
+    if(customList){
+      customList.innerHTML = `<div class="empty-state" style="color:#dc2626">加载失败: ${e.message}</div>`;
+    }
   }
 }
 
 function openCreateBaseModal(){
   document.getElementById('baseName').value = '';
-  document.getElementById('baseIsSystem').value = 'false';
+  const systemSelect = document.getElementById('baseIsSystem');
+  if(systemSelect){
+    systemSelect.value = 'false';
+    systemSelect.disabled = !isSuperAdmin;
+  }
   document.getElementById('baseCoverImage').value = '';
   document.getElementById('baseDescription').value = '';
   document.getElementById('createMsg').innerText = '';
@@ -343,9 +407,151 @@ function closeBaseModal(){
   document.getElementById('baseModal').classList.remove('active');
 }
 
+function sanitizeFilename(name){
+  const fallback = 'knowledge-base';
+  const text = (name || '').toString().trim();
+  if(!text) return fallback;
+  return text.replace(/[\\/:*?"<>|]/g, '_');
+}
+
+function buildBaseExportMeta(base){
+  const meta = { name: base.name };
+  if(base.grade_code) meta.grade_code = base.grade_code;
+  if(base.education_stage) meta.education_stage = base.education_stage;
+  if(base.grade) meta.grade = base.grade;
+  if(base.term) meta.term = base.term;
+  if(base.version) meta.version = base.version;
+  if(base.publisher) meta.publisher = base.publisher;
+  if(base.editor) meta.editor = base.editor;
+  if(base.description) meta.description = base.description;
+  if(base.cover_image) meta.cover_image = base.cover_image;
+  return meta;
+}
+
+function findBaseById(baseId){
+  return basesCache.find(b => b.id === baseId);
+}
+
+function blobToDataUrl(blob){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('封面读取失败'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function fetchCoverAsset(coverUrl){
+  if(!coverUrl) return null;
+  const res = await fetch(coverUrl, {cache: 'no-cache'});
+  if(!res.ok){
+    throw new Error('封面获取失败');
+  }
+  const blob = await res.blob();
+  if(!blob.type || !blob.type.startsWith('image/')){
+    throw new Error('封面不是图片格式');
+  }
+  const dataUrl = await blobToDataUrl(blob);
+  return {id: 'cover', content: dataUrl};
+}
+
+async function exportBase(baseId, btn){
+  const base = findBaseById(baseId);
+  if(!base){
+    alert('资料库信息不存在，请刷新页面后重试。');
+    return;
+  }
+  if(!isSuperAdmin && base.is_system){
+    alert('仅管理员可导出系统资料库。');
+    return;
+  }
+
+  const originalText = btn ? btn.textContent : '';
+  if(btn){
+    if(btn.dataset.exporting === '1') return;
+    btn.dataset.exporting = '1';
+    btn.disabled = true;
+    btn.textContent = '导出中...';
+  }
+
+  try{
+    const [itemsRes, unitsRes] = await Promise.all([
+      apiJSON(`/api/knowledge-bases/${baseId}/items`),
+      apiJSON(`/api/knowledge-bases/${baseId}/units`)
+    ]);
+
+    const items = (itemsRes.items || []).map(item => {
+      const mapped = {
+        type: (item.item_type || 'WORD').toUpperCase(),
+        unit_code: item.unit || '__ALL__',
+        en_text: item.en_text || '',
+        zh_hint: item.zh_text || ''
+      };
+      if(item.difficulty_tag){
+        mapped.difficulty_tag = item.difficulty_tag;
+      }
+      return mapped;
+    });
+
+    const unitMeta = (unitsRes.units || []).map(unit => {
+      const mapped = { unit_code: unit.unit_code };
+      if(unit.unit_name) mapped.unit_name = unit.unit_name;
+      if(unit.unit_index !== null && unit.unit_index !== undefined) mapped.unit_index = unit.unit_index;
+      if(unit.description) mapped.description = unit.description;
+      return mapped;
+    });
+
+    const payload = {
+      format: 'EL_KB_V1_UNITMETA',
+      base: buildBaseExportMeta(base),
+      items,
+      unit_meta: unitMeta
+    };
+
+    if(base.cover_image){
+      try{
+        const coverAsset = await fetchCoverAsset(base.cover_image);
+        if(coverAsset){
+          payload.assets = [coverAsset];
+        }
+      }catch(e){
+        alert('封面导出失败：' + e.message);
+      }
+    }
+
+    const jsonText = JSON.stringify(payload, null, 2);
+    const blob = new Blob([jsonText], {type: 'application/json;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateTag = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `${sanitizeFilename(base.name)}_${dateTag}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    if(btn){
+      btn.textContent = '已导出';
+      setTimeout(() => {
+        btn.textContent = originalText || '导出';
+        btn.disabled = false;
+        btn.dataset.exporting = '0';
+      }, 1200);
+    }
+  }catch(e){
+    if(btn){
+      btn.textContent = originalText || '导出';
+      btn.disabled = false;
+      btn.dataset.exporting = '0';
+    }
+    alert('导出失败：' + e.message);
+  }
+}
+
 async function saveBase(){
   const name = document.getElementById('baseName').value.trim();
-  const isSystem = document.getElementById('baseIsSystem').value === 'true';
+  const isSystem = isSuperAdmin && document.getElementById('baseIsSystem').value === 'true';
   const coverImageFile = document.getElementById('baseCoverImage').files[0];
   const description = document.getElementById('baseDescription').value.trim();
   const msg = document.getElementById('createMsg');
@@ -459,6 +665,11 @@ async function deleteBase(baseId, baseName){
 function openImportBaseModal(){
   document.getElementById('importBaseFile').value = '';
   document.getElementById('importMsg').innerText = '';
+  const importType = document.getElementById('importBaseIsSystem');
+  if(importType){
+    importType.value = 'false';
+    importType.disabled = !isSuperAdmin;
+  }
   document.getElementById('importBaseModal').classList.add('active');
 }
 
@@ -469,6 +680,8 @@ function closeImportBaseModal(){
 async function importBase(){
   const file = document.getElementById('importBaseFile').files[0];
   const msg = document.getElementById('importMsg');
+  const importType = document.getElementById('importBaseIsSystem');
+  const isSystem = isSuperAdmin && importType && importType.value === 'true';
 
   if(!file){
     alert('请选择要导入的文件');
@@ -498,6 +711,7 @@ async function importBase(){
     const formData = new FormData();
     formData.append('file', file);
     formData.append('mode', 'skip');
+    formData.append('is_system', isSystem ? 'true' : 'false');
 
     const response = await fetch('/api/knowledge-bases/import-file', {
       method: 'POST',
@@ -539,7 +753,30 @@ async function importBase(){
 }
 
 // Initialize
-window.addEventListener('DOMContentLoaded', loadBases);
+window.addEventListener('DOMContentLoaded', async () => {
+  try{
+    if(window.self !== window.top){
+      window.parent.postMessage({type: 'appPage', page: 'library.html'}, '*');
+    }
+  }catch(e){}
+  await loadAccount();
+  await loadBases();
+});
+
+window.addEventListener('message', (event) => {
+  if(event.source !== window.parent){
+    return;
+  }
+  if(window.location.origin !== 'null' && event.origin !== window.location.origin){
+    return;
+  }
+  if(event.data && event.data.type === 'openCreateBase'){
+    openCreateBaseModal();
+  }
+  if(event.data && event.data.type === 'openImportBase'){
+    openImportBaseModal();
+  }
+});
 </script>
 </body>
 </html>

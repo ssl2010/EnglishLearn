@@ -5,6 +5,22 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [2.1.0] - 2026-01-18
+
+### Added
+- 家长看板 V2 接口：`/api/dashboard/overview` 与 `/api/dashboard/student`，提供多学生概览与学习库聚合统计
+- 看板双态页面：全部学生概览 + 单学生详情（资料库掌握、近期练习、易错）
+- 提交/批改在 ALL 模式下可通过练习单编号解析学生与资料库后入库
+
+### Changed
+- 应用默认进入 ALL 概览，学生选择在不同页面按需显示/限制
+- 练习单管理支持 ALL 模式查询当前账号下所有学生
+- 近期练习链接统一跳转到 `practice-view.html`
+
+### Fixed
+- ALL/单学生切换在跨页面时状态不同步的问题
+- 学生管理编辑区布局与操作区域一致性
+
 ## [2.0.0] - 2026-01-01
 
 ### Added

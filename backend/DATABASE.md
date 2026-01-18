@@ -51,6 +51,8 @@ python3 init_db.py --force --no-seed
 | `practice_results` | 批改入库结果 |
 | `student_item_stats` | 学生词条练习统计 |
 | `system_settings` | 系统配置（掌握阈值等） |
+| `accounts` | 登录账号 |
+| `auth_sessions` | 登录会话 |
 | `sessions` | 旧版练习单（兼容保留） |
 | `session_items` | 旧版练习单关联（兼容保留） |
 

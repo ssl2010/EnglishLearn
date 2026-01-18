@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>登录</title>
+  <style>
+    * { box-sizing: border-box; }
+    body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:#f6f7fb;color:#1a202c;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .card{width:100%;max-width:360px;background:#fff;border-radius:16px;padding:28px;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+    h1{margin:0 0 8px;font-size:22px}
+    .muted{color:#64748b;font-size:13px;margin-bottom:16px}
+    label{display:block;margin:12px 0 6px;font-size:12px;color:#334155}
+    input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #e2e8f0;font-size:14px}
+    button{width:100%;padding:10px 12px;border-radius:10px;border:0;background:#0f172a;color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-top:16px}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .error{color:#dc2626;font-size:12px;margin-top:10px;min-height:16px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>EnglishLearn</h1>
+    <div class="muted">请输入账号与密码登录</div>
+    <label for="username">账号</label>
+    <input id="username" type="text" placeholder="admin" autocomplete="username" />
+    <label for="password">密码</label>
+    <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+    <button id="loginBtn">登录</button>
+    <div id="error" class="error"></div>
+  </div>
+
+  <script>
+    async function checkLoggedIn(){
+      try{
+        const res = await fetch('/api/auth/me');
+        if(res.ok){
+          window.location.href = '/app.html';
+        }
+      }catch(e){
+        // ignore
+      }
+    }
+
+    async function login(){
+      const btn = document.getElementById('loginBtn');
+      const error = document.getElementById('error');
+      error.textContent = '';
+      btn.disabled = true;
+      try{
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            username: document.getElementById('username').value.trim(),
+            password: document.getElementById('password').value
+          })
+        });
+        if(!res.ok){
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || '登录失败');
+        }
+        window.location.href = '/app.html';
+      }catch(e){
+        error.textContent = e.message;
+      }finally{
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById('loginBtn').addEventListener('click', login);
+    document.addEventListener('keydown', (e) => {
+      if(e.key === 'Enter'){
+        login();
+      }
+    });
+
+    checkLoggedIn();
+  </script>
+</body>
+</html>

@@ -3,706 +3,759 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>学生信息</title>
+  <title>学生管理</title>
   <style>
-    * { box-sizing: border-box; }
-    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;margin:0;background:#f6f7fb;color:#1a202c;line-height:1.6}
-    .wrap{max-width:800px;margin:0 auto;padding:32px 24px}
-    .card{background:#fff;border-radius:16px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,.1),0 1px 2px rgba(0,0,0,.06);margin-bottom:24px}
-
-    /* Header */
-    .page-header{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      margin-bottom:8px;
-      flex-wrap:wrap;
-      gap:16px;
+    :root{
+      --bg:#f6f7fb;
+      --card:#ffffff;
+      --text:#0f172a;
+      --muted:#64748b;
+      --line:#e2e8f0;
+      --primary:#0f172a;
+      --primary-soft:#f1f5f9;
+      --danger:#dc2626;
+      --shadow:0 8px 24px rgba(15,23,42,.08);
     }
-    .page-header h2{
-      margin:0;
-      font-size:28px;
-      font-weight:700;
-      color:#1a202c;
-    }
-    .back-link{
-      padding:10px 18px;
-      background:#fff;
-      color:#1a202c;
-      border:1.5px solid #e2e8f0;
-      border-radius:10px;
-      text-decoration:none;
-      font-size:14px;
-      font-weight:500;
-      transition:all 0.2s;
-    }
-    .back-link:hover{
-      background:#f7fafc;
-      border-color:#cbd5e0;
-    }
-
-    .subtitle{color:#718096;font-size:14px;margin-top:8px}
-
-    /* Profile Header - Avatar & Name */
-    .profile-header{
-      display:flex;
-      align-items:center;
-      gap:24px;
-      padding-bottom:32px;
-      border-bottom:1px solid #e2e8f0;
-      margin-bottom:32px;
-    }
-    .profile-avatar-large{
-      font-size:80px;
-      width:120px;
-      height:120px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      background:#f7fafc;
-      border-radius:50%;
-      border:3px solid #e2e8f0;
-      transition:all 0.2s;
-    }
-    .profile-info-header{
-      flex:1;
-    }
-    .profile-name-display{
-      font-size:28px;
-      font-weight:700;
-      color:#1a202c;
-      margin-bottom:8px;
-    }
-    .profile-meta{
-      color:#718096;
-      font-size:14px;
-      display:flex;
-      gap:12px;
-      align-items:center;
-    }
-    .meta-badge{
-      display:inline-flex;
-      align-items:center;
-      padding:4px 12px;
-      background:#eff6ff;
-      color:#1e40af;
-      border-radius:12px;
-      font-size:13px;
-      font-weight:500;
-    }
-
-    /* Info Item */
-    .info-item{
-      padding:20px 0;
-      border-bottom:1px solid #f3f4f6;
-      transition:all 0.2s;
-    }
-    .info-item:last-child{
-      border-bottom:none;
-    }
-    .info-item-header{
-      display:flex;
-      justify-content:space-between;
-      align-items:flex-start;
-      gap:16px;
-    }
-    .info-label{
-      font-size:13px;
-      font-weight:600;
-      color:#6b7280;
-      text-transform:uppercase;
-      letter-spacing:0.05em;
-      margin-bottom:8px;
-    }
-    .info-value{
-      font-size:16px;
-      color:#1a202c;
-      font-weight:500;
-    }
-    .info-value.muted{
-      color:#9ca3af;
-      font-style:italic;
-    }
-
-    /* Edit Controls */
-    .edit-btn{
-      border:0;
-      background:transparent;
-      color:#0b5fff;
-      cursor:pointer;
-      font-size:14px;
-      font-weight:500;
-      padding:6px 12px;
-      border-radius:6px;
-      transition:all 0.2s;
-    }
-    .edit-btn:hover{
-      background:#eff6ff;
-    }
-    .edit-form{
-      display:none;
-      margin-top:16px;
-      padding:20px;
-      background:#f9fafb;
-      border-radius:12px;
-      border:1px solid #e5e7eb;
-    }
-    .edit-form.active{
-      display:block;
-    }
-
-    input[type="text"]{
-      width:100%;
-      padding:11px 14px;
-      border-radius:10px;
-      border:1.5px solid #e2e8f0;
-      font-size:14px;
-      transition:all 0.2s;
-      font-family:inherit;
-      background:#fff;
-    }
-    input:focus{
-      outline:none;
-      border-color:#0b5fff;
-      box-shadow:0 0 0 3px rgba(11,95,255,0.1);
-    }
-
-    /* Avatar Grid */
-    .avatar-grid{
-      display:grid;
-      grid-template-columns:repeat(auto-fill, minmax(80px, 1fr));
-      gap:12px;
-      margin-bottom:16px;
-    }
-    .avatar-option{
-      padding:12px;
-      border:2px solid #e2e8f0;
-      border-radius:12px;
-      cursor:pointer;
-      transition:all 0.2s;
-      text-align:center;
-      background:#fff;
-    }
-    .avatar-option:hover{
-      border-color:#0b5fff;
-      background:#eff6ff;
-      transform:translateY(-2px);
-    }
-    .avatar-option.selected{
-      border-color:#0b5fff;
-      background:#eff6ff;
-      box-shadow:0 0 0 3px rgba(11,95,255,0.1);
-    }
-    .avatar-emoji{
-      font-size:36px;
-      margin-bottom:4px;
-    }
-    .avatar-label{
-      font-size:11px;
-      color:#4a5568;
-      font-weight:500;
-    }
-
-    /* Grade Grid */
-    .grade-grid{
-      display:grid;
-      grid-template-columns:repeat(auto-fill, minmax(70px, 1fr));
-      gap:8px;
-      margin-bottom:12px;
-    }
-    .grade-option{
-      padding:10px;
-      border:1.5px solid #e2e8f0;
-      border-radius:8px;
-      cursor:pointer;
-      transition:all 0.2s;
-      text-align:center;
-      background:#fff;
-      font-size:13px;
-      font-weight:500;
-    }
-    .grade-option:hover{
-      border-color:#0b5fff;
-      background:#eff6ff;
-    }
-    .grade-option.selected{
-      border-color:#0b5fff;
-      background:#0b5fff;
-      color:#fff;
-    }
-    .grade-section{
-      margin-bottom:16px;
-    }
-    .grade-section-title{
-      font-size:12px;
-      font-weight:600;
-      color:#6b7280;
-      margin-bottom:8px;
-      text-transform:uppercase;
-      letter-spacing:0.05em;
-    }
-
-    /* Buttons */
-    .btn-group{
-      display:flex;
-      gap:8px;
-      margin-top:16px;
-    }
-    .btn{
-      border:0;
-      border-radius:8px;
-      padding:9px 18px;
-      cursor:pointer;
-      font-size:14px;
-      font-weight:500;
-      transition:all 0.2s;
-      line-height:1.5;
-    }
-    .btn-primary{
-      background:#0b5fff;
-      color:#fff;
-    }
-    .btn-primary:hover{
-      background:#0847cc;
-    }
-    .btn-secondary{
-      background:#fff;
-      color:#4a5568;
-      border:1.5px solid #e2e8f0;
-    }
-    .btn-secondary:hover{
-      background:#f7fafc;
-      border-color:#cbd5e0;
-    }
-
-    .hint{
-      font-size:12px;
-      color:#718096;
-      margin-top:8px;
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1280px;margin:0 auto;padding:28px 24px 40px}
+    .page-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:12px}
+    .page-header h1{margin:0;font-size:24px}
+    .toolbar{display:flex;align-items:center;gap:10px}
+    .btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:9px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer}
+    .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+    .btn.ghost{background:var(--primary-soft);border-color:transparent}
+    .btn.danger{color:#fff;background:var(--danger);border-color:var(--danger)}
+    .btn.small{padding:6px 10px;font-size:12px;border-radius:8px}
+    .panel{background:var(--card);border-radius:16px;border:1px solid #e9edf4;box-shadow:var(--shadow);padding:18px}
+    .panel + .panel{margin-top:16px}
+    .panel-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+    .panel-header h2{margin:0;font-size:16px}
+    .subtext{color:var(--muted);font-size:12px}
+    .status{font-size:12px;min-height:16px;margin-top:8px}
+    .status.error{color:var(--danger)}
+    .status.success{color:#059669}
+    .form-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;align-items:end}
+    label{display:block;margin-bottom:6px;font-size:12px;color:#334155}
+    input,select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);font-size:14px}
+    .form-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 8px;border-bottom:1px solid #edf1f7;font-size:13px;text-align:left}
+    th{color:#475569;font-weight:600;font-size:12px}
+    tr.active{background:var(--primary-soft)}
+    .tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:var(--primary-soft);font-size:12px;color:#1e293b}
+    .avatar{display:inline-flex;align-items:center;gap:6px}
+    .avatar-img{width:28px;height:28px;border-radius:50%;object-fit:cover;border:1px solid var(--line);background:#fff}
+    .actions{display:flex;gap:6px}
+    .empty{padding:16px;border:1px dashed var(--line);border-radius:12px;color:var(--muted);font-size:13px;text-align:center}
+    .editor-row td{background:#fbfcfe}
+    .editor{padding:16px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:0 6px 16px rgba(15,23,42,.05)}
+    .editor-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:12px}
+    .editor-title{font-size:14px;font-weight:700}
+    .editor-meta{font-size:12px;color:var(--muted);margin-top:2px}
+    .editor-layout{display:grid;grid-template-columns:1.2fr 1fr;gap:16px}
+    .editor-section{border:1px solid var(--line);border-radius:12px;padding:12px;background:#f8fafc}
+    .editor-section-title{font-size:12px;font-weight:700;color:#1e293b;margin-bottom:10px}
+    .editor-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .editor-field{display:flex;flex-direction:column;gap:6px}
+    .editor-field.full{grid-column:1 / -1}
+    .editor-section .avatar-picker + .editor-field{margin-top:10px}
+    .editor-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px;flex-wrap:wrap}
+    .editor .avatar-picker{gap:6px}
+    .editor .avatar-option{min-width:96px;padding:6px 8px;border-radius:10px;font-size:12px}
+    .editor .avatar-thumb{width:24px;height:24px;font-size:14px}
+    .upload-note{font-size:12px;color:var(--muted);margin-top:6px}
+    .avatar-picker{display:flex;flex-wrap:wrap;gap:8px}
+    .avatar-option{border:1px solid var(--line);background:#fff;border-radius:12px;padding:6px 10px;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);min-width:110px}
+    .avatar-option.active{border-color:var(--primary);box-shadow:0 0 0 2px rgba(15,23,42,.08)}
+    .avatar-thumb{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid var(--line);font-size:16px;overflow:hidden}
+    .avatar-thumb img{width:100%;height:100%;object-fit:cover}
+    .hidden{display:none}
+    body.embedded .page-header{display:none}
+    @media (max-width: 900px){
+      .form-grid{grid-template-columns:1fr}
+      .editor-layout{grid-template-columns:1fr}
+      .editor-fields{grid-template-columns:1fr}
+      .page-header{flex-direction:column;align-items:flex-start}
     }
   </style>
 </head>
 <body>
-<div class="wrap">
-  <!-- Profile Header -->
-  <div class="card">
-    <div class="page-header" style="justify-content:flex-end;margin-bottom:16px">
-      <a href="/" class="back-link">← 返回</a>
-    </div>
-    <div class="profile-header">
-      <div class="profile-avatar-large" id="headerAvatar">🐰</div>
-      <div class="profile-info-header">
-        <div class="profile-name-display" id="headerName">加载中...</div>
-        <div class="profile-meta">
-          <span class="meta-badge" id="headerGrade">-</span>
-          <span style="color:#cbd5e0">·</span>
-          <span style="font-size:13px">ID: #<span id="headerStudentId">-</span></span>
-        </div>
+  <div class="wrap">
+    <div class="page-header">
+      <div>
+        <h1>学生管理</h1>
       </div>
     </div>
 
-    <!-- Name -->
-    <div class="info-item">
-      <div class="info-item-header">
-        <div style="flex:1">
-          <div class="info-label">姓名</div>
-          <div class="info-value" id="nameDisplay">-</div>
-        </div>
-        <button class="edit-btn" onclick="toggleEdit('name')">编辑</button>
-      </div>
-      <div class="edit-form" id="nameEdit">
-        <input type="text" id="nameInput" placeholder="请输入姓名" maxlength="50" />
-        <div class="hint">最多50个字符</div>
-        <div class="btn-group">
-          <button class="btn btn-primary" onclick="saveName()">保存</button>
-          <button class="btn btn-secondary" onclick="cancelEdit('name')">取消</button>
-        </div>
-      </div>
-    </div>
+    <div id="pageStatus" class="status"></div>
 
-    <!-- Avatar -->
-    <div class="info-item">
-      <div class="info-item-header">
-        <div style="flex:1">
-          <div class="info-label">头像</div>
-          <div class="info-value">
-            <span id="avatarDisplay" style="font-size:32px">🐰</span>
-          </div>
+    <section id="createPanel" class="panel hidden">
+      <div class="panel-header">
+        <div>
+          <h2>新建学生</h2>
+          <div class="subtext">填写基本信息后保存</div>
         </div>
-        <button class="edit-btn" onclick="toggleEdit('avatar')">更换</button>
+        <button id="closeCreateBtn" class="btn ghost">收起</button>
       </div>
-      <div class="edit-form" id="avatarEdit">
-        <div class="hint" style="margin-bottom:12px">选择一个疯狂动物城角色作为头像</div>
-        <div class="avatar-grid" id="avatarGrid"></div>
-        <div class="btn-group">
-          <button class="btn btn-primary" onclick="saveAvatar()">保存</button>
-          <button class="btn btn-secondary" onclick="cancelEdit('avatar')">取消</button>
+      <div class="form-grid">
+        <div>
+          <label>姓名</label>
+          <input id="createNameInput" placeholder="请输入姓名" />
+        </div>
+        <div>
+          <label>年级</label>
+          <select id="createGradeSelect"></select>
+        </div>
+        <div>
+          <label>头像</label>
+          <div id="createAvatarPicker" class="avatar-picker"></div>
+          <input type="hidden" id="createAvatarValue" value="rabbit" />
         </div>
       </div>
-    </div>
+      <div style="margin-top:12px">
+        <label>自定义头像（可选）</label>
+        <input id="createAvatarFile" type="file" accept="image/*" />
+        <div class="upload-note">支持 jpg/png/webp，上传后会覆盖默认头像。</div>
+      </div>
+      <div class="form-actions">
+        <button id="createSaveBtn" class="btn primary">保存</button>
+        <button id="createResetBtn" class="btn">清空</button>
+      </div>
+      <div id="createStatus" class="status"></div>
+    </section>
 
-    <!-- Grade -->
-    <div class="info-item">
-      <div class="info-item-header">
-        <div style="flex:1">
-          <div class="info-label">年级</div>
-          <div class="info-value" id="gradeDisplay">-</div>
-        </div>
-        <button class="edit-btn" onclick="toggleEdit('grade')">修改</button>
-      </div>
-      <div class="edit-form" id="gradeEdit">
-        <div class="grade-section">
-          <div class="grade-section-title">幼儿园</div>
-          <div class="grade-grid" id="kindergartenGrades"></div>
-        </div>
-        <div class="grade-section">
-          <div class="grade-section-title">小学 (1-6年级)</div>
-          <div class="grade-grid" id="primaryGrades"></div>
-        </div>
-        <div class="grade-section">
-          <div class="grade-section-title">初中 (1-3年级)</div>
-          <div class="grade-grid" id="juniorGrades"></div>
-        </div>
-        <div class="grade-section">
-          <div class="grade-section-title">高中 (1-3年级)</div>
-          <div class="grade-grid" id="seniorGrades"></div>
-        </div>
-        <div class="btn-group">
-          <button class="btn btn-primary" onclick="saveGrade()">保存</button>
-          <button class="btn btn-secondary" onclick="cancelEdit('grade')">取消</button>
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>学生列表</h2>
+          <div class="subtext">共 <span id="studentCount">0</span> 名学生</div>
         </div>
       </div>
-    </div>
+      <div id="emptyState" class="empty hidden">暂无学生，请先添加学生。</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:90px">系统编号</th>
+            <th>姓名</th>
+            <th style="width:140px">年级</th>
+            <th style="width:140px">头像</th>
+            <th style="width:120px">更新时间</th>
+            <th style="width:140px">操作</th>
+          </tr>
+        </thead>
+        <tbody id="studentTableBody"></tbody>
+      </table>
+    </section>
   </div>
-</div>
 
-<script>
-// Avatar configuration
-const AVATARS = [
-  { id: 'rabbit', emoji: '🐰', name: '朱迪兔' },
-  { id: 'fox', emoji: '🦊', name: '尼克狐' },
-  { id: 'sloth', emoji: '🦥', name: '闪电树懒' },
-  { id: 'buffalo', emoji: '🦬', name: '博戈局长' },
-  { id: 'cheetah', emoji: '🐆', name: '豹警官' },
-  { id: 'lion', emoji: '🦁', name: '狮子市长' },
-  { id: 'gazelle', emoji: '🦌', name: '夏奇羊' },
-  { id: 'otter', emoji: '🦦', name: '水獭' },
-  { id: 'elephant', emoji: '🐘', name: '象警官' },
-  { id: 'sheep', emoji: '🐑', name: '绵羊副市长' }
-];
+  <script>
+    const AVATARS = [
+      {id: 'rabbit', name: '兔子', emoji: '🐰'},
+      {id: 'fox', name: '狐狸', emoji: '🦊'},
+      {id: 'lion', name: '狮子', emoji: '🦁'},
+      {id: 'tiger', name: '老虎', emoji: '🐯'},
+      {id: 'panda', name: '熊猫', emoji: '🐼'},
+      {id: 'koala', name: '考拉', emoji: '🐨'},
+      {id: 'dog', name: '小狗', emoji: '🐶'},
+      {id: 'cat', name: '小猫', emoji: '🐱'}
+    ];
 
-// Grade configuration
-const GRADES = {
-  kindergarten: [
-    { code: 'K1', label: '小班' },
-    { code: 'K2', label: '中班' },
-    { code: 'K3', label: '大班' }
-  ],
-  primary: [
-    { code: 'G1', label: '一年级' },
-    { code: 'G2', label: '二年级' },
-    { code: 'G3', label: '三年级' },
-    { code: 'G4', label: '四年级' },
-    { code: 'G5', label: '五年级' },
-    { code: 'G6', label: '六年级' }
-  ],
-  junior: [
-    { code: 'G7', label: '初一' },
-    { code: 'G8', label: '初二' },
-    { code: 'G9', label: '初三' }
-  ],
-  senior: [
-    { code: 'G10', label: '高一' },
-    { code: 'G11', label: '高二' },
-    { code: 'G12', label: '高三' }
-  ]
-};
+    const GRADES = [
+      {code: '', label: '未设置'},
+      {code: 'K1', label: '幼儿园 小班'},
+      {code: 'K2', label: '幼儿园 中班'},
+      {code: 'K3', label: '幼儿园 大班'},
+      {code: 'G1', label: '小学 一年级'},
+      {code: 'G2', label: '小学 二年级'},
+      {code: 'G3', label: '小学 三年级'},
+      {code: 'G4', label: '小学 四年级'},
+      {code: 'G5', label: '小学 五年级'},
+      {code: 'G6', label: '小学 六年级'},
+      {code: 'G7', label: '初中 初一'},
+      {code: 'G8', label: '初中 初二'},
+      {code: 'G9', label: '初中 初三'},
+      {code: 'G10', label: '高中 高一'},
+      {code: 'G11', label: '高中 高二'},
+      {code: 'G12', label: '高中 高三'}
+    ];
 
-let currentStudentId = null;
-let studentData = {};
-let editingData = {
-  name: '',
-  avatar: 'rabbit',
-  grade: ''
-};
+    const AVATAR_MAP = Object.fromEntries(AVATARS.map(a => [a.id, a]));
+    const GRADE_MAP = Object.fromEntries(GRADES.map(g => [g.code, g.label]));
 
-function getCfg(){
-  const raw = localStorage.getItem('el_cfg');
-  return raw ? JSON.parse(raw) : {};
-}
+    const state = {
+      students: [],
+      activeId: null
+    };
 
-function setCfg(cfg){
-  localStorage.setItem('el_cfg', JSON.stringify(cfg||{}));
-}
-
-async function apiJSON(path, opts){
-  const res = await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
-  if(!res.ok){
-    let errorMsg;
     try{
-      const text = await res.text();
-      try{
-        const errorData = JSON.parse(text);
-        errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData);
-      }catch(e){
-        errorMsg = text;
+      if(window.self !== window.top){
+        document.body.classList.add('embedded');
       }
-    }catch(e){
-      errorMsg = 'Request failed';
+    }catch(e){}
+
+    function apiJSON(path, opts){
+      return fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts || {}))
+        .then(async res => {
+          if(!res.ok){
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || '请求失败');
+          }
+          return res.json();
+        });
     }
-    throw new Error(errorMsg);
-  }
-  return res.json();
-}
 
-function getAvatarEmoji(avatarId){
-  const avatar = AVATARS.find(a => a.id === avatarId);
-  return avatar ? avatar.emoji : '🐰';
-}
-
-function getGradeLabel(gradeCode){
-  const allGrades = [...GRADES.kindergarten, ...GRADES.primary, ...GRADES.junior, ...GRADES.senior];
-  const grade = allGrades.find(g => g.code === gradeCode);
-  return grade ? grade.label : gradeCode;
-}
-
-function getGradeWithStage(gradeCode){
-  // Determine education stage and grade label
-  let stage = '';
-  let label = '';
-
-  if(GRADES.kindergarten.find(g => g.code === gradeCode)){
-    stage = '幼儿园';
-    label = getGradeLabel(gradeCode);
-  }else if(GRADES.primary.find(g => g.code === gradeCode)){
-    stage = '小学';
-    label = getGradeLabel(gradeCode);
-  }else if(GRADES.junior.find(g => g.code === gradeCode)){
-    stage = '初中';
-    label = getGradeLabel(gradeCode);
-  }else if(GRADES.senior.find(g => g.code === gradeCode)){
-    stage = '高中';
-    label = getGradeLabel(gradeCode);
-  }else{
-    return gradeCode;
-  }
-
-  return `${stage} ${label}`;
-}
-
-async function loadProfile(){
-  const cfg = getCfg();
-  if(!cfg.student_id){
-    alert('请先在引导页完成初始化');
-    location.href = '/';
-    return;
-  }
-
-  currentStudentId = cfg.student_id;
-
-  try{
-    studentData = await apiJSON(`/api/students/${currentStudentId}`);
-
-    // Set editing data
-    editingData.name = studentData.name || '';
-    editingData.avatar = studentData.avatar || 'rabbit';
-    editingData.grade = studentData.grade || '';
-
-    // Update header
-    document.getElementById('headerAvatar').textContent = getAvatarEmoji(editingData.avatar);
-    document.getElementById('headerName').textContent = editingData.name || '未设置';
-    document.getElementById('headerGrade').textContent = getGradeWithStage(editingData.grade);
-    document.getElementById('headerStudentId').textContent = studentData.id;
-
-    // Update display fields
-    document.getElementById('nameDisplay').textContent = editingData.name || '未设置';
-    document.getElementById('avatarDisplay').textContent = getAvatarEmoji(editingData.avatar);
-    document.getElementById('gradeDisplay').textContent = getGradeWithStage(editingData.grade);
-
-    // Render grade grids (but don't show yet)
-    renderGradeGrids();
-  }catch(e){
-    alert('加载失败：' + e.message);
-  }
-}
-
-function toggleEdit(field){
-  // Close all other edit forms
-  ['name', 'avatar', 'grade'].forEach(f => {
-    if(f !== field){
-      document.getElementById(f + 'Edit').classList.remove('active');
+    function formatDate(value){
+      if(!value) return '-';
+      const text = String(value);
+      return text.split('T')[0] || text;
     }
-  });
 
-  // Toggle current field
-  const editForm = document.getElementById(field + 'Edit');
-  const isActive = editForm.classList.contains('active');
-
-  if(isActive){
-    editForm.classList.remove('active');
-  }else{
-    editForm.classList.add('active');
-
-    // Initialize field value
-    if(field === 'name'){
-      document.getElementById('nameInput').value = editingData.name;
-      document.getElementById('nameInput').focus();
-    }else if(field === 'avatar'){
-      renderAvatarGrid();
-    }else if(field === 'grade'){
-      renderGradeGrids();
+    function setStatus(text, type){
+      const el = document.getElementById('pageStatus');
+      el.textContent = text || '';
+      el.className = 'status' + (type ? ' ' + type : '');
     }
-  }
-}
 
-function cancelEdit(field){
-  document.getElementById(field + 'Edit').classList.remove('active');
+    function setCreateStatus(text, type){
+      const el = document.getElementById('createStatus');
+      el.textContent = text || '';
+      el.className = 'status' + (type ? ' ' + type : '');
+    }
 
-  // Reset editing data to original
-  if(field === 'name'){
-    editingData.name = studentData.name || '';
-  }else if(field === 'avatar'){
-    editingData.avatar = studentData.avatar || 'rabbit';
-  }else if(field === 'grade'){
-    editingData.grade = studentData.grade || '';
-  }
-}
+    function isCustomAvatar(value){
+      return value && !AVATAR_MAP[value];
+    }
 
-function renderAvatarGrid(){
-  const html = AVATARS.map(avatar => `
-    <div class="avatar-option ${avatar.id === editingData.avatar ? 'selected' : ''}"
-         onclick="selectAvatar('${avatar.id}')">
-      <div class="avatar-emoji">${avatar.emoji}</div>
-      <div class="avatar-label">${avatar.name}</div>
-    </div>
-  `).join('');
-  document.getElementById('avatarGrid').innerHTML = html;
-}
+    function getAvatarUrl(value){
+      if(!value) return '';
+      if(value.startsWith('http') || value.startsWith('/media/')){
+        return value;
+      }
+      return `/media/${value}`;
+    }
 
-function selectAvatar(avatarId){
-  editingData.avatar = avatarId;
-  renderAvatarGrid();
-}
+    function setAvatarSelection(container, value){
+      container.dataset.value = value;
+      container.querySelectorAll('.avatar-option').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.value === value);
+      });
+      const target = container.dataset.targetInput;
+      if(target){
+        const input = document.getElementById(target);
+        if(input){
+          input.value = value;
+        }
+      }
+    }
 
-function renderGradeGrids(){
-  // Kindergarten
-  const kindergartenHtml = GRADES.kindergarten.map(grade => `
-    <div class="grade-option ${grade.code === editingData.grade ? 'selected' : ''}"
-         onclick="selectGrade('${grade.code}')">
-      ${grade.label}
-    </div>
-  `).join('');
-  document.getElementById('kindergartenGrades').innerHTML = kindergartenHtml;
+    function getAvatarSelection(container){
+      return container.dataset.value || 'rabbit';
+    }
 
-  // Primary
-  const primaryHtml = GRADES.primary.map(grade => `
-    <div class="grade-option ${grade.code === editingData.grade ? 'selected' : ''}"
-         onclick="selectGrade('${grade.code}')">
-      ${grade.label}
-    </div>
-  `).join('');
-  document.getElementById('primaryGrades').innerHTML = primaryHtml;
+    function updateCustomPreview(container, previewUrl){
+      const customBtn = container.querySelector('[data-role=\"custom\"]');
+      if(!customBtn) return;
+      const thumb = customBtn.querySelector('.avatar-thumb');
+      thumb.innerHTML = '';
+      if(previewUrl){
+        const img = document.createElement('img');
+        img.src = previewUrl;
+        thumb.appendChild(img);
+      }else{
+        thumb.textContent = '🖼️';
+      }
+      if(container.dataset.previewUrl){
+        URL.revokeObjectURL(container.dataset.previewUrl);
+      }
+      if(previewUrl && previewUrl.startsWith('blob:')){
+        container.dataset.previewUrl = previewUrl;
+      }else{
+        container.dataset.previewUrl = '';
+      }
+    }
 
-  // Junior
-  const juniorHtml = GRADES.junior.map(grade => `
-    <div class="grade-option ${grade.code === editingData.grade ? 'selected' : ''}"
-         onclick="selectGrade('${grade.code}')">
-      ${grade.label}
-    </div>
-  `).join('');
-  document.getElementById('juniorGrades').innerHTML = juniorHtml;
+    function buildAvatarOption({value, label, emoji, imgUrl, isCustom}, container){
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'avatar-option';
+      btn.dataset.value = value;
+      if(isCustom){
+        btn.dataset.role = 'custom';
+      }
+      const thumb = document.createElement('span');
+      thumb.className = 'avatar-thumb';
+      if(imgUrl){
+        const img = document.createElement('img');
+        img.src = imgUrl;
+        thumb.appendChild(img);
+      }else{
+        thumb.textContent = emoji || '🖼️';
+      }
+      const text = document.createElement('span');
+      text.textContent = label;
+      btn.appendChild(thumb);
+      btn.appendChild(text);
+      btn.addEventListener('click', () => {
+        setAvatarSelection(container, value);
+      });
+      return btn;
+    }
 
-  // Senior
-  const seniorHtml = GRADES.senior.map(grade => `
-    <div class="grade-option ${grade.code === editingData.grade ? 'selected' : ''}"
-         onclick="selectGrade('${grade.code}')">
-      ${grade.label}
-    </div>
-  `).join('');
-  document.getElementById('seniorGrades').innerHTML = seniorHtml;
-}
+    function renderAvatarPicker(container, value, targetInputId){
+      const currentValue = value || 'rabbit';
+      if(container.dataset.previewUrl){
+        URL.revokeObjectURL(container.dataset.previewUrl);
+        container.dataset.previewUrl = '';
+      }
+      container.innerHTML = '';
+      if(targetInputId){
+        container.dataset.targetInput = targetInputId;
+      }
+      AVATARS.forEach(avatar => {
+        const btn = buildAvatarOption({
+          value: avatar.id,
+          label: avatar.name,
+          emoji: avatar.emoji
+        }, container);
+        container.appendChild(btn);
+      });
+      const customValue = isCustomAvatar(currentValue) ? currentValue : '__custom__';
+      const customUrl = isCustomAvatar(currentValue) ? getAvatarUrl(currentValue) : '';
+      const customBtn = buildAvatarOption({
+        value: customValue,
+        label: '自定义',
+        emoji: '🖼️',
+        imgUrl: customUrl,
+        isCustom: true
+      }, container);
+      container.appendChild(customBtn);
+      setAvatarSelection(container, isCustomAvatar(currentValue) ? customValue : currentValue);
+    }
 
-function selectGrade(gradeCode){
-  editingData.grade = gradeCode;
-  renderGradeGrids();
-}
+    function buildSelect(options, value){
+      const select = document.createElement('select');
+      options.forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt.code || opt.id || '';
+        option.textContent = opt.label || `${opt.emoji || ''} ${opt.name || ''}`.trim();
+        select.appendChild(option);
+      });
+      select.value = value || '';
+      return select;
+    }
 
-async function saveName(){
-  const name = document.getElementById('nameInput').value.trim();
+    async function uploadAvatar(studentId, file){
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`/api/students/${studentId}/avatar`, {method: 'POST', body: form});
+      if(!res.ok){
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || '头像上传失败');
+      }
+      return res.json();
+    }
 
-  if(!name){
-    alert('请输入姓名');
-    document.getElementById('nameInput').focus();
-    return;
-  }
-  if(name.length > 50){
-    alert('姓名不能超过50个字符');
-    document.getElementById('nameInput').focus();
-    return;
-  }
+    function renderCreateSelects(){
+      const gradeSelect = document.getElementById('createGradeSelect');
+      gradeSelect.innerHTML = '';
+      GRADES.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g.code;
+        opt.textContent = g.label;
+        gradeSelect.appendChild(opt);
+      });
+      renderAvatarPicker(document.getElementById('createAvatarPicker'), 'rabbit', 'createAvatarValue');
+    }
 
-  try{
-    await apiJSON(`/api/students/${currentStudentId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ name: name })
+    function openCreatePanel(){
+      document.getElementById('createPanel').classList.remove('hidden');
+      setCreateStatus('');
+    }
+
+    function closeCreatePanel(){
+      document.getElementById('createPanel').classList.add('hidden');
+      setCreateStatus('');
+    }
+
+    function getCfg(){
+      const raw = localStorage.getItem('el_cfg');
+      return raw ? JSON.parse(raw) : {};
+    }
+
+    function updateCfg(student){
+      if(!student) return;
+      const cfg = getCfg();
+      if(cfg.student_id === student.id){
+        cfg.student_name = student.name;
+        cfg.grade_code = student.grade || '';
+        localStorage.setItem('el_cfg', JSON.stringify(cfg));
+      }
+    }
+
+    function clearCfgIfDeleted(studentId){
+      const cfg = getCfg();
+      if(cfg.student_id === studentId){
+        localStorage.removeItem('el_cfg');
+      }
+    }
+
+    function toggleEditor(studentId){
+      state.activeId = state.activeId === studentId ? null : studentId;
+      renderTable();
+      setStatus('');
+    }
+
+    function renderTable(){
+      const body = document.getElementById('studentTableBody');
+      const empty = document.getElementById('emptyState');
+      body.innerHTML = '';
+      document.getElementById('studentCount').textContent = String(state.students.length);
+      if(state.students.length === 0){
+        empty.classList.remove('hidden');
+        return;
+      }
+      empty.classList.add('hidden');
+      state.students.forEach(student => {
+        const tr = document.createElement('tr');
+        if(student.id === state.activeId){
+          tr.classList.add('active');
+        }
+        tr.addEventListener('click', () => toggleEditor(student.id));
+
+        const idTd = document.createElement('td');
+        idTd.textContent = String(student.id);
+
+        const nameTd = document.createElement('td');
+        nameTd.textContent = student.name || '-';
+
+        const gradeTd = document.createElement('td');
+        const gradeLabel = GRADE_MAP[student.grade || ''] || student.grade || '未设置';
+        const gradeTag = document.createElement('span');
+        gradeTag.className = 'tag';
+        gradeTag.textContent = gradeLabel;
+        gradeTd.appendChild(gradeTag);
+
+      const avatarTd = document.createElement('td');
+      const avatarValue = student.avatar || 'rabbit';
+      if(isCustomAvatar(avatarValue)){
+        const img = document.createElement('img');
+        img.className = 'avatar-img';
+        img.src = getAvatarUrl(avatarValue);
+        img.alt = '自定义头像';
+        avatarTd.appendChild(img);
+      }else{
+        const avatar = AVATAR_MAP[avatarValue] || AVATAR_MAP.rabbit;
+        const avatarWrap = document.createElement('span');
+        avatarWrap.className = 'avatar';
+        avatarWrap.textContent = avatar ? `${avatar.emoji} ${avatar.name}` : '-';
+        avatarTd.appendChild(avatarWrap);
+      }
+
+        const updatedTd = document.createElement('td');
+        updatedTd.textContent = formatDate(student.updated_at || student.created_at);
+
+        const actionsTd = document.createElement('td');
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn small ghost';
+        editBtn.textContent = student.id === state.activeId ? '收起' : '编辑';
+        editBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleEditor(student.id);
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn small danger';
+        delBtn.textContent = '删除';
+        delBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteStudent(student.id);
+        });
+
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+        actionsTd.appendChild(actions);
+
+        tr.appendChild(idTd);
+        tr.appendChild(nameTd);
+        tr.appendChild(gradeTd);
+        tr.appendChild(avatarTd);
+        tr.appendChild(updatedTd);
+        tr.appendChild(actionsTd);
+        body.appendChild(tr);
+
+        if(student.id === state.activeId){
+          body.appendChild(buildEditorRow(student));
+        }
+      });
+    }
+
+    function buildEditorRow(student){
+      const tr = document.createElement('tr');
+      tr.className = 'editor-row';
+      const td = document.createElement('td');
+      td.colSpan = 6;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'editor';
+
+      const header = document.createElement('div');
+      header.className = 'editor-header';
+      const headerMain = document.createElement('div');
+      const headerTitle = document.createElement('div');
+      headerTitle.className = 'editor-title';
+      headerTitle.textContent = '编辑学生信息';
+      const headerMeta = document.createElement('div');
+      headerMeta.className = 'editor-meta';
+      headerMeta.textContent = `学生ID #${student.id} · 最近更新 ${formatDate(student.updated_at || student.created_at)}`;
+      headerMain.appendChild(headerTitle);
+      headerMain.appendChild(headerMeta);
+      header.appendChild(headerMain);
+
+      const layout = document.createElement('div');
+      layout.className = 'editor-layout';
+
+      const infoSection = document.createElement('div');
+      infoSection.className = 'editor-section';
+      const infoTitle = document.createElement('div');
+      infoTitle.className = 'editor-section-title';
+      infoTitle.textContent = '基本信息';
+      const infoFields = document.createElement('div');
+      infoFields.className = 'editor-fields';
+
+      const nameWrap = document.createElement('div');
+      nameWrap.className = 'editor-field';
+      const nameLabel = document.createElement('label');
+      nameLabel.textContent = '姓名';
+      const nameInput = document.createElement('input');
+      nameInput.value = student.name || '';
+      nameWrap.appendChild(nameLabel);
+      nameWrap.appendChild(nameInput);
+
+      const gradeWrap = document.createElement('div');
+      gradeWrap.className = 'editor-field';
+      const gradeLabel = document.createElement('label');
+      gradeLabel.textContent = '年级';
+      const gradeSelect = buildSelect(GRADES, student.grade || '');
+      gradeWrap.appendChild(gradeLabel);
+      gradeWrap.appendChild(gradeSelect);
+
+      infoFields.appendChild(nameWrap);
+      infoFields.appendChild(gradeWrap);
+      infoSection.appendChild(infoTitle);
+      infoSection.appendChild(infoFields);
+
+      const avatarSection = document.createElement('div');
+      avatarSection.className = 'editor-section';
+      const avatarTitle = document.createElement('div');
+      avatarTitle.className = 'editor-section-title';
+      avatarTitle.textContent = '头像设置';
+      const avatarPicker = document.createElement('div');
+      avatarPicker.className = 'avatar-picker';
+      renderAvatarPicker(avatarPicker, student.avatar || 'rabbit');
+
+      const uploadWrap = document.createElement('div');
+      uploadWrap.className = 'editor-field full';
+      const uploadLabel = document.createElement('label');
+      uploadLabel.textContent = '自定义头像（可选）';
+      const avatarFile = document.createElement('input');
+      avatarFile.type = 'file';
+      avatarFile.accept = 'image/*';
+      const uploadNote = document.createElement('div');
+      uploadNote.className = 'upload-note';
+      uploadNote.textContent = '支持 jpg/png/webp，上传后会覆盖默认头像。';
+      uploadWrap.appendChild(uploadLabel);
+      uploadWrap.appendChild(avatarFile);
+      uploadWrap.appendChild(uploadNote);
+      avatarFile.addEventListener('change', () => {
+        if(avatarFile.files && avatarFile.files[0]){
+          const url = URL.createObjectURL(avatarFile.files[0]);
+          updateCustomPreview(avatarPicker, url);
+          setAvatarSelection(avatarPicker, '__custom__');
+        }
+      });
+
+      avatarSection.appendChild(avatarTitle);
+      avatarSection.appendChild(avatarPicker);
+      avatarSection.appendChild(uploadWrap);
+
+      layout.appendChild(infoSection);
+      layout.appendChild(avatarSection);
+
+      const actions = document.createElement('div');
+      actions.className = 'editor-actions';
+
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'btn primary';
+      saveBtn.textContent = '保存';
+      saveBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const name = nameInput.value.trim();
+        const grade = gradeSelect.value;
+        let avatar = getAvatarSelection(avatarPicker);
+        if(!name){
+          setStatus('请输入姓名', 'error');
+          return;
+        }
+        if(avatar === '__custom__' && !(avatarFile.files && avatarFile.files[0])){
+          setStatus('请上传自定义头像', 'error');
+          return;
+        }
+        try{
+          setStatus('');
+          if(avatarFile.files && avatarFile.files[0]){
+            const uploadRes = await uploadAvatar(student.id, avatarFile.files[0]);
+            avatar = uploadRes.avatar;
+          }
+          const res = await apiJSON(`/api/students/${student.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({name, grade, avatar})
+          });
+          updateCfg(res);
+          setStatus('学生信息已更新', 'success');
+          await loadStudents();
+        }catch(err){
+          setStatus(err.message, 'error');
+        }
+      });
+
+      const resetBtn = document.createElement('button');
+      resetBtn.className = 'btn ghost';
+      resetBtn.textContent = '重置';
+      resetBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        nameInput.value = student.name || '';
+        gradeSelect.value = student.grade || '';
+        renderAvatarPicker(avatarPicker, student.avatar || 'rabbit');
+        avatarFile.value = '';
+      });
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn ghost';
+      cancelBtn.textContent = '收起';
+      cancelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.activeId = null;
+        renderTable();
+      });
+
+      actions.appendChild(saveBtn);
+      actions.appendChild(resetBtn);
+      actions.appendChild(cancelBtn);
+
+      wrapper.appendChild(header);
+      wrapper.appendChild(layout);
+      wrapper.appendChild(actions);
+      td.appendChild(wrapper);
+      tr.appendChild(td);
+      return tr;
+    }
+
+    async function loadStudents(){
+      const res = await apiJSON('/api/students');
+      state.students = res.students || [];
+      if(state.activeId && !state.students.some(s => s.id === state.activeId)){
+        state.activeId = null;
+      }
+      renderTable();
+    }
+
+    async function deleteStudent(studentId){
+      const student = state.students.find(s => s.id === studentId);
+      if(!student) return;
+      if(!window.confirm(`确认删除学生“${student.name}”？删除后将同步移除相关练习记录。`)){
+        return;
+      }
+      try{
+        setStatus('');
+        await apiJSON(`/api/students/${studentId}`, {method: 'DELETE'});
+        clearCfgIfDeleted(studentId);
+        if(state.activeId === studentId){
+          state.activeId = null;
+        }
+        setStatus('学生已删除', 'success');
+        await loadStudents();
+      }catch(e){
+        setStatus(e.message, 'error');
+      }
+    }
+
+    window.addEventListener('message', (event) => {
+      if(event.source !== window.parent){
+        return;
+      }
+      if(window.location.origin !== 'null' && event.origin !== window.location.origin){
+        return;
+      }
+      if(event.data && event.data.type === 'openCreateStudent'){
+        openCreatePanel();
+        setStatus('');
+        window.scrollTo({top: 0, behavior: 'smooth'});
+      }
     });
 
-    // Update local config
-    const cfg = getCfg();
-    cfg.student_name = name;
-    setCfg(cfg);
-
-    await loadProfile();
-    document.getElementById('nameEdit').classList.remove('active');
-  }catch(e){
-    alert('保存失败：' + e.message);
-  }
-}
-
-async function saveAvatar(){
-  if(!editingData.avatar){
-    alert('请选择头像');
-    return;
-  }
-
-  try{
-    await apiJSON(`/api/students/${currentStudentId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ avatar: editingData.avatar })
+    document.getElementById('closeCreateBtn').addEventListener('click', () => {
+      closeCreatePanel();
     });
 
-    await loadProfile();
-    document.getElementById('avatarEdit').classList.remove('active');
-  }catch(e){
-    alert('保存失败：' + e.message);
-  }
-}
-
-async function saveGrade(){
-  if(!editingData.grade){
-    alert('请选择年级');
-    return;
-  }
-
-  try{
-    await apiJSON(`/api/students/${currentStudentId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ grade: editingData.grade })
+    document.getElementById('createAvatarFile').addEventListener('change', (e) => {
+      const picker = document.getElementById('createAvatarPicker');
+      const file = e.target.files && e.target.files[0];
+      if(file){
+        const url = URL.createObjectURL(file);
+        updateCustomPreview(picker, url);
+        setAvatarSelection(picker, '__custom__');
+      }
     });
 
-    // Update local config
-    const cfg = getCfg();
-    cfg.grade_code = editingData.grade;
-    setCfg(cfg);
+    document.getElementById('createResetBtn').addEventListener('click', () => {
+      document.getElementById('createNameInput').value = '';
+      document.getElementById('createGradeSelect').value = '';
+      renderAvatarPicker(document.getElementById('createAvatarPicker'), 'rabbit', 'createAvatarValue');
+      document.getElementById('createAvatarFile').value = '';
+      setCreateStatus('');
+    });
 
-    await loadProfile();
-    document.getElementById('gradeEdit').classList.remove('active');
-  }catch(e){
-    alert('保存失败：' + e.message);
-  }
-}
+    document.getElementById('createSaveBtn').addEventListener('click', async () => {
+      const name = document.getElementById('createNameInput').value.trim();
+      const grade = document.getElementById('createGradeSelect').value;
+      const avatarPicker = document.getElementById('createAvatarPicker');
+      let avatar = getAvatarSelection(avatarPicker);
+      const avatarFile = document.getElementById('createAvatarFile').files[0];
+      if(!name){
+        setCreateStatus('请输入姓名', 'error');
+        return;
+      }
+      if(avatar === '__custom__' && !avatarFile){
+        setCreateStatus('请上传自定义头像', 'error');
+        return;
+      }
+      try{
+        setCreateStatus('');
+        const res = await apiJSON('/api/students', {
+          method: 'POST',
+          body: JSON.stringify({name, grade, avatar: avatar === '__custom__' ? 'rabbit' : avatar})
+        });
+        if(avatarFile){
+          await uploadAvatar(res.student_id, avatarFile);
+        }
+        setCreateStatus('学生创建成功', 'success');
+        document.getElementById('createNameInput').value = '';
+        document.getElementById('createGradeSelect').value = '';
+        renderAvatarPicker(document.getElementById('createAvatarPicker'), 'rabbit', 'createAvatarValue');
+        document.getElementById('createAvatarFile').value = '';
+        state.activeId = res.student_id || null;
+        await loadStudents();
+      }catch(e){
+        setCreateStatus(e.message, 'error');
+      }
+    });
 
-window.addEventListener('DOMContentLoaded', loadProfile);
-</script>
+    renderCreateSelects();
+    loadStudents();
+  </script>
 </body>
 </html>
