@@ -1,12 +1,13 @@
 import hashlib
 import os
+import re
 import secrets
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from passlib.hash import bcrypt
 
-from .db import db, qone, row_to_dict, utcnow_iso
+from .db import db, exec1, qall, qone, row_to_dict, rows_to_dicts, utcnow_iso
 
 
 def hash_password(plain: str) -> str:
@@ -87,14 +88,18 @@ def get_account_by_session(token: Optional[str]) -> Optional[Dict[str, Any]]:
 
 def ensure_super_admin() -> None:
     username = os.environ.get("EL_ADMIN_USER", "admin")
-    password = os.environ.get("EL_ADMIN_PASS", "")
-    if not password:
-        raise RuntimeError("EL_ADMIN_PASS is required to initialize admin account")
     with db() as conn:
         row = qone(conn, "SELECT COUNT(1) AS c FROM accounts")
         count = int(row["c"]) if row else 0
         if count > 0:
             return
+        password = os.environ.get("EL_ADMIN_PASS", "")
+        if not password:
+            raise RuntimeError("EL_ADMIN_PASS is required to initialize admin account (first run only)")
+        try:
+            _validate_password(password)
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from exc
         conn.execute(
             """
             INSERT INTO accounts(username, password_hash, is_super_admin, is_active, created_at, updated_at)
@@ -102,3 +107,104 @@ def ensure_super_admin() -> None:
             """,
             (username, hash_password(password), 1, 1, utcnow_iso(), utcnow_iso()),
         )
+
+
+_USERNAME_RE = re.compile(r"^[a-zA-Z0-9._-]{3,32}$")
+
+
+def _validate_username(username: str) -> None:
+    if not username or not _USERNAME_RE.match(username):
+        raise ValueError("用户名需为 3~32 位字母/数字/._-")
+
+
+def _validate_password(pw: str) -> None:
+    if not pw or len(pw) < 8:
+        raise ValueError("密码至少 8 位")
+
+
+def delete_sessions_for_account(account_id: int) -> None:
+    with db() as conn:
+        conn.execute("DELETE FROM auth_sessions WHERE account_id = ?", (account_id,))
+
+
+def count_active_admins(conn) -> int:
+    row = qone(conn, "SELECT COUNT(1) AS c FROM accounts WHERE is_super_admin=1 AND is_active=1")
+    return int(row["c"]) if row else 0
+
+
+def list_accounts_with_last_seen() -> List[Dict[str, Any]]:
+    with db() as conn:
+        rows = qall(
+            conn,
+            """
+            SELECT
+              a.id, a.username, a.is_super_admin, a.is_active, a.created_at, a.updated_at,
+              MAX(s.last_seen_at) AS last_seen_at
+            FROM accounts a
+            LEFT JOIN auth_sessions s ON s.account_id = a.id
+            GROUP BY a.id
+            ORDER BY a.is_super_admin DESC, a.username ASC
+            """,
+        )
+    return rows_to_dicts(rows)
+
+
+def create_account(username: str, password: str, is_super_admin: bool = False) -> Dict[str, Any]:
+    _validate_username(username)
+    _validate_password(password)
+    now = utcnow_iso()
+    with db() as conn:
+        account_id = exec1(
+            conn,
+            """
+            INSERT INTO accounts(username, password_hash, is_super_admin, is_active, created_at, updated_at)
+            VALUES (?,?,?,?,?,?)
+            """,
+            (username, hash_password(password), 1 if is_super_admin else 0, 1, now, now),
+        )
+        row = qone(
+            conn,
+            """
+            SELECT id, username, is_super_admin, is_active, created_at, updated_at
+            FROM accounts
+            WHERE id = ?
+            """,
+            (account_id,),
+        )
+    return row_to_dict(row)
+
+
+def set_account_password(account_id: int, new_password: str) -> None:
+    _validate_password(new_password)
+    with db() as conn:
+        conn.execute(
+            "UPDATE accounts SET password_hash = ?, updated_at = ? WHERE id = ?",
+            (hash_password(new_password), utcnow_iso(), account_id),
+        )
+
+
+def update_account_flags(account_id: int, is_active: Optional[bool], is_super_admin: Optional[bool]) -> None:
+    updates = []
+    args: List[Any] = []
+    if is_active is not None:
+        updates.append("is_active = ?")
+        args.append(1 if is_active else 0)
+    if is_super_admin is not None:
+        updates.append("is_super_admin = ?")
+        args.append(1 if is_super_admin else 0)
+    if not updates:
+        return
+    updates.append("updated_at = ?")
+    args.append(utcnow_iso())
+    args.append(account_id)
+    with db() as conn:
+        conn.execute(f"UPDATE accounts SET {', '.join(updates)} WHERE id = ?", args)
+
+
+def deactivate_account(account_id: int) -> None:
+    with db() as conn:
+        conn.execute(
+            "UPDATE accounts SET is_active = 0, updated_at = ? WHERE id = ?",
+            (utcnow_iso(), account_id),
+        )
+        conn.execute("DELETE FROM auth_sessions WHERE account_id = ?", (account_id,))

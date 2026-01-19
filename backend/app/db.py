@@ -98,28 +98,37 @@ def rows_to_dicts(rows: List[sqlite3.Row]) -> List[Dict]:
 # 学生相关
 # ============================================================
 
-def get_students(conn: sqlite3.Connection) -> List[Dict]:
-    """获取所有学生"""
-    rows = qall(conn, "SELECT * FROM students ORDER BY id")
+def get_students(conn: sqlite3.Connection, account_id: int) -> List[Dict]:
+    """获取账户下的所有学生"""
+    rows = qall(conn, "SELECT * FROM students WHERE account_id = ? ORDER BY id", (account_id,))
     return rows_to_dicts(rows)
 
 
-def get_student(conn: sqlite3.Connection, student_id: int) -> Optional[Dict]:
+def get_student(conn: sqlite3.Connection, student_id: int, account_id: int) -> Optional[Dict]:
     """获取单个学生"""
-    row = qone(conn, "SELECT * FROM students WHERE id = ?", (student_id,))
+    row = qone(conn, "SELECT * FROM students WHERE id = ? AND account_id = ?", (student_id, account_id))
     return row_to_dict(row)
 
 
-def create_student(conn: sqlite3.Connection, name: str, grade: str = None, avatar: str = None) -> int:
+def create_student(conn: sqlite3.Connection, name: str, grade: str = None, avatar: str = None, account_id: int = None) -> int:
     """创建学生"""
+    if account_id is None:
+        raise ValueError("account_id is required")
     if avatar is None:
-        sql = "INSERT INTO students (name, grade) VALUES (?, ?)"
-        return exec1(conn, sql, (name, grade))
-    sql = "INSERT INTO students (name, grade, avatar) VALUES (?, ?, ?)"
-    return exec1(conn, sql, (name, grade, avatar))
+        sql = "INSERT INTO students (name, grade, account_id) VALUES (?, ?, ?)"
+        return exec1(conn, sql, (name, grade, account_id))
+    sql = "INSERT INTO students (name, grade, avatar, account_id) VALUES (?, ?, ?, ?)"
+    return exec1(conn, sql, (name, grade, avatar, account_id))
 
 
-def update_student(conn: sqlite3.Connection, student_id: int, name: str = None, grade: str = None, avatar: str = None) -> None:
+def update_student(
+    conn: sqlite3.Connection,
+    student_id: int,
+    account_id: int,
+    name: str = None,
+    grade: str = None,
+    avatar: str = None,
+) -> None:
     """更新学生信息"""
     updates = []
     args = []
@@ -138,39 +147,58 @@ def update_student(conn: sqlite3.Connection, student_id: int, name: str = None, 
         updates.append("updated_at = ?")
         args.append(utcnow_iso())
         args.append(student_id)
+        args.append(account_id)
 
-        sql = f"UPDATE students SET {', '.join(updates)} WHERE id = ?"
+        sql = f"UPDATE students SET {', '.join(updates)} WHERE id = ? AND account_id = ?"
         conn.execute(sql, args)
 
 
-def delete_student(conn: sqlite3.Connection, student_id: int) -> None:
+def delete_student(conn: sqlite3.Connection, student_id: int, account_id: int) -> None:
     """删除学生"""
-    conn.execute("DELETE FROM students WHERE id = ?", (student_id,))
+    conn.execute("DELETE FROM students WHERE id = ? AND account_id = ?", (student_id, account_id))
 
 
 # ============================================================
 # 资料库相关
 # ============================================================
 
-def get_bases(conn: sqlite3.Connection, is_system: bool = None) -> List[Dict]:
+def get_bases(conn: sqlite3.Connection, account_id: int, is_system: bool = None) -> List[Dict]:
     """获取资料库列表
 
     Args:
         is_system: None=全部, True=仅系统, False=仅自定义
     """
     if is_system is None:
-        sql = "SELECT * FROM bases ORDER BY is_system DESC, id"
+        sql = """
+            SELECT * FROM bases
+            WHERE is_system = 1 OR (is_system = 0 AND account_id = ?)
+            ORDER BY is_system DESC, id
+        """
+        rows = qall(conn, sql, (account_id,))
+    elif is_system:
+        sql = "SELECT * FROM bases WHERE is_system = 1 ORDER BY id"
         rows = qall(conn, sql)
     else:
-        sql = "SELECT * FROM bases WHERE is_system = ? ORDER BY id"
-        rows = qall(conn, sql, (1 if is_system else 0,))
+        sql = "SELECT * FROM bases WHERE is_system = 0 AND account_id = ? ORDER BY id"
+        rows = qall(conn, sql, (account_id,))
 
     return rows_to_dicts(rows)
 
 
-def get_base(conn: sqlite3.Connection, base_id: int) -> Optional[Dict]:
+def get_base(conn: sqlite3.Connection, base_id: int, account_id: int, allow_system: bool = True) -> Optional[Dict]:
     """获取单个资料库"""
-    row = qone(conn, "SELECT * FROM bases WHERE id = ?", (base_id,))
+    if allow_system:
+        row = qone(
+            conn,
+            "SELECT * FROM bases WHERE id = ? AND (is_system = 1 OR account_id = ?)",
+            (base_id, account_id),
+        )
+    else:
+        row = qone(
+            conn,
+            "SELECT * FROM bases WHERE id = ? AND account_id = ?",
+            (base_id, account_id),
+        )
     return row_to_dict(row)
 
 
@@ -179,6 +207,7 @@ def create_base(
     name: str,
     description: str = None,
     is_system: bool = False,
+    account_id: Optional[int] = None,
     education_stage: str = None,
     grade: str = None,
     term: str = None,
@@ -188,11 +217,15 @@ def create_base(
     cover_image: str = None
 ) -> int:
     """创建资料库"""
+    if is_system:
+        account_id = None
+    elif account_id is None:
+        raise ValueError("account_id is required for custom bases")
     sql = """INSERT INTO bases
-             (name, description, is_system, education_stage, grade, term, version, publisher, editor, cover_image)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+             (name, description, is_system, account_id, education_stage, grade, term, version, publisher, editor, cover_image)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
     return exec1(conn, sql, (
-        name, description, 1 if is_system else 0,
+        name, description, 1 if is_system else 0, account_id,
         education_stage, grade, term, version, publisher, editor, cover_image
     ))
 
@@ -465,6 +498,21 @@ def get_base_units(conn: sqlite3.Connection, base_id: int) -> List[str]:
 def get_item(conn: sqlite3.Connection, item_id: int) -> Optional[Dict]:
     """获取单个词条"""
     row = qone(conn, "SELECT * FROM items WHERE id = ?", (item_id,))
+    return row_to_dict(row)
+
+
+def get_item_scoped(conn: sqlite3.Connection, item_id: int, account_id: int) -> Optional[Dict]:
+    """按账户范围获取词条（system 或当前账户）"""
+    row = qone(
+        conn,
+        """
+        SELECT i.*
+        FROM items i
+        JOIN bases b ON b.id = i.base_id
+        WHERE i.id = ? AND (b.is_system = 1 OR b.account_id = ?)
+        """,
+        (item_id, account_id),
+    )
     return row_to_dict(row)
 
 

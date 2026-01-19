@@ -11,18 +11,28 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from app import db
 
+def get_default_account_id(conn):
+    row = conn.execute("SELECT id FROM accounts ORDER BY id ASC LIMIT 1").fetchone()
+    if not row:
+        print("❌ accounts 为空，请先初始化管理员账号，跳过测试")
+        return None
+    return int(row["id"])
+
 def test_students():
     """测试学生相关API函数"""
     print("\n=== 测试学生相关API函数 ===")
 
     with db.db() as conn:
         # Test get_students
-        students = db.get_students(conn)
+        account_id = get_default_account_id(conn)
+        if not account_id:
+            return
+        students = db.get_students(conn, account_id)
         print(f"✓ get_students(): {len(students)} 个学生")
 
         if students:
             # Test get_student
-            student = db.get_student(conn, students[0]['id'])
+            student = db.get_student(conn, students[0]['id'], account_id)
             print(f"✓ get_student({students[0]['id']}): {student['name']}")
 
 
@@ -32,18 +42,21 @@ def test_bases():
 
     with db.db() as conn:
         # Test get_bases with filters
-        all_bases = db.get_bases(conn, is_system=None)
+        account_id = get_default_account_id(conn)
+        if not account_id:
+            return
+        all_bases = db.get_bases(conn, account_id, is_system=None)
         print(f"✓ get_bases(is_system=None): {len(all_bases)} 个资料库")
 
-        system_bases = db.get_bases(conn, is_system=True)
+        system_bases = db.get_bases(conn, account_id, is_system=True)
         print(f"✓ get_bases(is_system=True): {len(system_bases)} 个系统资料库")
 
-        custom_bases = db.get_bases(conn, is_system=False)
+        custom_bases = db.get_bases(conn, account_id, is_system=False)
         print(f"✓ get_bases(is_system=False): {len(custom_bases)} 个自定义资料库")
 
         if all_bases:
             # Test get_base
-            base = db.get_base(conn, all_bases[0]['id'])
+            base = db.get_base(conn, all_bases[0]['id'], account_id)
             print(f"✓ get_base({all_bases[0]['id']}): {base['name']}")
 
             # Test get_base_items
@@ -60,7 +73,10 @@ def test_learning_library():
     print("\n=== 测试学习库相关API函数 ===")
 
     with db.db() as conn:
-        students = db.get_students(conn)
+        account_id = get_default_account_id(conn)
+        if not account_id:
+            return
+        students = db.get_students(conn, account_id)
         if not students:
             print("❌ 没有学生，跳过学习库测试")
             return
@@ -90,11 +106,14 @@ def test_crud_operations():
 
     with db.db() as conn:
         # Test create student
-        student_id = db.create_student(conn, "测试学生", "四年级")
+        account_id = get_default_account_id(conn)
+        if not account_id:
+            return
+        student_id = db.create_student(conn, "测试学生", "四年级", account_id=account_id)
         print(f"✓ create_student(): student_id={student_id}")
 
         # Test create custom base
-        base_id = db.create_base(conn, "测试资料库", "测试描述", is_system=False)
+        base_id = db.create_base(conn, "测试资料库", "测试描述", is_system=False, account_id=account_id)
         print(f"✓ create_base(): base_id={base_id}")
 
         # Test add items

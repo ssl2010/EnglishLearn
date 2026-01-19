@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>我的账号</title>
+  <style>
+    :root{
+      --bg:#f6f7fb;
+      --card:#ffffff;
+      --text:#0f172a;
+      --muted:#64748b;
+      --line:#e2e8f0;
+      --primary:#0f172a;
+      --primary-soft:#f1f5f9;
+      --danger:#dc2626;
+      --shadow:0 8px 24px rgba(15,23,42,.08);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1280px;margin:0 auto;padding:28px 24px 40px}
+    .page-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:12px}
+    .page-header h1{margin:0;font-size:24px}
+    .subtext{color:var(--muted);font-size:13px;margin-top:6px}
+    .panel{background:var(--card);border-radius:16px;border:1px solid #e9edf4;box-shadow:var(--shadow);padding:18px}
+    .panel + .panel{margin-top:16px}
+    .panel-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+    .panel-header h2{margin:0;font-size:16px}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .info-item{padding:12px;border-radius:12px;background:var(--primary-soft);border:1px solid var(--line)}
+    .info-label{font-size:12px;color:var(--muted)}
+    .info-value{font-size:15px;font-weight:600;margin-top:6px}
+    label{display:block;margin-bottom:6px;font-size:12px;color:#334155}
+    input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);font-size:14px}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end}
+    .form-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+    .btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:9px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer}
+    .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+    .status{font-size:12px;min-height:16px;margin-top:8px}
+    .status.error{color:var(--danger)}
+    .status.success{color:#059669}
+    .hint{font-size:12px;color:var(--muted);margin-top:6px}
+    @media (max-width: 720px){
+      .info-grid{grid-template-columns:1fr}
+      .form-grid{grid-template-columns:1fr}
+      .page-header{flex-direction:column;align-items:flex-start}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="page-header">
+      <div>
+        <h1>我的账号</h1>
+        <div class="subtext">仅支持修改自己的密码</div>
+      </div>
+    </div>
+
+    <div id="pageStatus" class="status"></div>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>账号信息</h2>
+      </div>
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="info-label">用户名</div>
+          <div id="accountName" class="info-value">-</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">角色</div>
+          <div id="accountRole" class="info-value">-</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>修改密码</h2>
+      </div>
+      <form id="passwordForm">
+        <div class="form-grid">
+          <div>
+            <label>旧密码</label>
+            <input id="oldPassword" type="password" autocomplete="current-password" required />
+          </div>
+          <div>
+            <label>新密码</label>
+            <input id="newPassword" type="password" autocomplete="new-password" required />
+          </div>
+          <div>
+            <label>确认新密码</label>
+            <input id="confirmPassword" type="password" autocomplete="new-password" required />
+          </div>
+        </div>
+        <div class="hint">密码至少 8 位，修改后需要重新登录。</div>
+        <div class="form-actions">
+          <button id="submitBtn" class="btn primary" type="submit">确认修改</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById('pageStatus');
+    const nameEl = document.getElementById('accountName');
+    const roleEl = document.getElementById('accountRole');
+    const formEl = document.getElementById('passwordForm');
+    const oldInput = document.getElementById('oldPassword');
+    const newInput = document.getElementById('newPassword');
+    const confirmInput = document.getElementById('confirmPassword');
+    const submitBtn = document.getElementById('submitBtn');
+
+    function setStatus(message, type){
+      statusEl.textContent = message || '';
+      statusEl.className = 'status' + (type ? ' ' + type : '');
+    }
+
+    function redirectToLogin(){
+      try{
+        window.top.location.href = '/login.html';
+      }catch(e){
+        window.location.href = '/login.html';
+      }
+    }
+
+    function apiJSON(path, opts){
+      return fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts || {}))
+        .then(async res => {
+          if(!res.ok){
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || '请求失败');
+          }
+          return res.json();
+        });
+    }
+
+    async function loadAccount(){
+      try{
+        const res = await apiJSON('/api/auth/me');
+        const account = res.account || {};
+        nameEl.textContent = account.username || '-';
+        roleEl.textContent = account.is_super_admin ? '管理员' : '普通用户';
+      }catch(e){
+        redirectToLogin();
+      }
+    }
+
+    formEl.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      setStatus('');
+      const oldPassword = oldInput.value.trim();
+      const newPassword = newInput.value.trim();
+      const confirmPassword = confirmInput.value.trim();
+      if(!oldPassword || !newPassword){
+        setStatus('请填写完整的密码信息。', 'error');
+        return;
+      }
+      if(newPassword !== confirmPassword){
+        setStatus('两次输入的新密码不一致。', 'error');
+        return;
+      }
+      submitBtn.disabled = true;
+      try{
+        await apiJSON('/api/auth/change-password', {
+          method: 'POST',
+          body: JSON.stringify({old_password: oldPassword, new_password: newPassword})
+        });
+        setStatus('密码已更新，将重新登录。', 'success');
+        await fetch('/api/auth/logout', {method: 'POST'});
+        setTimeout(() => redirectToLogin(), 500);
+      }catch(e){
+        setStatus(e.message, 'error');
+      }finally{
+        submitBtn.disabled = false;
+      }
+    });
+
+    loadAccount();
+  </script>
+</body>
+</html>

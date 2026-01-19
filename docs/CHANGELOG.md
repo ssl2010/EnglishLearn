@@ -21,6 +21,21 @@
 - ALL/单学生切换在跨页面时状态不同步的问题
 - 学生管理编辑区布局与操作区域一致性
 
+## [2.2.0] - 2026-01-19
+
+### Added
+- 账号管理与我的账号页面（管理员可创建/停用/重置密码，用户可改密）
+- 账号管理 API：`/api/auth/change-password` 与 `/api/admin/accounts*`
+- 多账户数据隔离：students/custom bases 按 account 归属隔离，system bases 全局共享
+- 迁移脚本 `backend/migrate_add_account_scope.py`，为 students/bases 回填 `account_id`
+
+### Changed
+- 账号初始化逻辑：accounts 非空时不再依赖 `EL_ADMIN_PASS`
+- seed 仅加载系统资料库，避免污染账户数据
+
+### Fixed
+- 通过账号范围校验，阻止跨账户访问学生/资料库/练习单数据
+
 ## [2.0.0] - 2026-01-01
 
 ### Added

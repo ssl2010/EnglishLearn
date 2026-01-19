@@ -64,7 +64,7 @@
   </div>
 
   <script>
-    const menuItems = [
+    const baseMenuItems = [
       {label: '概览', src: 'dashboard.html'},
       {label: '生成练习单', src: 'generate.html'},
       {label: '提交 / 批改', src: 'submit.html'},
@@ -73,6 +73,8 @@
       {label: '资料库维护', src: 'library.html'},
       {label: '学生管理', src: 'profile.html'}
     ];
+    const accountMenuItem = {label: '我的账号', src: 'account.html'};
+    const adminMenuItem = {label: '账号管理', src: 'admin-accounts.html'};
 
     const AVATARS = [
       {id: 'rabbit', name: '兔子', emoji: '🐰'},
@@ -114,16 +116,28 @@
       'practice.html': {title: '练习单管理'},
       'knowledge.html': {title: '学习库管理'},
       'library.html': {title: '资料库维护'},
-      'profile.html': {title: '学生管理'}
+      'profile.html': {title: '学生管理'},
+      'account.html': {title: '我的账号'},
+      'admin-accounts.html': {title: '账号管理'}
     };
 
     const state = {
+      account: null,
       students: [],
       bases: [],
       currentStudentId: null,
       currentBaseId: null,
-      currentPage: 'dashboard.html'
+      currentPage: 'dashboard.html',
+      menuItems: []
     };
+
+    function getMenuItems(){
+      const items = [...baseMenuItems, accountMenuItem];
+      if(state.account && state.account.is_super_admin){
+        items.push(adminMenuItem);
+      }
+      return items;
+    }
 
     function apiJSON(path, opts){
       return fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts || {}))
@@ -175,11 +189,17 @@
     function renderMenu(){
       const menu = document.getElementById('menu');
       menu.innerHTML = '';
-      const current = localStorage.getItem('el_app_page') || 'dashboard.html';
+      const menuItems = getMenuItems();
+      state.menuItems = menuItems;
+      let current = localStorage.getItem('el_app_page') || 'dashboard.html';
+      const currentPage = normalizePage(current);
+      if(!menuItems.some(item => normalizePage(item.src) === currentPage)){
+        current = 'dashboard.html';
+      }
       menuItems.forEach(item => {
         const btn = document.createElement('button');
         btn.textContent = item.label;
-        if(item.src === current){
+        if(normalizePage(item.src) === normalizePage(current)){
           btn.classList.add('active');
         }
         btn.addEventListener('click', () => setPage(item.src));
@@ -232,7 +252,7 @@
         pageTitle.classList.add('hidden');
       }
       if(studentPicker){
-        const hidePicker = isProfile || isLibraryPage(page) || state.students.length === 0;
+        const hidePicker = isProfile || isLibraryPage(page) || page === 'account.html' || page === 'admin-accounts.html' || state.students.length === 0;
         studentPicker.classList.toggle('hidden', hidePicker);
         if(hidePicker){
           const cards = document.getElementById('studentCards');
@@ -281,7 +301,8 @@
         localStorage.setItem('el_app_page', src);
       }
       document.querySelectorAll('.menu button').forEach(btn => {
-        btn.classList.toggle('active', btn.textContent === menuItems.find(m => m.src === src)?.label);
+        const matched = state.menuItems.find(item => normalizePage(item.src) === targetPage);
+        btn.classList.toggle('active', matched && btn.textContent === matched.label);
       });
     }
 
@@ -421,7 +442,7 @@
       const picker = document.getElementById('studentPicker');
       if(!picker) return;
       const page = state.currentPage || getCurrentPage();
-      const hidePicker = page === 'profile.html' || isLibraryPage(page) || state.students.length === 0;
+      const hidePicker = page === 'profile.html' || page === 'account.html' || page === 'admin-accounts.html' || isLibraryPage(page) || state.students.length === 0;
       picker.classList.toggle('hidden', hidePicker);
       if(hidePicker){
         return;
@@ -487,7 +508,8 @@
 
     async function init(){
       try{
-        await apiJSON('/api/auth/me');
+        const res = await apiJSON('/api/auth/me');
+        state.account = res.account || null;
       }catch(e){
         window.location.href = '/login.html';
         return;

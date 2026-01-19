@@ -10,20 +10,30 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from app import db
 
+def get_default_account_id(conn):
+    row = conn.execute("SELECT id FROM accounts ORDER BY id ASC LIMIT 1").fetchone()
+    if not row:
+        print("❌ accounts 为空，请先初始化管理员账号，跳过测试")
+        return None
+    return int(row["id"])
+
 def test_students():
     """测试学生相关函数"""
     print("\n=== 测试学生相关函数 ===")
 
     with db.db() as conn:
+        account_id = get_default_account_id(conn)
+        if not account_id:
+            return
         # 获取所有学生
-        students = db.get_students(conn)
+        students = db.get_students(conn, account_id)
         print(f"✓ get_students(): {len(students)} 个学生")
         for s in students:
             print(f"  - {s['id']}: {s['name']} ({s['grade']})")
 
         # 获取单个学生
         if students:
-            student = db.get_student(conn, students[0]['id'])
+            student = db.get_student(conn, students[0]['id'], account_id)
             print(f"✓ get_student({students[0]['id']}): {student['name']}")
 
 
@@ -32,18 +42,21 @@ def test_bases():
     print("\n=== 测试资料库相关函数 ===")
 
     with db.db() as conn:
+        account_id = get_default_account_id(conn)
+        if not account_id:
+            return
         # 获取所有资料库
-        all_bases = db.get_bases(conn)
+        all_bases = db.get_bases(conn, account_id)
         print(f"✓ get_bases(): {len(all_bases)} 个资料库")
 
         # 获取系统资料库
-        system_bases = db.get_bases(conn, is_system=True)
+        system_bases = db.get_bases(conn, account_id, is_system=True)
         print(f"✓ get_bases(is_system=True): {len(system_bases)} 个")
         for b in system_bases:
             print(f"  - [系统] {b['id']}: {b['name']}")
 
         # 获取自定义资料库
-        custom_bases = db.get_bases(conn, is_system=False)
+        custom_bases = db.get_bases(conn, account_id, is_system=False)
         print(f"✓ get_bases(is_system=False): {len(custom_bases)} 个")
         for b in custom_bases:
             print(f"  - [自定义] {b['id']}: {b['name']}")
@@ -54,8 +67,11 @@ def test_items():
     print("\n=== 测试词条相关函数 ===")
 
     with db.db() as conn:
+        account_id = get_default_account_id(conn)
+        if not account_id:
+            return
         # 获取第一个资料库的词条
-        bases = db.get_bases(conn)
+        bases = db.get_bases(conn, account_id)
         if not bases:
             print("❌ 没有资料库，跳过词条测试")
             return
@@ -85,7 +101,10 @@ def test_learning_bases():
     print("\n=== 测试学生学习库相关函数 ===")
 
     with db.db() as conn:
-        students = db.get_students(conn)
+        account_id = get_default_account_id(conn)
+        if not account_id:
+            return
+        students = db.get_students(conn, account_id)
         if not students:
             print("❌ 没有学生，跳过学习库测试")
             return
@@ -110,7 +129,10 @@ def test_sessions():
     print("\n=== 测试练习单相关函数 ===")
 
     with db.db() as conn:
-        students = db.get_students(conn)
+        account_id = get_default_account_id(conn)
+        if not account_id:
+            return
+        students = db.get_students(conn, account_id)
         if not students:
             print("❌ 没有学生，跳过练习单测试")
             return
@@ -126,7 +148,7 @@ def test_sessions():
         print(f"✓ get_session({session_id}): {session}")
 
         # 添加词条到练习单
-        bases = db.get_bases(conn)
+        bases = db.get_bases(conn, account_id)
         if bases:
             items = db.get_base_items(conn, bases[0]['id'])
             if items:
@@ -147,8 +169,11 @@ def test_crud():
     print("\n=== 测试增删改查 ===")
 
     with db.db() as conn:
+        account_id = get_default_account_id(conn)
+        if not account_id:
+            return
         # 创建自定义资料库
-        base_id = db.create_base(conn, "测试资料库", "这是一个测试", is_system=False)
+        base_id = db.create_base(conn, "测试资料库", "这是一个测试", is_system=False, account_id=account_id)
         print(f"✓ create_base(): base_id={base_id}")
 
         # 添加词条
@@ -158,7 +183,7 @@ def test_crud():
 
         # 修改资料库
         db.update_base(conn, base_id, name="测试资料库(已修改)")
-        base = db.get_base(conn, base_id)
+        base = db.get_base(conn, base_id, account_id)
         print(f"✓ update_base(): {base['name']}")
 
         # 修改词条

@@ -610,7 +610,7 @@ def _match_session_by_items(conn, student_id: int, base_id: int, items: List[Dic
     }
 
 
-def _resolve_session_by_uuid(conn, worksheet_uuid: str) -> Optional[Dict[str, Any]]:
+def _resolve_session_by_uuid(conn, worksheet_uuid: str, account_id: int) -> Optional[Dict[str, Any]]:
     row = conn.execute(
         """
         SELECT
@@ -623,10 +623,11 @@ def _resolve_session_by_uuid(conn, worksheet_uuid: str) -> Optional[Dict[str, An
         LEFT JOIN students s ON s.id = ps.student_id
         LEFT JOIN bases b ON b.id = ps.base_id
         WHERE ps.practice_uuid = ?
+          AND s.account_id = ?
         ORDER BY ps.id DESC
         LIMIT 1
         """,
-        (worksheet_uuid,),
+        (worksheet_uuid, account_id),
     ).fetchone()
     return dict(row) if row else None
 
@@ -1122,7 +1123,7 @@ def _save_debug_overlay(image_bytes_list: List[bytes], items: List[Dict]) -> Lis
     return debug_urls
 
 
-def analyze_ai_photos_from_debug(student_id: int, base_id: int) -> Dict:
+def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int) -> Dict:
     """Load debug data from disk and process (for UI testing without calling LLM/OCR)."""
     debug_dir = os.path.join(MEDIA_DIR, "uploads", "debug_last")
 
@@ -1753,7 +1754,7 @@ def analyze_ai_photos_from_debug(student_id: int, base_id: int) -> Dict:
     }
 
 
-def analyze_ai_photos(student_id: Optional[int], base_id: Optional[int] = None, uploads: List[UploadFile] = None) -> Dict:
+def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optional[int] = None, uploads: List[UploadFile] = None) -> Dict:
     """LLM analysis + Baidu OCR recognition with merging.
 
     Args:
@@ -2555,7 +2556,7 @@ def analyze_ai_photos(student_id: Optional[int], base_id: Optional[int] = None, 
     if resolved_student_id is None or resolved_base_id is None:
         if uuid_info.get("uuid"):
             with db() as conn:
-                resolved = _resolve_session_by_uuid(conn, uuid_info["uuid"])
+                resolved = _resolve_session_by_uuid(conn, uuid_info["uuid"], account_id)
             if resolved:
                 resolved_session_id = int(resolved.get("id"))
                 resolved_student_id = int(resolved.get("student_id"))
@@ -2846,7 +2847,7 @@ def confirm_ai_extracted(
     }
 
 
-def bootstrap_single_child(student_name: str, grade_code: str) -> Dict[str, int]:
+def bootstrap_single_child(student_name: str, grade_code: str, account_id: int) -> Dict[str, int]:
     """第一次使用初始化：仅创建学生账户，不创建默认资料库。
 
     返回：student_id
@@ -2855,19 +2856,19 @@ def bootstrap_single_child(student_name: str, grade_code: str) -> Dict[str, int]
 
     with db() as conn:
         # create student using new db.py function
-        student_id = db_module.create_student(conn, student_name, grade=grade_code)
+        student_id = db_module.create_student(conn, student_name, grade=grade_code, account_id=account_id)
 
     return {"student_id": student_id}
 
 
-def list_bases(grade_code: Optional[str] = None) -> List[Dict]:
+def list_bases(account_id: int, grade_code: Optional[str] = None) -> List[Dict]:
     """List bases. Note: grade_code parameter is deprecated in new schema but kept for API compatibility."""
     from . import db as db_module
 
     with db() as conn:
         # New schema doesn't have grade_code on bases
         # Return all bases (can filter by is_system if needed)
-        bases = db_module.get_bases(conn, is_system=None)
+        bases = db_module.get_bases(conn, account_id=account_id, is_system=None)
         return bases
 
 
@@ -2875,6 +2876,7 @@ def create_base(
     name: str,
     grade_code: str,
     is_system: bool = False,
+    account_id: Optional[int] = None,
     education_stage: str = None,
     grade: str = None,
     term: str = None,
@@ -2894,6 +2896,7 @@ def create_base(
             conn, name,
             description=description,
             is_system=is_system,
+            account_id=account_id,
             education_stage=education_stage,
             grade=grade,
             term=term,
@@ -3329,6 +3332,7 @@ def generate_practice_session(
     student_id: int,
     total_count: int,
     mix_ratio: Dict[str, int],
+    account_id: int,
     title: str = "四年级英语默写单",
     base_id: Optional[int] = None,
     unit_scope: Optional[List[str]] = None,
@@ -3364,13 +3368,19 @@ def generate_practice_session(
         raise ValueError("Must provide either base_id or base_units")
 
     with db() as conn:
-        student = conn.execute("SELECT id FROM students WHERE id=?", (student_id,)).fetchone()
+        student = conn.execute(
+            "SELECT id FROM students WHERE id=? AND account_id=?",
+            (student_id, account_id),
+        ).fetchone()
         if not student:
             raise ValueError(f"student_id {student_id} 不存在，请先完成初始化/创建学生。")
 
         # Validate all base_ids exist
         for bid in normalized_base_units.keys():
-            base = conn.execute("SELECT id FROM bases WHERE id=?", (bid,)).fetchone()
+            base = conn.execute(
+                "SELECT id FROM bases WHERE id=? AND (is_system=1 OR account_id=?)",
+                (bid, account_id),
+            ).fetchone()
             if not base:
                 raise ValueError(f"base_id {bid} 不存在，请先导入或创建知识库。")
 
@@ -3709,6 +3719,7 @@ def list_sessions(student_id: int, base_id: int, limit: int = 30) -> List[Dict]:
 
 
 def search_practice_sessions(
+    account_id: int,
     student_id: Optional[int],
     base_id: Optional[int] = None,
     start_date: Optional[str] = None,
@@ -3720,10 +3731,11 @@ def search_practice_sessions(
 ) -> Tuple[List[Dict], int]:
     base_sql = """
         FROM practice_sessions ps
+        JOIN students s ON ps.student_id = s.id
         LEFT JOIN bases b ON ps.base_id = b.id
-        WHERE 1 = 1
+        WHERE s.account_id = ?
     """
-    params: List[Any] = []
+    params: List[Any] = [account_id]
     filters: List[str] = []
 
     if student_id is not None:
@@ -4199,6 +4211,7 @@ def upload_submission_image(session_id: int, upload: UploadFile) -> Dict:
 def upload_marked_submission_image(
     session_id: int,
     uploads: List[UploadFile],
+    account_id: int,
     confirm_mismatch: bool = False,
     allow_external: bool = False,
 ) -> Dict:
@@ -4213,7 +4226,7 @@ def upload_marked_submission_image(
         student_id = int(sess["student_id"])
         base_id = int(sess["base_id"])
 
-    return analyze_ai_photos(student_id, base_id, uploads)
+    return analyze_ai_photos(account_id, student_id, base_id, uploads)
 
 
 
@@ -4620,12 +4633,13 @@ def _media_url(path: Optional[str]) -> Optional[str]:
     return f"/media/{os.path.basename(path)}"
 
 
-def get_dashboard_overview(days: int = 30) -> Dict[str, Any]:
+def get_dashboard_overview(account_id: int, days: int = 30) -> Dict[str, Any]:
     mastery_threshold = get_mastery_threshold()
     weekly_target_days = get_weekly_target_days()
     with db() as conn:
         students = conn.execute(
-            "SELECT id, name, grade, avatar FROM students ORDER BY id LIMIT 3"
+            "SELECT id, name, grade, avatar FROM students WHERE account_id = ? ORDER BY id LIMIT 3",
+            (account_id,),
         ).fetchall()
 
         students_out = []
@@ -4663,13 +4677,13 @@ def get_dashboard_overview(days: int = 30) -> Dict[str, Any]:
     }
 
 
-def get_dashboard_student(student_id: int, days: int = 30, max_bases: int = 6) -> Dict[str, Any]:
+def get_dashboard_student(student_id: int, account_id: int, days: int = 30, max_bases: int = 6) -> Dict[str, Any]:
     mastery_threshold = get_mastery_threshold()
     weekly_target_days = get_weekly_target_days()
     with db() as conn:
         student_row = conn.execute(
-            "SELECT id, name, grade, avatar FROM students WHERE id = ?",
-            (student_id,),
+            "SELECT id, name, grade, avatar FROM students WHERE id = ? AND account_id = ?",
+            (student_id, account_id),
         ).fetchone()
         if not student_row:
             raise ValueError("student not found")

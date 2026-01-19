@@ -13,6 +13,14 @@ This document reflects the current state of the project (post‑OCR changes). It
 - DB: SQLite
 - Media: PDFs and uploads stored under `backend/media/`
 
+## Accounts & Data Isolation
+- 账号体系：`accounts` + `auth_sessions`，cookie 为 `el_session`。
+- 学生与自定义资料库归属到 `account_id`：
+  - `students.account_id` 必填；每个账号独立学生集合。
+  - `bases.account_id` 仅用于自定义资料库；`is_system=1` 时为 `NULL`，全局共享。
+- 所有涉及 `student_id` / `base_id` / `session_id` / `submission_id` 的 API 必须校验归属关系，跨账号访问返回 404。
+- 迁移脚本：`backend/migrate_add_account_scope.py` 为既有数据回填最早账户。
+
 ## Key Flows
 
 ### 1) Generate Practice Sheet

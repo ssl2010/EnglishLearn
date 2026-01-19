@@ -16,21 +16,6 @@ def load_seeds():
 
     try:
         # ========================================
-        # 示例学生
-        # ========================================
-        students = [
-            ("小明", "四年级"),
-            ("小红", "五年级"),
-        ]
-
-        for name, grade in students:
-            cursor.execute(
-                "INSERT INTO students (name, grade) VALUES (?, ?)",
-                (name, grade)
-            )
-        print(f"  ✅ 创建 {len(students)} 个示例学生")
-
-        # ========================================
         # 系统课本资料库
         # ========================================
         system_bases = [
@@ -126,60 +111,6 @@ def load_seeds():
                     )
 
         print(f"  ✅ 创建 {len(system_bases)} 个系统课本资料库")
-
-        # ========================================
-        # 示例自定义资料库
-        # ========================================
-        custom_bases = [
-            {
-                "name": "补习班资料库（示例）",
-                "description": "补习班学习内容",
-                "items": [
-                    ("WORD", "苹果", "apple"),
-                    ("WORD", "香蕉", "banana"),
-                    ("WORD", "橙子", "orange"),
-                    ("PHRASE", "我喜欢苹果", "I like apples"),
-                    ("PHRASE", "这是一个橙子", "This is an orange"),
-                ]
-            }
-        ]
-
-        for base_data in custom_bases:
-            cursor.execute(
-                "INSERT INTO bases (name, description, is_system) VALUES (?, ?, 0)",
-                (base_data["name"], base_data["description"])
-            )
-            base_id = cursor.lastrowid
-
-            # 不分单元的资料库，unit字段设为 "__ALL__"
-            for position, (item_type, zh_text, en_text) in enumerate(base_data["items"], 1):
-                cursor.execute(
-                    """INSERT INTO items
-                       (base_id, unit, position, zh_text, en_text, item_type)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (base_id, "__ALL__", position, zh_text, en_text, item_type)
-                )
-
-        print(f"  ✅ 创建 {len(custom_bases)} 个示例自定义资料库")
-
-        # ========================================
-        # 为示例学生配置学习库
-        # ========================================
-        # 小明（四年级）使用四年级上册，学到Unit 2
-        cursor.execute(
-            """INSERT INTO student_learning_bases
-               (student_id, base_id, custom_name, current_unit, display_order)
-               VALUES (1, 1, NULL, 'Unit 2', 1)"""
-        )
-
-        # 小明也使用补习班资料库
-        cursor.execute(
-            """INSERT INTO student_learning_bases
-               (student_id, base_id, custom_name, current_unit, display_order)
-               VALUES (1, 3, '新东方补习班', '__ALL__', 2)"""
-        )
-
-        print("  ✅ 配置示例学生学习库")
 
         conn.commit()
         print()

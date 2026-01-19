@@ -16,8 +16,22 @@ from pydantic import BaseModel, Field
 _DOTENV_PATH = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
 load_dotenv(_DOTENV_PATH, override=False)
 
-from .auth import create_session, delete_session, ensure_super_admin, get_account_by_session, verify_password
-from .db import init_db
+from .auth import (
+    count_active_admins,
+    create_account,
+    create_session,
+    deactivate_account,
+    delete_session,
+    delete_sessions_for_account,
+    ensure_super_admin,
+    get_account_by_session,
+    list_accounts_with_last_seen,
+    set_account_password,
+    update_account_flags,
+    verify_password,
+    _validate_username,
+)
+from .db import init_db, qone, row_to_dict
 from .services import (
     bootstrap_single_child,
     create_base,
@@ -86,6 +100,76 @@ def _require_super_admin(request: Request) -> None:
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
 
+def _require_account(request: Request) -> Dict:
+    account = _account_from_request(request)
+    if not account:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return account
+
+
+def _require_account_id(request: Request) -> int:
+    account = _require_account(request)
+    return int(account["id"])
+
+
+def _assert_student_owned(conn, account_id: int, student_id: int) -> Dict:
+    row = qone(conn, "SELECT * FROM students WHERE id = ? AND account_id = ?", (student_id, account_id))
+    if not row:
+        raise HTTPException(status_code=404, detail="Student not found")
+    return row_to_dict(row)
+
+
+def _assert_base_access(conn, account_id: int, base_id: int, allow_system: bool = True) -> Dict:
+    if allow_system:
+        row = qone(
+            conn,
+            "SELECT * FROM bases WHERE id = ? AND (is_system = 1 OR account_id = ?)",
+            (base_id, account_id),
+        )
+    else:
+        row = qone(
+            conn,
+            "SELECT * FROM bases WHERE id = ? AND account_id = ?",
+            (base_id, account_id),
+        )
+    if not row:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+    return row_to_dict(row)
+
+
+def _assert_session_owned(conn, account_id: int, session_id: int) -> Dict:
+    row = qone(
+        conn,
+        """
+        SELECT ps.*
+        FROM practice_sessions ps
+        JOIN students s ON ps.student_id = s.id
+        WHERE ps.id = ? AND s.account_id = ?
+        """,
+        (session_id, account_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Practice session not found")
+    return row_to_dict(row)
+
+
+def _assert_submission_owned(conn, account_id: int, submission_id: int) -> Dict:
+    row = qone(
+        conn,
+        """
+        SELECT sub.*
+        FROM submissions sub
+        JOIN practice_sessions ps ON sub.session_id = ps.id
+        JOIN students s ON ps.student_id = s.id
+        WHERE sub.id = ? AND s.account_id = ?
+        """,
+        (submission_id, account_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    return row_to_dict(row)
+
+
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     path = request.url.path
@@ -120,6 +204,26 @@ class BootstrapReq(BaseModel):
 class LoginReq(BaseModel):
     username: str
     password: str
+
+
+class ChangePasswordReq(BaseModel):
+    old_password: str
+    new_password: str
+
+
+class AdminCreateAccountReq(BaseModel):
+    username: str
+    password: str
+    is_super_admin: bool = False
+
+
+class AdminResetPasswordReq(BaseModel):
+    new_password: str
+
+
+class AdminUpdateAccountReq(BaseModel):
+    is_super_admin: Optional[bool] = None
+    is_active: Optional[bool] = None
 
 
 class CreateBaseReq(BaseModel):
@@ -284,14 +388,18 @@ class AIConfirmReq(BaseModel):
     bundle_id: Optional[str] = None
 
 @app.post("/api/bootstrap")
-def api_bootstrap(req: BootstrapReq):
+def api_bootstrap(req: BootstrapReq, request: Request):
     from .db import db
+    account_id = _require_account_id(request)
     with db() as conn:
-        row = conn.execute("SELECT COUNT(1) AS c FROM students").fetchone()
+        row = conn.execute(
+            "SELECT COUNT(1) AS c FROM students WHERE account_id = ?",
+            (account_id,),
+        ).fetchone()
         count = int(row["c"]) if row else 0
         if count >= _get_max_students():
             raise HTTPException(status_code=400, detail="学生数量已达到上限")
-    return bootstrap_single_child(req.student_name, req.grade_code)
+    return bootstrap_single_child(req.student_name, req.grade_code, account_id)
 
 
 # ============================================================
@@ -361,25 +469,145 @@ def api_auth_me(request: Request):
     }
 
 
+@app.post("/api/auth/change-password")
+def api_auth_change_password(req: ChangePasswordReq, request: Request):
+    from .db import db, qone
+    account = _account_from_request(request)
+    if not account:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    with db() as conn:
+        row = qone(conn, "SELECT * FROM accounts WHERE id = ?", (account["id"],))
+        if not row or row["is_active"] == 0:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        if not verify_password(req.old_password, row["password_hash"]):
+            raise HTTPException(status_code=400, detail="原密码错误")
+    try:
+        set_account_password(account["id"], req.new_password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    delete_sessions_for_account(account["id"])
+    return {"ok": True}
+
+
+# ============================================================
+# Admin Accounts API Endpoints
+# ============================================================
+
+@app.get("/api/admin/accounts")
+def api_admin_accounts(request: Request):
+    _require_super_admin(request)
+    accounts = list_accounts_with_last_seen()
+    for acc in accounts:
+        acc["is_super_admin"] = bool(acc.get("is_super_admin"))
+        acc["is_active"] = bool(acc.get("is_active"))
+    return {"accounts": accounts}
+
+
+@app.post("/api/admin/accounts")
+def api_admin_create_account(req: AdminCreateAccountReq, request: Request):
+    from .db import db, qone
+    _require_super_admin(request)
+    try:
+        _validate_username(req.username)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    with db() as conn:
+        exists = qone(conn, "SELECT id FROM accounts WHERE username = ?", (req.username,))
+        if exists:
+            raise HTTPException(status_code=400, detail="用户名已存在")
+    try:
+        account = create_account(req.username, req.password, req.is_super_admin)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    account["is_super_admin"] = bool(account.get("is_super_admin"))
+    account["is_active"] = bool(account.get("is_active"))
+    return {"account": account}
+
+
+@app.post("/api/admin/accounts/{account_id}/reset-password")
+def api_admin_reset_password(account_id: int, req: AdminResetPasswordReq, request: Request):
+    from .db import db, qone
+    _require_super_admin(request)
+    with db() as conn:
+        row = qone(conn, "SELECT id FROM accounts WHERE id = ?", (account_id,))
+        if not row:
+            raise HTTPException(status_code=404, detail="账号不存在")
+    try:
+        set_account_password(account_id, req.new_password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    delete_sessions_for_account(account_id)
+    return {"ok": True}
+
+
+@app.patch("/api/admin/accounts/{account_id}")
+def api_admin_update_account(account_id: int, req: AdminUpdateAccountReq, request: Request):
+    from .db import db, qone
+    _require_super_admin(request)
+    current = _account_from_request(request)
+    with db() as conn:
+        target = qone(
+            conn,
+            "SELECT id, username, is_super_admin, is_active FROM accounts WHERE id = ?",
+            (account_id,),
+        )
+        if not target:
+            raise HTTPException(status_code=404, detail="账号不存在")
+        if current and account_id == current.get("id") and req.is_active is False:
+            raise HTTPException(status_code=400, detail="不能停用自己")
+        target_is_admin = bool(target["is_super_admin"]) and bool(target["is_active"])
+        if target_is_admin and count_active_admins(conn) <= 1:
+            if req.is_super_admin is False or req.is_active is False:
+                raise HTTPException(status_code=400, detail="至少保留一个启用管理员")
+    update_account_flags(account_id, req.is_active, req.is_super_admin)
+    if req.is_active is False:
+        delete_sessions_for_account(account_id)
+    return {"ok": True}
+
+
+@app.delete("/api/admin/accounts/{account_id}")
+def api_admin_delete_account(account_id: int, request: Request):
+    from .db import db, qone
+    _require_super_admin(request)
+    current = _account_from_request(request)
+    if current and account_id == current.get("id"):
+        raise HTTPException(status_code=400, detail="不能停用自己")
+    with db() as conn:
+        target = qone(
+            conn,
+            "SELECT id, username, is_super_admin, is_active FROM accounts WHERE id = ?",
+            (account_id,),
+        )
+        if not target:
+            raise HTTPException(status_code=404, detail="账号不存在")
+        target_is_admin = bool(target["is_super_admin"]) and bool(target["is_active"])
+        if target_is_admin and count_active_admins(conn) <= 1:
+            raise HTTPException(status_code=400, detail="至少保留一个启用管理员")
+    deactivate_account(account_id)
+    return {"ok": True}
+
+
 # ============================================================
 # Student API Endpoints
 # ============================================================
 
 @app.get("/api/students")
-def api_get_students():
+def api_get_students(request: Request):
     """Get all students"""
     from .db import db, get_students
+    account_id = _require_account_id(request)
     with db() as conn:
-        students = get_students(conn)
+        students = get_students(conn, account_id)
     return {"students": students}
 
 
 @app.get("/api/students/{student_id}")
-def api_get_student(student_id: int):
+def api_get_student(student_id: int, request: Request):
     """Get single student"""
     from .db import db, get_student
+    account_id = _require_account_id(request)
     with db() as conn:
-        student = get_student(conn, student_id)
+        student = get_student(conn, student_id, account_id)
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     return student
@@ -392,15 +620,19 @@ class CreateStudentReq(BaseModel):
 
 
 @app.post("/api/students")
-def api_create_student(req: CreateStudentReq):
+def api_create_student(req: CreateStudentReq, request: Request):
     """Create new student"""
     from .db import db, create_student
+    account_id = _require_account_id(request)
     with db() as conn:
-        row = conn.execute("SELECT COUNT(1) AS c FROM students").fetchone()
+        row = conn.execute(
+            "SELECT COUNT(1) AS c FROM students WHERE account_id = ?",
+            (account_id,),
+        ).fetchone()
         count = int(row["c"]) if row else 0
         if count >= _get_max_students():
             raise HTTPException(status_code=400, detail="学生数量已达到上限")
-        student_id = create_student(conn, req.name, req.grade, req.avatar)
+        student_id = create_student(conn, req.name, req.grade, req.avatar, account_id=account_id)
     return {"student_id": student_id}
 
 
@@ -411,17 +643,19 @@ class UpdateStudentReq(BaseModel):
 
 
 @app.put("/api/students/{student_id}")
-def api_update_student(student_id: int, req: UpdateStudentReq):
+def api_update_student(student_id: int, req: UpdateStudentReq, request: Request):
     """Update student info"""
     from .db import db, update_student, get_student
+    account_id = _require_account_id(request)
     with db() as conn:
-        update_student(conn, student_id, req.name, req.grade, req.avatar)
-        student = get_student(conn, student_id)
+        _assert_student_owned(conn, account_id, student_id)
+        update_student(conn, student_id, account_id, req.name, req.grade, req.avatar)
+        student = get_student(conn, student_id, account_id)
     return student
 
 
 @app.post("/api/students/{student_id}/avatar")
-async def api_upload_student_avatar(student_id: int, file: UploadFile = File(...)):
+async def api_upload_student_avatar(student_id: int, request: Request, file: UploadFile = File(...)):
     """Upload custom avatar for student"""
     import os
     import uuid
@@ -445,50 +679,59 @@ async def api_upload_student_avatar(student_id: int, file: UploadFile = File(...
         shutil.copyfileobj(file.file, f)
 
     rel_path = os.path.join("uploads", "avatars", filename).replace(os.sep, "/")
+    account_id = _require_account_id(request)
     with db() as conn:
-        student = get_student(conn, student_id)
-        if not student:
-            raise HTTPException(status_code=404, detail="Student not found")
-        update_student(conn, student_id, avatar=rel_path)
-        student = get_student(conn, student_id)
+        _assert_student_owned(conn, account_id, student_id)
+        update_student(conn, student_id, account_id, avatar=rel_path)
+        student = get_student(conn, student_id, account_id)
 
     return {"avatar": rel_path, "student": student}
 
 
 @app.delete("/api/students/{student_id}")
-def api_delete_student(student_id: int):
+def api_delete_student(student_id: int, request: Request):
     """Delete student"""
     from .db import db, delete_student, get_student
+    account_id = _require_account_id(request)
     with db() as conn:
-        student = get_student(conn, student_id)
+        student = get_student(conn, student_id, account_id)
         if not student:
             raise HTTPException(status_code=404, detail="Student not found")
-        delete_student(conn, student_id)
+        delete_student(conn, student_id, account_id)
     return {"ok": True}
 
 
 @app.get("/api/system/status")
-def api_status(student_id: int, base_id: int):
+def api_status(student_id: int, base_id: int, request: Request):
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_student_owned(conn, account_id, student_id)
+        _assert_base_access(conn, account_id, base_id)
     return get_system_status(student_id, base_id)
 
 
 @app.get("/api/knowledge-bases")
-def api_list_bases(grade_code: Optional[str] = None, is_system: Optional[bool] = None):
+def api_list_bases(request: Request, grade_code: Optional[str] = None, is_system: Optional[bool] = None):
     """List bases with optional filters"""
     from .db import db, get_bases
+    account_id = _require_account_id(request)
     with db() as conn:
-        bases = get_bases(conn, is_system=is_system)
+        bases = get_bases(conn, account_id, is_system=is_system)
     return {"bases": bases}
 
 
 @app.post("/api/knowledge-bases")
 def api_create_base(req: CreateBaseReq, request: Request):
+    account_id = _require_account_id(request)
     if req.is_system:
         _require_super_admin(request)
+        account_id = None
     base_id = create_base(
         name=req.name,
         grade_code=req.grade_code,
         is_system=req.is_system,
+        account_id=account_id,
         education_stage=req.education_stage,
         grade=req.grade,
         term=req.term,
@@ -513,10 +756,16 @@ class UpdateBaseReq(BaseModel):
 
 
 @app.put("/api/knowledge-bases/{base_id}")
-def api_update_base(base_id: int, req: UpdateBaseReq):
+def api_update_base(base_id: int, req: UpdateBaseReq, request: Request):
     """Update base"""
     from .db import db, update_base, get_base
+    account_id = _require_account_id(request)
     with db() as conn:
+        base = _assert_base_access(conn, account_id, base_id)
+        if base.get("is_system"):
+            _require_super_admin(request)
+        if req.is_system is True and not base.get("is_system"):
+            _require_super_admin(request)
         update_base(
             conn, base_id,
             name=req.name,
@@ -529,12 +778,17 @@ def api_update_base(base_id: int, req: UpdateBaseReq):
             publisher=req.publisher,
             editor=req.editor
         )
-        base = get_base(conn, base_id)
+        if req.is_system is not None:
+            if req.is_system:
+                conn.execute("UPDATE bases SET account_id = NULL WHERE id = ?", (base_id,))
+            else:
+                conn.execute("UPDATE bases SET account_id = ? WHERE id = ?", (account_id, base_id))
+        base = get_base(conn, base_id, account_id)
     return base
 
 
 @app.post("/api/knowledge-bases/{base_id}/cover")
-async def api_upload_base_cover(base_id: int, file: UploadFile = File(...)):
+async def api_upload_base_cover(base_id: int, request: Request, file: UploadFile = File(...)):
     """Upload cover image for knowledge base"""
     import os
     from .db import db, update_base, get_base
@@ -560,9 +814,13 @@ async def api_upload_base_cover(base_id: int, file: UploadFile = File(...)):
 
     # Update database
     cover_url = f"/media/{filename}"
+    account_id = _require_account_id(request)
     with db() as conn:
+        base = _assert_base_access(conn, account_id, base_id)
+        if base.get("is_system"):
+            _require_super_admin(request)
         update_base(conn, base_id, cover_image=cover_url)
-        base = get_base(conn, base_id)
+        base = get_base(conn, base_id, account_id)
 
     return {"cover_url": cover_url, "base": base}
 
@@ -580,13 +838,12 @@ def api_delete_base(base_id: int, request: Request, force: bool = False):
     """
     from .db import db, delete_base, get_base
 
-    _require_super_admin(request)
+    account_id = _require_account_id(request)
 
     with db() as conn:
-        # Check if base exists
-        base = get_base(conn, base_id)
-        if not base:
-            raise HTTPException(status_code=404, detail="知识库不存在")
+        base = _assert_base_access(conn, account_id, base_id)
+        if base.get("is_system"):
+            _require_super_admin(request)
 
         # Check if base is used in any learning library
         check_sql = """
@@ -595,7 +852,11 @@ def api_delete_base(base_id: int, request: Request, force: bool = False):
             JOIN students s ON slb.student_id = s.id
             WHERE slb.base_id = ?
         """
-        usage_rows = conn.execute(check_sql, (base_id,)).fetchall()
+        usage_params = [base_id]
+        if not base.get("is_system"):
+            check_sql += " AND s.account_id = ?"
+            usage_params.append(account_id)
+        usage_rows = conn.execute(check_sql, usage_params).fetchall()
 
         if usage_rows and not force:
             # Base is in use, cannot delete (unless force=True)
@@ -622,10 +883,12 @@ def api_delete_base(base_id: int, request: Request, force: bool = False):
 
 
 @app.get("/api/knowledge-bases/{base_id}/units")
-def api_get_base_units(base_id: int):
+def api_get_base_units(base_id: int, request: Request):
     """Get unit metadata for a base"""
     from .db import db, get_units
+    account_id = _require_account_id(request)
     with db() as conn:
+        _assert_base_access(conn, account_id, base_id)
         units = get_units(conn, base_id)
     return {"units": units}
 
@@ -635,19 +898,25 @@ class ImportUnitsReq(BaseModel):
 
 
 @app.post("/api/knowledge-bases/{base_id}/units/import")
-def api_import_units(base_id: int, req: ImportUnitsReq):
+def api_import_units(base_id: int, req: ImportUnitsReq, request: Request):
     """Import unit metadata for a base"""
     from .db import db, upsert_units
+    account_id = _require_account_id(request)
     with db() as conn:
+        base = _assert_base_access(conn, account_id, base_id)
+        if base.get("is_system"):
+            _require_super_admin(request)
         result = upsert_units(conn, base_id, req.units)
     return result
 
 
 @app.get("/api/knowledge-bases/{base_id}/items")
-def api_get_base_items(base_id: int, unit: Optional[str] = None):
+def api_get_base_items(base_id: int, request: Request, unit: Optional[str] = None):
     """Get items for a base"""
     from .db import db, get_base_items
+    account_id = _require_account_id(request)
     with db() as conn:
+        _assert_base_access(conn, account_id, base_id)
         items = get_base_items(conn, base_id, unit=unit)
     return {"items": items}
 
@@ -662,10 +931,14 @@ class CreateItemReq(BaseModel):
 
 
 @app.post("/api/knowledge-items")
-def api_create_item(req: CreateItemReq):
+def api_create_item(req: CreateItemReq, request: Request):
     """Create a new knowledge item"""
     from .db import db, create_item
+    account_id = _require_account_id(request)
     with db() as conn:
+        base = _assert_base_access(conn, account_id, req.base_id)
+        if base.get("is_system"):
+            _require_super_admin(request)
         item_id = create_item(
             conn,
             base_id=req.base_id,
@@ -688,20 +961,34 @@ class UpdateItemReq(BaseModel):
 
 
 @app.put("/api/knowledge-items/{item_id}")
-def api_update_item(item_id: int, req: UpdateItemReq):
+def api_update_item(item_id: int, req: UpdateItemReq, request: Request):
     """Update knowledge item"""
-    from .db import db, update_item, get_item
+    from .db import db, update_item, get_item_scoped
+    account_id = _require_account_id(request)
     with db() as conn:
+        item = get_item_scoped(conn, item_id, account_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="词条不存在")
+        base = _assert_base_access(conn, account_id, item["base_id"])
+        if base.get("is_system"):
+            _require_super_admin(request)
         update_item(conn, item_id, req.zh_text, req.en_text, req.unit, None, req.item_type, req.difficulty_tag)
-        item = get_item(conn, item_id)
+        item = get_item_scoped(conn, item_id, account_id)
     return item
 
 
 @app.delete("/api/knowledge-items/{item_id}")
-def api_delete_item(item_id: int):
+def api_delete_item(item_id: int, request: Request):
     """Delete knowledge item"""
-    from .db import db, delete_item
+    from .db import db, delete_item, get_item_scoped
+    account_id = _require_account_id(request)
     with db() as conn:
+        item = get_item_scoped(conn, item_id, account_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="词条不存在")
+        base = _assert_base_access(conn, account_id, item["base_id"])
+        if base.get("is_system"):
+            _require_super_admin(request)
         delete_item(conn, item_id)
     return {"success": True}
 
@@ -711,10 +998,12 @@ def api_delete_item(item_id: int):
 # ============================================================
 
 @app.get("/api/students/{student_id}/learning-bases")
-def api_get_learning_bases(student_id: int, is_active: Optional[bool] = None):
+def api_get_learning_bases(student_id: int, request: Request, is_active: Optional[bool] = None):
     """Get student's learning library"""
     from .db import db, get_student_learning_bases
+    account_id = _require_account_id(request)
     with db() as conn:
+        _assert_student_owned(conn, account_id, student_id)
         learning_bases = get_student_learning_bases(conn, student_id, is_active=is_active)
     return {"learning_bases": learning_bases}
 
@@ -726,17 +1015,14 @@ class AddLearningBaseReq(BaseModel):
 
 
 @app.post("/api/students/{student_id}/learning-bases")
-def api_add_learning_base(student_id: int, req: AddLearningBaseReq):
+def api_add_learning_base(student_id: int, req: AddLearningBaseReq, request: Request):
     """Add base to student's learning library"""
-    from .db import db, add_learning_base, get_student, get_base
+    from .db import db, add_learning_base
+    account_id = _require_account_id(request)
     try:
         with db() as conn:
-            student = get_student(conn, student_id)
-            if not student:
-                raise HTTPException(status_code=400, detail=f"学生不存在: {student_id}")
-            base = get_base(conn, req.base_id)
-            if not base:
-                raise HTTPException(status_code=400, detail=f"资料库不存在: {req.base_id}")
+            _assert_student_owned(conn, account_id, student_id)
+            _assert_base_access(conn, account_id, req.base_id)
             lb_id = add_learning_base(conn, student_id, req.base_id, req.custom_name, req.current_unit)
         return {"id": lb_id}
     except HTTPException:
@@ -755,10 +1041,18 @@ class UpdateLearningBaseReq(BaseModel):
 
 
 @app.put("/api/students/{student_id}/learning-bases/{lb_id}")
-def api_update_learning_base(student_id: int, lb_id: int, req: UpdateLearningBaseReq):
+def api_update_learning_base(student_id: int, lb_id: int, req: UpdateLearningBaseReq, request: Request):
     """Update learning base configuration"""
     from .db import db, update_learning_base, get_student_learning_bases
+    account_id = _require_account_id(request)
     with db() as conn:
+        _assert_student_owned(conn, account_id, student_id)
+        row = conn.execute(
+            "SELECT id FROM student_learning_bases WHERE id = ? AND student_id = ?",
+            (lb_id, student_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="学习库不存在")
         update_learning_base(conn, lb_id, req.custom_name, req.current_unit, req.is_active)
         # Return updated learning bases list
         learning_bases = get_student_learning_bases(conn, student_id)
@@ -766,16 +1060,24 @@ def api_update_learning_base(student_id: int, lb_id: int, req: UpdateLearningBas
 
 
 @app.delete("/api/students/{student_id}/learning-bases/{lb_id}")
-def api_remove_learning_base(student_id: int, lb_id: int):
+def api_remove_learning_base(student_id: int, lb_id: int, request: Request):
     """Remove base from student's learning library"""
     from .db import db, remove_learning_base
+    account_id = _require_account_id(request)
     with db() as conn:
+        _assert_student_owned(conn, account_id, student_id)
+        row = conn.execute(
+            "SELECT id FROM student_learning_bases WHERE id = ? AND student_id = ?",
+            (lb_id, student_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="学习库不存在")
         remove_learning_base(conn, lb_id)
     return {"success": True}
 
 
 @app.get("/api/students/{student_id}/bases/{base_id}/mastery-stats")
-def api_get_mastery_stats(student_id: int, base_id: int):
+def api_get_mastery_stats(student_id: int, base_id: int, request: Request):
     """Get detailed mastery statistics for a base, grouped by item type and difficulty tag
 
     Returns statistics showing:
@@ -790,6 +1092,9 @@ def api_get_mastery_stats(student_id: int, base_id: int):
     mastery_threshold = int(get_setting("mastery_threshold", "2"))
 
     with db() as conn:
+        account_id = _require_account_id(request)
+        _assert_student_owned(conn, account_id, student_id)
+        _assert_base_access(conn, account_id, base_id)
         # Get all items for this base with their stats
         query = """
             SELECT
@@ -864,6 +1169,7 @@ def api_get_mastery_stats(student_id: int, base_id: int):
 def api_get_base_items_with_stats(
     student_id: int,
     base_id: int,
+    request: Request,
     unit: Optional[str] = None,
 ):
     """Get items for a base with per-student mastery/practice stats."""
@@ -908,6 +1214,9 @@ def api_get_base_items_with_stats(
             i.id
     """
     with db() as conn:
+        account_id = _require_account_id(request)
+        _assert_student_owned(conn, account_id, student_id)
+        _assert_base_access(conn, account_id, base_id)
         rows = conn.execute(sql, params).fetchall()
 
     items = []
@@ -938,7 +1247,13 @@ def api_get_base_items_with_stats(
 
 
 @app.post("/api/knowledge-items/import")
-def api_import_items(req: ImportItemsReq):
+def api_import_items(req: ImportItemsReq, request: Request):
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        base = _assert_base_access(conn, account_id, req.base_id)
+        if base.get("is_system"):
+            _require_super_admin(request)
     return upsert_items(req.base_id, req.items, mode=req.mode)
 
 
@@ -1041,13 +1356,16 @@ async def api_import_base_file(
     if mode not in ("skip", "update"):
         raise HTTPException(status_code=422, detail="mode must be skip or update")
 
+    account_id = _require_account_id(request)
     if is_system:
         _require_super_admin(request)
+        account_id = None
 
     base_id = create_base(
         name=str(name),
         grade_code=str(grade_code),
         is_system=is_system,
+        account_id=account_id,
         education_stage=education_stage,
         grade=grade,
         term=term,
@@ -1125,16 +1443,23 @@ async def api_import_base_file(
     return res
 
 @app.post("/api/practice-sessions/generate")
-def api_generate(req: GenerateReq):
+def api_generate(req: GenerateReq, request: Request):
     try:
+        from .db import db
+        account_id = _require_account_id(request)
         # Validate: must provide either base_units OR (base_id + optional unit_scope)
         if req.base_units:
             # New multi-base mode
+            with db() as conn:
+                _assert_student_owned(conn, account_id, req.student_id)
+                for base_id in req.base_units.keys():
+                    _assert_base_access(conn, account_id, int(base_id))
             data = generate_practice_session(
                 student_id=req.student_id,
                 base_units=req.base_units,
                 total_count=req.total_count,
                 mix_ratio={k.upper(): int(v) for k, v in req.mix_ratio.items()},
+                account_id=account_id,
                 title=req.title,
                 difficulty_filter=req.difficulty_filter,
             )
@@ -1142,12 +1467,16 @@ def api_generate(req: GenerateReq):
             # Legacy single-base mode
             if not req.base_id:
                 raise ValueError("Either base_units or base_id must be provided")
+            with db() as conn:
+                _assert_student_owned(conn, account_id, req.student_id)
+                _assert_base_access(conn, account_id, req.base_id)
             data = generate_practice_session(
                 student_id=req.student_id,
                 base_id=req.base_id,
                 unit_scope=req.unit_scope,
                 total_count=req.total_count,
                 mix_ratio={k.upper(): int(v) for k, v in req.mix_ratio.items()},
+                account_id=account_id,
                 title=req.title,
                 difficulty_filter=req.difficulty_filter,
             )
@@ -1170,12 +1499,18 @@ def api_generate(req: GenerateReq):
 
 
 @app.get("/api/practice-sessions")
-def api_list_sessions(student_id: int, base_id: int, limit: int = 30):
+def api_list_sessions(student_id: int, base_id: int, request: Request, limit: int = 30):
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_student_owned(conn, account_id, student_id)
+        _assert_base_access(conn, account_id, base_id)
     return {"sessions": list_sessions(student_id, base_id, limit=limit)}
 
 
 @app.get("/api/practice-sessions/search")
 def api_search_sessions(
+    request: Request,
     student_id: Optional[int] = None,
     base_id: Optional[int] = None,
     start_date: Optional[str] = None,
@@ -1205,7 +1540,17 @@ def api_search_sessions(
         size = limit_val
         page_num = 1
 
+    account_id = _require_account_id(request)
+    if student_id is not None:
+        from .db import db
+        with db() as conn:
+            _assert_student_owned(conn, account_id, student_id)
+    if base_id is not None:
+        from .db import db
+        with db() as conn:
+            _assert_base_access(conn, account_id, base_id)
     sessions, total_count = search_practice_sessions(
+        account_id=account_id,
         student_id=student_id,
         base_id=base_id,
         start_date=start_date,
@@ -1225,7 +1570,11 @@ def api_search_sessions(
 
 
 @app.delete("/api/practice-sessions/{session_id}")
-def api_delete_practice_session(session_id: int):
+def api_delete_practice_session(session_id: int, request: Request):
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_session_owned(conn, account_id, session_id)
     try:
         return delete_practice_session(session_id)
     except ValueError as e:
@@ -1235,9 +1584,10 @@ def api_delete_practice_session(session_id: int):
 
 
 @app.get("/api/practice-sessions/by-uuid/{practice_uuid}")
-def api_get_session_by_uuid(practice_uuid: str):
+def api_get_session_by_uuid(practice_uuid: str, request: Request):
     """Query practice session by UUID"""
     from .db import db
+    account_id = _require_account_id(request)
     with db() as conn:
         session = conn.execute(
             """
@@ -1254,9 +1604,11 @@ def api_get_session_by_uuid(practice_uuid: str):
                 ps.pdf_path,
                 ps.answer_pdf_path
             FROM practice_sessions ps
+            JOIN students s ON ps.student_id = s.id
             WHERE ps.practice_uuid = ?
+              AND s.account_id = ?
             """,
-            (practice_uuid,)
+            (practice_uuid, account_id)
         ).fetchone()
 
         if not session:
@@ -1293,7 +1645,11 @@ def api_get_session_by_uuid(practice_uuid: str):
 
 
 @app.get("/api/practice-sessions/{session_id}/detail")
-def api_get_session_detail(session_id: int):
+def api_get_session_detail(session_id: int, request: Request):
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_session_owned(conn, account_id, session_id)
     try:
         return get_practice_session_detail(session_id)
     except ValueError as e:
@@ -1301,7 +1657,11 @@ def api_get_session_detail(session_id: int):
 
 
 @app.post("/api/practice-sessions/{session_id}/regenerate-pdf")
-def api_regenerate_pdf(session_id: int):
+def api_regenerate_pdf(session_id: int, request: Request):
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_session_owned(conn, account_id, session_id)
     try:
         return regenerate_practice_pdfs(session_id)
     except ValueError as e:
@@ -1311,6 +1671,7 @@ def api_regenerate_pdf(session_id: int):
 @app.get("/api/students/{student_id}/practice-sessions/by-date")
 def api_get_sessions_by_date(
     student_id: int,
+    request: Request,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     downloaded_only: bool = False
@@ -1358,7 +1719,9 @@ def api_get_sessions_by_date(
 
     sql += " ORDER BY ps.created_date DESC, ps.id DESC"
 
+    account_id = _require_account_id(request)
     with db() as conn:
+        _assert_student_owned(conn, account_id, student_id)
         sessions = conn.execute(sql, params).fetchall()
         sessions_list = []
 
@@ -1379,7 +1742,11 @@ def api_get_sessions_by_date(
 
 
 @app.post("/api/practice-sessions/{session_id}/submit-image")
-def api_submit_image(session_id: int, file: UploadFile = File(...)):
+def api_submit_image(session_id: int, request: Request, file: UploadFile = File(...)):
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_session_owned(conn, account_id, session_id)
     return upload_submission_image(session_id, file)
 
 
@@ -1387,13 +1754,19 @@ def api_submit_image(session_id: int, file: UploadFile = File(...)):
 @app.post("/api/practice-sessions/{session_id}/submit-marked-photo")
 def api_submit_marked_photo(
     session_id: int,
+    request: Request,
     files: List[UploadFile] = File(...),
     confirm_mismatch: bool = False,
     allow_external: bool = False,
 ):
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_session_owned(conn, account_id, session_id)
     return upload_marked_submission_image(
         session_id,
         files,
+        account_id,
         confirm_mismatch=confirm_mismatch,
         allow_external=allow_external,
     )
@@ -1401,24 +1774,43 @@ def api_submit_marked_photo(
 
 @app.post("/api/ai/grade-photos")
 def api_ai_grade_photos(
+    request: Request,
     student_id: Optional[int] = None,
     base_id: Optional[int] = None,
     files: List[UploadFile] = File(...),
 ):
-    return analyze_ai_photos(student_id, base_id, files)
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        if student_id is not None:
+            _assert_student_owned(conn, account_id, student_id)
+        if base_id is not None:
+            _assert_base_access(conn, account_id, base_id)
+    return analyze_ai_photos(account_id, student_id, base_id, files)
 
 
 @app.post("/api/ai/grade-photos-debug")
 def api_ai_grade_photos_debug(
+    request: Request,
     student_id: int,
     base_id: int,
 ):
     """Debug mode: load from debug_last directory instead of calling LLM/OCR."""
-    return analyze_ai_photos_from_debug(student_id, base_id)
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_student_owned(conn, account_id, student_id)
+        _assert_base_access(conn, account_id, base_id)
+    return analyze_ai_photos_from_debug(account_id, student_id, base_id)
 
 
 @app.post("/api/ai/confirm-extracted")
-def api_ai_confirm_extracted(req: AIConfirmReq):
+def api_ai_confirm_extracted(req: AIConfirmReq, request: Request):
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_student_owned(conn, account_id, req.student_id)
+        _assert_base_access(conn, account_id, req.base_id)
     items = [it.model_dump() for it in req.items]
     return confirm_ai_extracted(
         req.student_id,
@@ -1437,30 +1829,48 @@ class ConfirmMarksReq(BaseModel):
 
 
 @app.post("/api/submissions/{submission_id}/confirm-marks")
-def api_confirm_marks(submission_id: int, req: ConfirmMarksReq):
+def api_confirm_marks(submission_id: int, req: ConfirmMarksReq, request: Request):
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_submission_owned(conn, account_id, submission_id)
     final = {int(k): bool(v) for k, v in req.marks.items()}
     return confirm_mark_grading(submission_id, final)
 
 
 @app.post("/api/practice-sessions/{session_id}/manual-correct")
-def api_manual_correct(session_id: int, req: ManualCorrectReq):
+def api_manual_correct(session_id: int, req: ManualCorrectReq, request: Request):
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_session_owned(conn, account_id, session_id)
     return manual_correct_session(session_id, req.answers)
 
 
 @app.get("/api/dashboard")
-def api_dashboard(student_id: int, base_id: int, days: int = 30):
+def api_dashboard(student_id: int, base_id: int, request: Request, days: int = 30):
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_student_owned(conn, account_id, student_id)
+        _assert_base_access(conn, account_id, base_id)
     return get_dashboard(student_id, base_id, days=days)
 
 
 @app.get("/api/dashboard/overview")
-def api_dashboard_overview(days: int = 30):
-    return get_dashboard_overview(days=days)
+def api_dashboard_overview(request: Request, days: int = 30):
+    account_id = _require_account_id(request)
+    return get_dashboard_overview(account_id=account_id, days=days)
 
 
 @app.get("/api/dashboard/student")
-def api_dashboard_student(student_id: int, days: int = 30, max_bases: int = 6):
+def api_dashboard_student(student_id: int, request: Request, days: int = 30, max_bases: int = 6):
+    from .db import db
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_student_owned(conn, account_id, student_id)
     try:
-        return get_dashboard_student(student_id, days=days, max_bases=max_bases)
+        return get_dashboard_student(student_id, account_id=account_id, days=days, max_bases=max_bases)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 

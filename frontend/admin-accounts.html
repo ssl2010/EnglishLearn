@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>账号管理</title>
+  <style>
+    :root{
+      --bg:#f6f7fb;
+      --card:#ffffff;
+      --text:#0f172a;
+      --muted:#64748b;
+      --line:#e2e8f0;
+      --primary:#0f172a;
+      --primary-soft:#f1f5f9;
+      --danger:#dc2626;
+      --shadow:0 8px 24px rgba(15,23,42,.08);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1200px;margin:0 auto;padding:28px 24px 40px}
+    .page-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:12px}
+    .page-header h1{margin:0;font-size:24px}
+    .subtext{color:var(--muted);font-size:13px;margin-top:6px}
+    .panel{background:var(--card);border-radius:16px;border:1px solid #e9edf4;box-shadow:var(--shadow);padding:18px}
+    .panel + .panel{margin-top:16px}
+    .panel-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+    .panel-header h2{margin:0;font-size:16px}
+    .btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:9px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer}
+    .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+    .btn.danger{background:var(--danger);color:#fff;border-color:var(--danger)}
+    .btn.small{padding:6px 10px;font-size:12px;border-radius:8px}
+    label{display:block;margin-bottom:6px;font-size:12px;color:#334155}
+    input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);font-size:14px}
+    .form-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:12px;align-items:end}
+    .form-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+    .status{font-size:12px;min-height:16px;margin-top:8px}
+    .status.error{color:var(--danger)}
+    .status.success{color:#059669}
+    .tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:var(--primary-soft);font-size:12px;color:#1e293b}
+    .tag.off{background:#fee2e2;color:#b91c1c}
+    .table-wrap{overflow:auto}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 8px;border-bottom:1px solid #edf1f7;font-size:13px;text-align:left;white-space:nowrap}
+    th{color:#475569;font-weight:600;font-size:12px}
+    tr.inactive{background:#fbfbfd;color:#94a3b8}
+    .actions{display:flex;gap:6px;flex-wrap:wrap}
+    .empty{padding:16px;border:1px dashed var(--line);border-radius:12px;color:var(--muted);font-size:13px;text-align:center}
+    .notice{font-size:12px;color:var(--muted)}
+    .hidden{display:none}
+    @media (max-width: 900px){
+      .form-grid{grid-template-columns:1fr}
+      .page-header{flex-direction:column;align-items:flex-start}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="page-header">
+      <div>
+        <h1>账号管理</h1>
+        <div class="subtext">删除=停用（账号会被强制退出）</div>
+      </div>
+    </div>
+
+    <div id="pageStatus" class="status"></div>
+
+    <section id="noPermission" class="panel hidden">
+      <div class="panel-header">
+        <h2>需要管理员权限</h2>
+      </div>
+      <div class="notice">当前账号没有管理员权限。</div>
+      <div class="form-actions">
+        <button id="backBtn" class="btn primary">返回看板</button>
+      </div>
+    </section>
+
+    <section id="mainContent" class="hidden">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>创建账号</h2>
+        </div>
+        <div class="form-grid">
+          <div>
+            <label>用户名</label>
+            <input id="createUsername" placeholder="3~32 位字母/数字/._-" />
+          </div>
+          <div>
+            <label>初始密码</label>
+            <input id="createPassword" type="password" placeholder="至少 8 位" />
+          </div>
+          <div>
+            <label>管理员</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px">
+              <input id="createIsAdmin" type="checkbox" style="width:auto" />
+              设为管理员
+            </label>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button id="createBtn" class="btn primary">创建账号</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>账号列表</h2>
+          <div class="notice">管理员权限不足时无法操作。</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>用户名</th>
+                <th>角色</th>
+                <th>状态</th>
+                <th>最近活动</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="accountsBody"></tbody>
+          </table>
+        </div>
+        <div id="emptyState" class="empty hidden">暂无账号数据</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const state = {
+      account: null,
+      accounts: []
+    };
+
+    const statusEl = document.getElementById('pageStatus');
+    const noPermissionEl = document.getElementById('noPermission');
+    const mainContentEl = document.getElementById('mainContent');
+    const accountsBody = document.getElementById('accountsBody');
+    const emptyState = document.getElementById('emptyState');
+
+    function setStatus(message, type){
+      statusEl.textContent = message || '';
+      statusEl.className = 'status' + (type ? ' ' + type : '');
+    }
+
+    function redirectToLogin(){
+      try{
+        window.top.location.href = '/login.html';
+      }catch(e){
+        window.location.href = '/login.html';
+      }
+    }
+
+    function apiJSON(path, opts){
+      return fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts || {}))
+        .then(async res => {
+          if(!res.ok){
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || '请求失败');
+          }
+          return res.json();
+        });
+    }
+
+    function formatLastSeen(value){
+      if(!value){
+        return '-';
+      }
+      const d = new Date(value);
+      if(Number.isNaN(d.getTime())){
+        return value;
+      }
+      return d.toLocaleString();
+    }
+
+    function renderAccounts(){
+      accountsBody.innerHTML = '';
+      if(!state.accounts.length){
+        emptyState.classList.remove('hidden');
+        return;
+      }
+      emptyState.classList.add('hidden');
+      state.accounts.forEach(acc => {
+        const tr = document.createElement('tr');
+        if(!acc.is_active){
+          tr.classList.add('inactive');
+        }
+
+        const nameTd = document.createElement('td');
+        nameTd.textContent = acc.username || '-';
+
+        const roleTd = document.createElement('td');
+        const roleTag = document.createElement('span');
+        roleTag.className = 'tag';
+        roleTag.textContent = acc.is_super_admin ? '管理员' : '普通用户';
+        roleTd.appendChild(roleTag);
+
+        const statusTd = document.createElement('td');
+        const statusTag = document.createElement('span');
+        statusTag.className = 'tag' + (acc.is_active ? '' : ' off');
+        statusTag.textContent = acc.is_active ? '启用' : '停用';
+        statusTd.appendChild(statusTag);
+
+        const lastTd = document.createElement('td');
+        lastTd.textContent = formatLastSeen(acc.last_seen_at);
+
+        const actionTd = document.createElement('td');
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+
+        const resetBtn = document.createElement('button');
+        resetBtn.className = 'btn small';
+        resetBtn.textContent = '重置密码';
+        resetBtn.addEventListener('click', () => resetPassword(acc));
+
+        const roleBtn = document.createElement('button');
+        roleBtn.className = 'btn small';
+        roleBtn.textContent = acc.is_super_admin ? '设为普通' : '设为管理员';
+        roleBtn.addEventListener('click', () => toggleRole(acc));
+
+        const activeBtn = document.createElement('button');
+        activeBtn.className = 'btn small' + (acc.is_active ? '' : ' primary');
+        activeBtn.textContent = acc.is_active ? '停用' : '启用';
+        activeBtn.addEventListener('click', () => toggleActive(acc));
+
+        actions.appendChild(resetBtn);
+        actions.appendChild(roleBtn);
+        actions.appendChild(activeBtn);
+        actionTd.appendChild(actions);
+
+        tr.appendChild(nameTd);
+        tr.appendChild(roleTd);
+        tr.appendChild(statusTd);
+        tr.appendChild(lastTd);
+        tr.appendChild(actionTd);
+        accountsBody.appendChild(tr);
+      });
+    }
+
+    async function refreshAccounts(){
+      const res = await apiJSON('/api/admin/accounts');
+      state.accounts = res.accounts || [];
+      renderAccounts();
+    }
+
+    async function resetPassword(acc){
+      setStatus('');
+      const newPassword = window.prompt(`为 ${acc.username} 设置新密码（至少 8 位）`);
+      if(!newPassword){
+        return;
+      }
+      if(newPassword.trim().length < 8){
+        setStatus('密码至少 8 位。', 'error');
+        return;
+      }
+      try{
+        await apiJSON(`/api/admin/accounts/${acc.id}/reset-password`, {
+          method: 'POST',
+          body: JSON.stringify({new_password: newPassword.trim()})
+        });
+        setStatus('密码已重置。', 'success');
+      }catch(e){
+        setStatus(e.message, 'error');
+      }
+    }
+
+    async function toggleRole(acc){
+      setStatus('');
+      try{
+        await apiJSON(`/api/admin/accounts/${acc.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({is_super_admin: !acc.is_super_admin})
+        });
+        await refreshAccounts();
+      }catch(e){
+        setStatus(e.message, 'error');
+      }
+    }
+
+    async function toggleActive(acc){
+      setStatus('');
+      if(acc.is_active){
+        const ok = window.confirm(`确定停用账号 ${acc.username} 吗？`);
+        if(!ok){
+          return;
+        }
+        try{
+          await apiJSON(`/api/admin/accounts/${acc.id}`, {method: 'DELETE'});
+          await refreshAccounts();
+        }catch(e){
+          setStatus(e.message, 'error');
+        }
+        return;
+      }
+      try{
+        await apiJSON(`/api/admin/accounts/${acc.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({is_active: true})
+        });
+        await refreshAccounts();
+      }catch(e){
+        setStatus(e.message, 'error');
+      }
+    }
+
+    async function createAccount(){
+      const usernameInput = document.getElementById('createUsername');
+      const passwordInput = document.getElementById('createPassword');
+      const isAdminInput = document.getElementById('createIsAdmin');
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value.trim();
+      if(!username || !password){
+        setStatus('请填写用户名和初始密码。', 'error');
+        return;
+      }
+      try{
+        await apiJSON('/api/admin/accounts', {
+          method: 'POST',
+          body: JSON.stringify({
+            username,
+            password,
+            is_super_admin: Boolean(isAdminInput.checked)
+          })
+        });
+        setStatus('账号创建成功。', 'success');
+        usernameInput.value = '';
+        passwordInput.value = '';
+        isAdminInput.checked = false;
+        await refreshAccounts();
+      }catch(e){
+        setStatus(e.message, 'error');
+      }
+    }
+
+    async function init(){
+      try{
+        const res = await apiJSON('/api/auth/me');
+        state.account = res.account || null;
+        if(!state.account || !state.account.is_super_admin){
+          noPermissionEl.classList.remove('hidden');
+          mainContentEl.classList.add('hidden');
+          return;
+        }
+        mainContentEl.classList.remove('hidden');
+        await refreshAccounts();
+      }catch(e){
+        redirectToLogin();
+      }
+    }
+
+    document.getElementById('createBtn').addEventListener('click', createAccount);
+    document.getElementById('backBtn').addEventListener('click', () => {
+      try{
+        window.top.location.href = '/app.html';
+      }catch(e){
+        window.location.href = '/app.html';
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

@@ -13,9 +13,11 @@ CREATE TABLE IF NOT EXISTS students (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     grade TEXT,
+    account_id INTEGER NOT NULL,
     avatar TEXT DEFAULT 'rabbit',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
 
 -- 资料库表
@@ -24,6 +26,7 @@ CREATE TABLE IF NOT EXISTS bases (
     name TEXT NOT NULL,
     description TEXT,
     is_system BOOLEAN DEFAULT 0,
+    account_id INTEGER,
     education_stage TEXT,
     grade TEXT,
     term TEXT,
@@ -32,7 +35,8 @@ CREATE TABLE IF NOT EXISTS bases (
     editor TEXT,
     cover_image TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
 
 -- 单元元数据表
@@ -222,6 +226,8 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
 CREATE INDEX IF NOT EXISTS idx_items_base_id ON items(base_id);
 CREATE INDEX IF NOT EXISTS idx_items_unit ON items(unit);
 CREATE INDEX IF NOT EXISTS idx_items_base_unit ON items(base_id, unit);
+CREATE INDEX IF NOT EXISTS idx_students_account_id ON students(account_id);
+CREATE INDEX IF NOT EXISTS idx_bases_account_id ON bases(account_id);
 CREATE INDEX IF NOT EXISTS idx_student_learning_bases_student ON student_learning_bases(student_id);
 CREATE INDEX IF NOT EXISTS idx_student_learning_bases_active ON student_learning_bases(student_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_units_base ON units(base_id);
