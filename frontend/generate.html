@@ -567,6 +567,44 @@
       color:#111;
       font-weight:500
     }
+    .log-panel{
+      margin-top:16px;
+      background:#fff;
+      border:1px solid #e5e7eb;
+      border-radius:10px;
+      padding:12px
+    }
+    .log-title{
+      font-size:13px;
+      font-weight:600;
+      color:#374151;
+      margin-bottom:6px
+    }
+    .log-list{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      max-height:160px;
+      overflow:auto;
+      font-size:12px;
+      color:#4b5563
+    }
+    .log-item{
+      padding:6px 8px;
+      border-radius:6px;
+      background:#f8fafc;
+      border:1px solid #e5e7eb
+    }
+    .log-item.success{
+      color:#166534;
+      background:#ecfdf3;
+      border-color:#bbf7d0
+    }
+    .log-item.error{
+      color:#b91c1c;
+      background:#fef2f2;
+      border-color:#fecaca
+    }
   </style>
 </head>
 <body>
@@ -600,7 +638,7 @@
             <div class="param-group-title">基础配置</div>
             <div style="margin-bottom:12px">
               <label style="margin-top:0">标题</label>
-              <input type="text" id="title" value="英语默写单" onchange="updateParamsSummary()" oninput="updateParamsSummary()" />
+              <input type="text" id="title" value="英语默写单" onchange="updateParamsSummary();saveParams()" oninput="updateParamsSummary();saveParams()" />
             </div>
             <div>
               <label style="margin-top:0">总题量 <span class="muted" style="font-weight:400">(自动计算)</span></label>
@@ -614,15 +652,15 @@
             <div class="row">
               <div>
                 <label style="margin-top:0">单词</label>
-                <input type="number" id="word" value="15" min="0" max="50" onchange="updateTotal();updateParamsSummary()" oninput="updateTotal();updateParamsSummary()" />
+                <input type="number" id="word" value="15" min="0" max="50" onchange="updateTotal();updateParamsSummary();saveParams()" oninput="updateTotal();updateParamsSummary();saveParams()" />
               </div>
               <div>
                 <label style="margin-top:0">短语</label>
-                <input type="number" id="phrase" value="8" min="0" max="30" onchange="updateTotal();updateParamsSummary()" oninput="updateTotal();updateParamsSummary()" />
+                <input type="number" id="phrase" value="8" min="0" max="30" onchange="updateTotal();updateParamsSummary();saveParams()" oninput="updateTotal();updateParamsSummary();saveParams()" />
               </div>
               <div>
                 <label style="margin-top:0">句子</label>
-                <input type="number" id="sentence" value="6" min="0" max="20" onchange="updateTotal();updateParamsSummary()" oninput="updateTotal();updateParamsSummary()" />
+                <input type="number" id="sentence" value="6" min="0" max="20" onchange="updateTotal();updateParamsSummary();saveParams()" oninput="updateTotal();updateParamsSummary();saveParams()" />
               </div>
             </div>
           </div>
@@ -632,11 +670,11 @@
             <div class="param-group-title">要求筛选</div>
             <div class="checkbox-group">
               <label class="checkbox-label" id="writeLabel" onclick="toggleDifficultyCheckbox('write')">
-                <input type="checkbox" id="difficultyWrite" checked onchange="updateDifficultyLabels();updateParamsSummary()" onclick="event.stopPropagation()">
+                <input type="checkbox" id="difficultyWrite" checked onchange="updateDifficultyLabels(event);updateParamsSummary();saveParams()" onclick="event.stopPropagation()">
                 <span>会写</span>
               </label>
               <label class="checkbox-label checked" id="readLabel" onclick="toggleDifficultyCheckbox('read')">
-                <input type="checkbox" id="difficultyRead" checked onchange="updateDifficultyLabels();updateParamsSummary()" onclick="event.stopPropagation()">
+                <input type="checkbox" id="difficultyRead" checked onchange="updateDifficultyLabels(event);updateParamsSummary();saveParams()" onclick="event.stopPropagation()">
                 <span>会认</span>
               </label>
             </div>
@@ -671,6 +709,10 @@
 
       <!-- Result section (moved below preview for better UX) -->
       <div id="out" style="margin-top:12px"></div>
+      <div class="log-panel">
+        <div class="log-title">生成日志</div>
+        <div id="genLogList" class="log-list"></div>
+      </div>
     </div>
   </div>
 
@@ -680,6 +722,22 @@ if(!cfg){ location.href='/'; }
 
 let learningBases = [];
 let currentSessionData = null; // Store current session data for preview
+const PARAMS_STORAGE_KEY = 'el_generate_params_v1';
+let isParamsInitializing = true;
+
+function appendLog(message, type){
+  const list = document.getElementById('genLogList');
+  if(!list) return;
+  const item = document.createElement('div');
+  const now = new Date();
+  const time = now.toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  item.className = `log-item${type ? ` ${type}` : ''}`;
+  item.textContent = `[${time}] ${message}`;
+  list.prepend(item);
+  while(list.children.length > 8){
+    list.removeChild(list.lastChild);
+  }
+}
 
 // Toggle params section
 function toggleParams(){
@@ -740,10 +798,12 @@ function toggleDifficultyCheckbox(type){
   const checkbox = document.getElementById(`difficulty${type === 'write' ? 'Write' : 'Read'}`);
   checkbox.checked = !checkbox.checked;
   updateDifficultyLabels();
+  updateParamsSummary();
+  saveParams();
 }
 
 // Update difficulty label styles based on checkbox state
-function updateDifficultyLabels(){
+function updateDifficultyLabels(sourceEvent){
   const writeCheckbox = document.getElementById('difficultyWrite');
   const readCheckbox = document.getElementById('difficultyRead');
   const writeLabel = document.getElementById('writeLabel');
@@ -752,10 +812,11 @@ function updateDifficultyLabels(){
   // Prevent unchecking both (at least one must be selected)
   if(!writeCheckbox.checked && !readCheckbox.checked){
     // Re-check the one that was just unchecked
-    if(event && event.target){
-      event.target.checked = true;
+    if(sourceEvent && sourceEvent.target){
+      sourceEvent.target.checked = true;
+    }else{
+      readCheckbox.checked = true;
     }
-    return;
   }
 
   // Update label styles
@@ -770,6 +831,45 @@ function updateDifficultyLabels(){
   }else{
     readLabel.classList.remove('checked');
   }
+}
+
+function loadSavedParams(){
+  const raw = localStorage.getItem(PARAMS_STORAGE_KEY);
+  if(!raw) return;
+  try{
+    const data = JSON.parse(raw);
+    if(typeof data.title === 'string'){
+      document.getElementById('title').value = data.title;
+    }
+    if(typeof data.word === 'number' || typeof data.word === 'string'){
+      document.getElementById('word').value = data.word;
+    }
+    if(typeof data.phrase === 'number' || typeof data.phrase === 'string'){
+      document.getElementById('phrase').value = data.phrase;
+    }
+    if(typeof data.sentence === 'number' || typeof data.sentence === 'string'){
+      document.getElementById('sentence').value = data.sentence;
+    }
+    if(typeof data.difficulty_write === 'boolean'){
+      document.getElementById('difficultyWrite').checked = data.difficulty_write;
+    }
+    if(typeof data.difficulty_read === 'boolean'){
+      document.getElementById('difficultyRead').checked = data.difficulty_read;
+    }
+  }catch(e){}
+}
+
+function saveParams(){
+  if(isParamsInitializing) return;
+  const payload = {
+    title: document.getElementById('title').value || '英语默写单',
+    word: parseInt(document.getElementById('word').value || '0', 10),
+    phrase: parseInt(document.getElementById('phrase').value || '0', 10),
+    sentence: parseInt(document.getElementById('sentence').value || '0', 10),
+    difficulty_write: document.getElementById('difficultyWrite').checked,
+    difficulty_read: document.getElementById('difficultyRead').checked
+  };
+  localStorage.setItem(PARAMS_STORAGE_KEY, JSON.stringify(payload));
 }
 
 // Get difficulty filter based on checkbox states
@@ -1187,6 +1287,13 @@ document.getElementById('go').onclick = async () => {
   const previewSection = document.getElementById('previewSection');
   const topActions = document.getElementById('topActions');
 
+  const title = document.getElementById('title').value||'英语默写单';
+  const wordCount = parseInt(document.getElementById('word').value||'15',10);
+  const phraseCount = parseInt(document.getElementById('phrase').value||'8',10);
+  const sentenceCount = parseInt(document.getElementById('sentence').value||'6',10);
+  const difficultyText = document.getElementById('summaryDifficulty').textContent || '会写 + 会认';
+
+  appendLog(`开始生成：${title}（单词${wordCount} 短语${phraseCount} 句子${sentenceCount}，要求 ${difficultyText}）`);
   out.innerHTML = '生成中...';
   previewSection.classList.remove('show');
   topActions.style.display = 'none'; // Hide top action buttons
@@ -1195,6 +1302,7 @@ document.getElementById('go').onclick = async () => {
 
   if(Object.keys(baseUnits).length === 0){
     out.innerHTML = '<p style="color:#c00">❌ 请至少选择一个资料库的一个单元</p>';
+    appendLog('生成失败：未选择出题范围', 'error');
     return;
   }
 
@@ -1207,12 +1315,12 @@ document.getElementById('go').onclick = async () => {
         student_id: cfg.student_id,
         base_units: baseUnits,
         total_count: parseInt(document.getElementById('total').value||'29',10),
-        title: document.getElementById('title').value||'英语默写单',
+        title,
         difficulty_filter: difficultyFilter,
         mix_ratio: {
-          WORD: parseInt(document.getElementById('word').value||'15',10),
-          PHRASE: parseInt(document.getElementById('phrase').value||'8',10),
-          SENTENCE: parseInt(document.getElementById('sentence').value||'6',10)
+          WORD: wordCount,
+          PHRASE: phraseCount,
+          SENTENCE: sentenceCount
         }
       })
     });
@@ -1223,8 +1331,11 @@ document.getElementById('go').onclick = async () => {
     // Show preview
     showPreview(data);
     out.innerHTML = '';
+    const itemCount = (data.items || []).length;
+    appendLog(`生成完成：共 ${itemCount} 题，Session #${data.session_id}`, 'success');
   }catch(e){
     out.innerHTML = `<p style="color:#c00">❌ 生成失败：${e.message}</p>`;
+    appendLog(`生成失败：${e.message}`, 'error');
   }
 };
 
@@ -1320,6 +1431,8 @@ document.getElementById('confirmBtn').onclick = () => {
   setTimeout(() => {
     out.scrollIntoView({behavior: 'smooth', block: 'nearest'});
   }, 100);
+
+  appendLog(`PDF 已生成：Session #${data.session_id}`, 'success');
 };
 
 // Regenerate button
@@ -1352,9 +1465,12 @@ document.getElementById('adjustBtnTop').onclick = () => {
 // Load learning bases on page load
 window.addEventListener('DOMContentLoaded', () => {
   loadLearningBases();
+  loadSavedParams();
   updateTotal(); // Initialize total count
   updateDifficultyLabels(); // Initialize difficulty checkbox styles
   updateParamsSummary(); // Initialize params summary
+  isParamsInitializing = false;
+  appendLog('生成器已就绪');
 });
 </script>
 </body>

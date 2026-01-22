@@ -66,8 +66,8 @@ def render_dictation_pdf(
     width, height = A4
 
     # Layout constants - 平衡美观与空间利用
-    margin_x = 18 * mm  # 左右边距（保持）
-    margin_y = 15 * mm  # 上下边距（减小以节省空间）
+    margin_x = (16 if show_answers else 18) * mm  # 答案页略减边距
+    margin_y = (12 if show_answers else 15) * mm  # 答案页略减边距
     y = height - margin_y
 
     # 答题横线的结束点
@@ -84,6 +84,8 @@ def render_dictation_pdf(
     # 页码计数器
     page_number = 1
     date_str = datetime.now().strftime("%Y年%m月%d日")
+
+    footer_space_mm = 12 if show_answers else 15
 
     # 绘制页眉（标题 + 左上角日期 + 右上角条码，对称设计）
     def draw_header(is_first_page=True):
@@ -112,12 +114,12 @@ def render_dictation_pdf(
         if is_first_page:
             # 第一页：显示标题（居中，在日期和条码下方）
             y -= 6 * mm  # 为顶部日期/条码预留空间（减少以压缩）
-            c.setFont(font_cn, 22)
+            c.setFont(font_cn, 18 if show_answers else 22)
             c.drawCentredString(width / 2, y, title)
-            y -= 10 * mm  # 标题后间距（减少以压缩）
+            y -= (8 if show_answers else 10) * mm  # 标题后间距
         else:
             # 非首页：为顶部日期/条码预留空间后直接开始内容
-            y -= 14 * mm  # 减少以节省空间
+            y -= (12 if show_answers else 14) * mm  # 减少以节省空间
 
     # 绘制页脚（仅页码居中）
     def draw_footer():
@@ -145,7 +147,7 @@ def render_dictation_pdf(
 
     def ensure_space(min_needed_mm: float):
         nonlocal y
-        if y < margin_y + min_needed_mm * mm + 15 * mm:  # 为页脚预留空间
+        if y < margin_y + min_needed_mm * mm + footer_space_mm * mm:  # 为页脚预留空间
             new_page()
 
     # Rendering helpers
@@ -154,99 +156,173 @@ def render_dictation_pdf(
         c.setLineWidth(0.5)
         c.line(x0, y0 - 2.5 * mm, x1, y0 - 2.5 * mm)
 
-    # Main body
-    for key, label in section_order:
-        rows = sections.get(key, []) or []
-        if not rows:
-            continue
+    def truncate_text(text: str, max_width: float, font_size: int) -> str:
+        if c.stringWidth(text, font_cn, font_size) <= max_width:
+            return text
+        trimmed = text
+        while trimmed and c.stringWidth(trimmed + "...", font_cn, font_size) > max_width:
+            trimmed = trimmed[:-1]
+        return trimmed + "..." if trimmed else ""
 
-        ensure_space(20)
-        c.setFont(font_cn, 16)
-        c.drawString(margin_x, y, f"{label}（共 {len(rows)} 题）")
-        y -= 8 * mm  # 章节标题后的间距（减少以压缩）
+    def wrap_text(text: str, max_width: float, font_size: int) -> List[str]:
+        if not text:
+            return [""]
+        lines: List[str] = []
+        buf = ""
+        for ch in text:
+            if c.stringWidth(buf + ch, font_cn, font_size) <= max_width:
+                buf += ch
+            else:
+                if buf:
+                    lines.append(buf)
+                buf = ch
+        if buf or not lines:
+            lines.append(buf)
+        return lines
 
-        if key == "WORD":
-            # 单词部分：单列排版（测试两页是否够用）
-            c.setFont(font_cn, 14)
+    def render_answer_sections():
+        nonlocal y
+        section_title_size = 13
+        item_size = 11
+        hint_size = 9
+        section_gap_mm = 3
 
+        def draw_section_title(label: str, count: int):
+            nonlocal y
+            ensure_space(12)
+            c.setFont(font_cn, section_title_size)
+            c.drawString(margin_x, y, f"{label}（{count}题）")
+            y -= 6 * mm
+
+        def draw_grid(rows: List[ExerciseRow], columns: int, cell_height_mm: float):
+            nonlocal y
+            if not rows:
+                return
+            col_width = (width - 2 * margin_x) / columns
+            total_rows = (len(rows) + columns - 1) // columns
+            for row_idx in range(total_rows):
+                ensure_space(cell_height_mm)
+                row_y = y
+                for col in range(columns):
+                    idx = row_idx * columns + col
+                    if idx >= len(rows):
+                        break
+                    row = rows[idx]
+                    x = margin_x + col * col_width
+                    num_text = f"{idx + 1}."
+                    c.setFont(font_cn, item_size)
+                    c.drawString(x, row_y, num_text)
+                    prefix_w = c.stringWidth(num_text + " ", font_cn, item_size)
+                    max_text_width = col_width - prefix_w - 2 * mm
+                    answer = truncate_text(row.answer_en, max_text_width, item_size)
+                    c.drawString(x + prefix_w, row_y, answer)
+                    hint = row.zh_hint or "(无提示)"
+                    c.setFont(font_cn, hint_size)
+                    c.drawString(x + prefix_w, row_y - 4.2 * mm, truncate_text(hint, max_text_width, hint_size))
+                y -= cell_height_mm * mm
+
+        def draw_sentence_answers(rows: List[ExerciseRow]):
+            nonlocal y
+            answer_line_mm = 5.2
+            hint_line_mm = 4.2
+            item_gap_mm = 2.5
             for idx, row in enumerate(rows, start=1):
-                ensure_space(16)
-                # 换页后重新设置字体
+                prefix = f"{idx}. "
+                c.setFont(font_cn, item_size)
+                prefix_w = c.stringWidth(prefix, font_cn, item_size)
+                max_width = width - 2 * margin_x - prefix_w
+                lines = wrap_text(row.answer_en, max_width, item_size)
+                hint = row.zh_hint or "(无提示)"
+                needed_mm = len(lines) * answer_line_mm + hint_line_mm + item_gap_mm
+                ensure_space(needed_mm)
+                c.drawString(margin_x, y, prefix + lines[0])
+                y -= answer_line_mm * mm
+                for extra in lines[1:]:
+                    ensure_space(answer_line_mm)
+                    c.drawString(margin_x + prefix_w, y, extra)
+                    y -= answer_line_mm * mm
+                c.setFont(font_cn, hint_size)
+                c.drawString(margin_x + prefix_w, y, hint)
+                y -= (hint_line_mm + item_gap_mm) * mm
+
+        for key, label in section_order:
+            rows = sections.get(key, []) or []
+            if not rows:
+                continue
+            draw_section_title(label, len(rows))
+            if key == "WORD":
+                draw_grid(rows, 3, 10)
+            elif key == "PHRASE":
+                draw_grid(rows, 2, 11)
+            else:
+                draw_sentence_answers(rows)
+            y -= section_gap_mm * mm
+
+    # Main body
+    if show_answers:
+        render_answer_sections()
+    else:
+        for key, label in section_order:
+            rows = sections.get(key, []) or []
+            if not rows:
+                continue
+
+            ensure_space(20)
+            c.setFont(font_cn, 16)
+            c.drawString(margin_x, y, f"{label}（共 {len(rows)} 题）")
+            y -= 8 * mm  # 章节标题后的间距（减少以压缩）
+
+            if key == "WORD":
+                # 单词部分：单列排版（测试两页是否够用）
                 c.setFont(font_cn, 14)
 
-                prefix = f"{idx}. {row.zh_hint}："
-                c.drawString(margin_x, y, prefix)
-
-                # 答题区域或答案 - 横线到页面中间位置
-                prefix_width = c.stringWidth(prefix, font_cn, 14)
-                x_ans = margin_x + prefix_width + 2 * mm
-                if show_answers:
-                    c.setFont(font_cn, 13)
-                    c.drawString(x_ans, y, row.answer_en)
+                for idx, row in enumerate(rows, start=1):
+                    ensure_space(16)
+                    # 换页后重新设置字体
                     c.setFont(font_cn, 14)
-                else:
+
+                    prefix = f"{idx}. {row.zh_hint}："
+                    c.drawString(margin_x, y, prefix)
+
+                    # 答题区域或答案 - 横线到页面中间位置
+                    prefix_width = c.stringWidth(prefix, font_cn, 14)
+                    x_ans = margin_x + prefix_width + 2 * mm
                     draw_fill_line(x_ans, y, word_line_end_x)  # 使用单词专用的横线长度
 
-                y -= 14 * mm  # 单词行间距（略微增加以改善视觉间隔）
+                    y -= 14 * mm  # 单词行间距（略微增加以改善视觉间隔）
 
-        elif key == "PHRASE":
-            # 短语部分：单栏，更大字体和间距
-            c.setFont(font_cn, 14)  # 确保字体设置正确
-            for idx, row in enumerate(rows, start=1):
-                ensure_space(16)  # 减少所需空间
-                # 换页后重新设置字体（修复换页后字号变小的问题）
-                c.setFont(font_cn, 14)
-
-                prefix = f"{idx}. {row.zh_hint}："
-                c.drawString(margin_x, y, prefix)
-
-                # 答题区域或答案 - 横线紧挨冒号，结束点统一
-                prefix_width = c.stringWidth(prefix, font_cn, 14)
-                x_ans = margin_x + prefix_width + 2 * mm
-                if show_answers:
-                    c.setFont(font_cn, 13)
-                    c.drawString(x_ans, y, row.answer_en)
+            elif key == "PHRASE":
+                # 短语部分：单栏，更大字体和间距
+                c.setFont(font_cn, 14)  # 确保字体设置正确
+                for idx, row in enumerate(rows, start=1):
+                    ensure_space(16)  # 减少所需空间
+                    # 换页后重新设置字体（修复换页后字号变小的问题）
                     c.setFont(font_cn, 14)
-                else:
+
+                    prefix = f"{idx}. {row.zh_hint}："
+                    c.drawString(margin_x, y, prefix)
+
+                    # 答题区域或答案 - 横线紧挨冒号，结束点统一
+                    prefix_width = c.stringWidth(prefix, font_cn, 14)
+                    x_ans = margin_x + prefix_width + 2 * mm
                     draw_fill_line(x_ans, y, line_end_x)
-                y -= 14 * mm  # 短语行间距（略微增加以改善视觉间隔）
+                    y -= 14 * mm  # 短语行间距（略微增加以改善视觉间隔）
 
-        else:
-            # 句子部分：只一行横线，横线从题目标号下方开始
-            c.setFont(font_cn, 14)
-            for idx, row in enumerate(rows, start=1):
-                ensure_space(22)  # 减少所需空间
+            else:
+                # 句子部分：只一行横线，横线从题目标号下方开始
+                c.setFont(font_cn, 14)
+                for idx, row in enumerate(rows, start=1):
+                    ensure_space(22)  # 减少所需空间
 
-                # 中文提示行
-                c.drawString(margin_x, y, f"{idx}. {row.zh_hint}")
-                y -= 8 * mm  # 减少横线和中文提示之间的间隔（从10mm减到8mm）
+                    # 中文提示行
+                    c.drawString(margin_x, y, f"{idx}. {row.zh_hint}")
+                    y -= 8 * mm  # 减少横线和中文提示之间的间隔（从10mm减到8mm）
 
-                # 英文答题/答案行
-                if show_answers:
-                    c.drawString(margin_x + 5 * mm, y, "英文：")
-                    x_ans = margin_x + 23 * mm
-
-                    # 处理长句子换行
-                    text = row.answer_en
-                    max_chars = 70
-                    lines = [text[i : i + max_chars] for i in range(0, len(text), max_chars)] or [""]
-
-                    c.setFont(font_cn, 13)
-                    c.drawString(x_ans, y, lines[0])
-                    y -= 9 * mm
-
-                    for extra in lines[1:]:
-                        ensure_space(14)
-                        c.drawString(x_ans, y, extra)
-                        y -= 9 * mm
-
-                    c.setFont(font_cn, 14)
-                else:
                     # 只绘制一条横线，从题目标号下方开始
                     draw_fill_line(margin_x, y, line_end_x)
                     y -= 9 * mm  # 句子题目之间的间隔（略微增加以改善视觉间隔）
 
-        y -= 3 * mm  # 各部分之间的间距（减少以压缩）
+            y -= 3 * mm  # 各部分之间的间距（减少以压缩）
 
     # 绘制最后一页的页脚
     draw_footer()
