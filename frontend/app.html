@@ -78,14 +78,14 @@
     const adminMenuItem = {label: '账号管理', src: 'admin-accounts.html'};
 
     const AVATARS = [
-      {id: 'rabbit', name: '兔子', emoji: '🐰'},
-      {id: 'fox', name: '狐狸', emoji: '🦊'},
-      {id: 'lion', name: '狮子', emoji: '🦁'},
-      {id: 'tiger', name: '老虎', emoji: '🐯'},
-      {id: 'panda', name: '熊猫', emoji: '🐼'},
-      {id: 'koala', name: '考拉', emoji: '🐨'},
-      {id: 'dog', name: '小狗', emoji: '🐶'},
-      {id: 'cat', name: '小猫', emoji: '🐱'}
+      {id: 'judy', name: 'Judy 兔子警官', emoji: '🐰'},
+      {id: 'nick', name: 'Nick 狐狸', emoji: '🦊'},
+      {id: 'flash', name: 'Flash 树懒', emoji: '🦥'},
+      {id: 'bogo', name: 'Bogo 水牛局长', emoji: '🐃'},
+      {id: 'clawhauser', name: 'Clawhauser 猎豹', emoji: '🐆'},
+      {id: 'gazelle', name: 'Gazelle 羚羊', emoji: '🦌'},
+      {id: 'finnick', name: 'Finnick 耳廓狐', emoji: '🦊'},
+      {id: 'yax', name: 'Yax 牦牛', emoji: '🐂'}
     ];
 
     const GRADES = [
@@ -398,14 +398,14 @@
 
         const avatar = document.createElement('span');
         avatar.className = 'student-avatar';
-        const avatarValue = student.avatar || 'rabbit';
+        const avatarValue = student.avatar || 'judy';
         if(isCustomAvatar(avatarValue)){
           const img = document.createElement('img');
           img.src = getAvatarUrl(avatarValue);
           img.alt = student.name || '学生';
           avatar.appendChild(img);
         }else{
-          const meta = AVATAR_MAP[avatarValue] || AVATAR_MAP.rabbit;
+          const meta = AVATAR_MAP[avatarValue] || AVATAR_MAP.judy;
           avatar.textContent = meta ? meta.emoji : '🙂';
         }
 
