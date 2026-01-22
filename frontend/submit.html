@@ -7,6 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>提交与批改 v2.0</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <style>
     body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
     .wrap{max-width:1280px;margin:0 auto;padding:24px}
@@ -100,10 +101,26 @@ async function api(path, opts){
   return res.json();
 }
 
+let isSuperAdmin = false;
+
+async function loadAccount(){
+  try{
+    const res = await api('/api/auth/me');
+    isSuperAdmin = Boolean(res.account && res.account.is_super_admin);
+  }catch(e){
+    isSuperAdmin = false;
+  }
+  // Show/hide debug button based on admin status
+  const debugBtn = document.getElementById('debugBtn');
+  if(debugBtn){
+    debugBtn.style.display = isSuperAdmin ? 'inline-block' : 'none';
+  }
+}
+
 function normalizeAnswer(s){
   if (!s) return '';
   let out = String(s).trim().toLowerCase();
-  out = out.replace(/[’‘`]/g, "'");
+  out = out.replace(/[''`]/g, "'");
   let cleaned = '';
   for (const ch of out) {
     const code = ch.charCodeAt(0);
@@ -174,7 +191,7 @@ async function ensureValidBaseId(){
 }
 
 // Initialize on page load
-ensureValidBaseId().then(() => {
+Promise.all([loadAccount(), ensureValidBaseId()]).then(() => {
   if(!cfg.base_id && cfg.student_id){
     setMissingBaseState('该学生暂无资料库，请先在学习库管理中添加资料库。');
   }

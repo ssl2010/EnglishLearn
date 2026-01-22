@@ -86,8 +86,8 @@ def main():
     parser = argparse.ArgumentParser(description='EnglishLearn 数据库初始化')
     parser.add_argument('--force', action='store_true',
                        help='强制重建数据库（删除现有数据）')
-    parser.add_argument('--no-seed', action='store_true',
-                       help='不加载种子数据')
+    parser.add_argument('--with-seed', action='store_true',
+                       help='加载种子数据（系统资料库和词条）')
 
     args = parser.parse_args()
 
@@ -101,7 +101,7 @@ def main():
         sys.exit(1)
 
     # 加载种子数据
-    if not args.no_seed:
+    if args.with_seed:
         print()
         print("=" * 60)
         print("加载种子数据")

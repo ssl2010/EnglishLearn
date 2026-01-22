@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>家长看板</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <style>
     :root{
       --bg:#f6f7fb;
@@ -159,8 +160,8 @@
     const MAX_BASES = 6;
     const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
     const AVATAR_MAP = {
-      rabbit: '🐰', fox: '🦊', lion: '🦁', tiger: '🐯', panda: '🐼',
-      koala: '🐨', dog: '🐶', cat: '🐱'
+      judy: '🐰', nick: '🦊', flash: '🦥', bogo: '🐃',
+      clawhauser: '🐆', gazelle: '🦌', finnick: '🦊', yax: '🐂'
     };
 
     const state = {
@@ -259,7 +260,7 @@
       card.className = 'card student-card';
       card.tabIndex = 0;
 
-      const avatarValue = student.avatar || 'rabbit';
+      const avatarValue = student.avatar || 'judy';
       const avatarNode = document.createElement('div');
       avatarNode.className = 'avatar';
       if(avatarValue.startsWith('http') || avatarValue.startsWith('/media/')){
