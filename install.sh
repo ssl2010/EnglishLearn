@@ -4,11 +4,19 @@
 # 适用于 Ubuntu 20.04+ / Debian 11+ / CentOS 8+
 #
 # 使用方法:
+#   方法1: 远程执行（需配置 SSH 密钥）
 #   curl -fsSL https://raw.githubusercontent.com/ssl2010/EnglishLearn/main/install.sh | sudo bash
-#   或者:
-#   wget -O - https://raw.githubusercontent.com/ssl2010/EnglishLearn/main/install.sh | sudo bash
-#   或者本地执行:
+#
+#   方法2: 本地执行
 #   sudo bash install.sh
+#
+#   方法3: 手动克隆后安装（推荐）
+#   git clone git@github.com:ssl2010/EnglishLearn.git /opt/EnglishLearn
+#   cd /opt/EnglishLearn
+#   SKIP_GIT_CLONE=true sudo -E bash install.sh
+#
+# 环境变量:
+#   SKIP_GIT_CLONE=true  跳过 git 克隆步骤（适用于已手动克隆代码的情况）
 #
 
 set -euo pipefail
@@ -42,6 +50,9 @@ NGINX_CONF="/etc/nginx/sites-available/${SERVICE_NAME}"
 NGINX_LINK="/etc/nginx/sites-enabled/${SERVICE_NAME}"
 ENV_FILE="/etc/englishlearn.env"
 BACKUP_DIR="/opt/EnglishLearn_Backups"
+
+# 安装选项（可通过环境变量配置）
+SKIP_GIT_CLONE="${SKIP_GIT_CLONE:-false}"  # 设置为 true 跳过 git 克隆
 
 # 默认配置
 DEFAULT_PORT=8000
@@ -127,14 +138,83 @@ create_user() {
 
 # 克隆代码
 clone_repository() {
+    # 如果设置了跳过标志，检查目录是否存在
+    if [[ "$SKIP_GIT_CLONE" == "true" ]]; then
+        info "跳过 Git 克隆步骤（SKIP_GIT_CLONE=true）"
+        if [[ ! -d "$APP_DIR" ]]; then
+            error "目录 $APP_DIR 不存在。请先手动克隆代码或取消 SKIP_GIT_CLONE 选项"
+        fi
+        info "使用现有代码目录: $APP_DIR"
+        chown -R englishlearn:englishlearn "$APP_DIR"
+        success "代码目录检查完成"
+        return
+    fi
+
     info "克隆代码仓库..."
 
+    # 如果目录存在且是 git 仓库，拉取最新代码
     if [[ -d "$APP_DIR/.git" ]]; then
-        warn "代码目录已存在,拉取最新代码..."
+        warn "代码目录已存在，拉取最新代码..."
         cd "$APP_DIR"
         git pull
+        chown -R englishlearn:englishlearn "$APP_DIR"
+        success "代码更新完成"
+        return
+    fi
+
+    # 如果目录存在但不是 git 仓库，询问是否清除
+    if [[ -d "$APP_DIR" ]] && [[ ! -d "$APP_DIR/.git" ]]; then
+        warn "目录 $APP_DIR 已存在但不是 Git 仓库"
+        echo -n "是否清除该目录并重新克隆？[y/N] "
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            info "备份现有目录到 ${APP_DIR}.bak.$(date +%Y%m%d_%H%M%S)"
+            mv "$APP_DIR" "${APP_DIR}.bak.$(date +%Y%m%d_%H%M%S)"
+        else
+            error "目录已存在，安装中止。请手动处理 $APP_DIR 目录"
+        fi
+    fi
+
+    # 使用 SSH 克隆（推荐）
+    info "从 GitHub 克隆代码（使用 SSH）..."
+    if git clone git@github.com:ssl2010/EnglishLearn.git "$APP_DIR" 2>/dev/null; then
+        success "使用 SSH 克隆成功"
     else
-        git clone https://github.com/ssl2010/EnglishLearn.git "$APP_DIR"
+        warn "SSH 克隆失败，尝试使用 HTTPS..."
+        echo ""
+        info "GitHub 不再支持密码认证，请选择以下方式之一："
+        echo "  1. 配置 SSH 密钥（推荐）"
+        echo "  2. 使用 Personal Access Token（PAT）"
+        echo "  3. 手动克隆代码到 $APP_DIR"
+        echo ""
+        echo -n "是否继续尝试 HTTPS 克隆（需要 PAT）？[y/N] "
+        read -r response
+
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            info "请输入您的 GitHub Personal Access Token"
+            echo "（在 https://github.com/settings/tokens 生成）"
+            git clone https://github.com/ssl2010/EnglishLearn.git "$APP_DIR"
+        else
+            error "代码克隆中止。请参考以下步骤手动克隆：
+
+    方法1（推荐）：配置 SSH 密钥
+    1. 生成 SSH 密钥：ssh-keygen -t ed25519 -C \"your_email@example.com\"
+    2. 添加到 GitHub：cat ~/.ssh/id_ed25519.pub
+    3. 访问 https://github.com/settings/keys 添加密钥
+    4. 重新运行此脚本
+
+    方法2：使用 Personal Access Token
+    1. 访问 https://github.com/settings/tokens
+    2. 生成新 token（需要 'repo' 权限）
+    3. 使用 token 作为密码克隆：
+       git clone https://github.com/ssl2010/EnglishLearn.git $APP_DIR
+
+    方法3：手动克隆后继续
+    1. 手动克隆代码到 $APP_DIR
+    2. 设置环境变量跳过克隆：
+       SKIP_GIT_CLONE=true sudo -E bash install.sh
+    "
+        fi
     fi
 
     chown -R englishlearn:englishlearn "$APP_DIR"
