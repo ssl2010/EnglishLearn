@@ -769,6 +769,16 @@
         state.activeId = null;
       }
       renderTable();
+      // Notify parent window to refresh student list
+      notifyParentStudentsChanged();
+    }
+
+    function notifyParentStudentsChanged(){
+      try{
+        if(window.self !== window.top && window.parent){
+          window.parent.postMessage({type: 'studentsChanged'}, '*');
+        }
+      }catch(e){}
     }
 
     async function deleteStudent(studentId){

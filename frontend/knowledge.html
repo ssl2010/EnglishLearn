@@ -310,7 +310,11 @@ async function loadAll(){
   }
 
   if(!cfg.student_id){
-    document.getElementById('myLearningBases').innerHTML = '<div class="empty-state">请先在引导页完成初始化</div>';
+    document.getElementById('myLearningBases').innerHTML = `
+      <div class="empty-state" style="text-align:center;padding:32px 24px;background:#f8fafc;border-radius:12px">
+        暂无学生数据，请先<a href="javascript:void(0)" onclick="goToCreateStudent()" style="color:#3b82f6;text-decoration:underline;font-weight:600">创建学生</a>。
+      </div>
+    `;
     return;
   }
 
@@ -893,6 +897,15 @@ function showCoverImage(url){
 function hideCoverImage(){
   const modal = document.getElementById('coverModal');
   modal.style.display = 'none';
+}
+
+// Navigate to create student
+function goToCreateStudent(){
+  try{
+    if(window.self !== window.top && window.parent){
+      window.parent.postMessage({type:'navigateToPage', page: 'profile.html'}, '*');
+    }
+  }catch(e){}
 }
 
 window.addEventListener('DOMContentLoaded', loadAll);

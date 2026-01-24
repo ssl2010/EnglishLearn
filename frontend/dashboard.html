@@ -361,7 +361,11 @@
         grid.innerHTML = '';
         const students = data.students || [];
         if(students.length === 0){
-          grid.innerHTML = '<div class="empty">暂无学生数据，请先创建学生。</div>';
+          grid.innerHTML = `
+            <div class="empty">
+              暂无学生数据，请先<a href="javascript:void(0)" onclick="goToCreateStudent()" style="color:#3b82f6;text-decoration:underline;font-weight:600">创建学生</a>。
+            </div>
+          `;
           return;
         }
         students.forEach(student => {
@@ -545,6 +549,12 @@
       renderOverview();
       if(notifyParent && window.parent){
         window.parent.postMessage({type:'selectAllStudents'}, '*');
+      }
+    }
+
+    function goToCreateStudent(){
+      if(window.parent){
+        window.parent.postMessage({type:'navigateToPage', page: 'profile.html'}, '*');
       }
     }
 

@@ -719,7 +719,7 @@
 
 <script>
 const cfg = JSON.parse(localStorage.getItem('el_cfg')||'null');
-if(!cfg){ location.href='/'; }
+// Don't redirect to / - let the page handle the no-student case gracefully
 
 let learningBases = [];
 let currentSessionData = null; // Store current session data for preview
@@ -914,6 +914,16 @@ async function api(path, opts){
 }
 
 async function loadLearningBases(){
+  // Check if student_id exists
+  if(!cfg || !cfg.student_id){
+    document.getElementById('basesContainer').innerHTML = `
+      <div class="muted" style="text-align:center;padding:32px 24px;background:#f8fafc;border-radius:12px">
+        暂无学生数据，请先<a href="javascript:void(0)" onclick="goToCreateStudent()" style="color:#3b82f6;text-decoration:underline;font-weight:600">创建学生</a>。
+      </div>
+    `;
+    return;
+  }
+
   try{
     const res = await api(`/api/students/${cfg.student_id}/learning-bases?is_active=true`);
     learningBases = res.learning_bases || [];
@@ -1462,6 +1472,15 @@ document.getElementById('regenerateBtnTop').onclick = () => {
 document.getElementById('adjustBtnTop').onclick = () => {
   document.getElementById('adjustBtn').click(); // Reuse existing logic
 };
+
+// Navigate to create student
+function goToCreateStudent(){
+  try{
+    if(window.self !== window.top && window.parent){
+      window.parent.postMessage({type:'navigateToPage', page: 'profile.html'}, '*');
+    }
+  }catch(e){}
+}
 
 // Load learning bases on page load
 window.addEventListener('DOMContentLoaded', () => {

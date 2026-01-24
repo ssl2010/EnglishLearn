@@ -278,14 +278,27 @@
 
     function setPage(src, skipStore){
       const targetPage = normalizePage(src);
-      if(pageRequiresStudent(targetPage) && state.currentStudentId === null){
-        if((targetPage === 'generate.html' || targetPage === 'knowledge.html') && state.students.length){
+
+      // Allow profile page and pages that support "all students" regardless of student selection
+      const canAccessWithoutStudent =
+        targetPage === 'profile.html' ||
+        targetPage === 'account.html' ||
+        targetPage === 'admin-accounts.html' ||
+        isLibraryPage(targetPage) ||
+        pageSupportsAll(targetPage);
+
+      // For pages that require a student, only block if no students exist at all
+      if(pageRequiresStudent(targetPage) && !canAccessWithoutStudent){
+        if(state.students.length === 0){
+          // No students exist - allow page to load and show empty state
+          // Don't show alert or block navigation
+        } else if(state.currentStudentId === null){
+          // Students exist but none selected - auto-select first student
           selectStudent(state.students[0].id, targetPage);
           return;
         }
-        alert('请先选择一个学生');
-        return;
       }
+
       if(targetPage === 'dashboard.html'){
         if(state.currentStudentId === null){
           sessionStorage.setItem('dashboard_view', 'overview');
@@ -516,14 +529,15 @@
         return;
       }
 
-      localStorage.setItem('el_app_page', 'dashboard.html');
       renderMenu();
       await loadStudents();
 
       if(state.students.length === 0){
-        setContextHint('暂无学生，请先在引导页创建。', true);
-        setPage('index.html');
+        // No students - allow navigation to any page but show hint
+        setContextHint('暂无学生，请先在学生管理中添加学生。', false);
+        setAllStudentsState();
         renderStudentPicker();
+        // Don't force navigation - let user go to their intended page or default
         return;
       }
 
@@ -586,8 +600,58 @@
       }
       if(data.type === 'selectAllStudents'){
         selectAllStudents();
+        return;
+      }
+      if(data.type === 'studentsChanged'){
+        // Reload students when student list changes (add/edit/delete)
+        handleStudentsChanged();
+        return;
+      }
+      if(data.type === 'navigateToPage' && data.page){
+        // Navigate to specified page
+        setPage(data.page);
       }
     });
+
+    async function handleStudentsChanged(){
+      const previousStudentId = state.currentStudentId;
+      await loadStudents();
+
+      // If no students, stay on current page and show empty state
+      if(state.students.length === 0){
+        setAllStudentsState();
+        setContextHint('暂无学生，请先在学生管理中添加学生。', false);
+        renderStudentPicker();
+        // Don't force navigation - stay on current page and let it show empty state
+        return;
+      }
+
+      // If current student was deleted, select first student
+      if(previousStudentId && !state.students.some(s => s.id === previousStudentId)){
+        const firstStudent = state.students[0];
+        state.currentStudentId = null; // Reset to trigger selectStudent
+        await selectStudent(firstStudent.id);
+      } else if(previousStudentId){
+        // Current student still exists, refresh their data
+        await loadBases(previousStudentId);
+        const student = state.students.find(s => s.id === previousStudentId);
+        if(student){
+          updateCfg(student);
+        }
+      }
+
+      renderStudentPicker();
+    }
+
+    function updateCfg(student){
+      if(!student) return;
+      const cfg = JSON.parse(localStorage.getItem('el_cfg') || '{}');
+      if(cfg.student_id === student.id){
+        cfg.student_name = student.name;
+        cfg.grade_code = student.grade || '';
+        localStorage.setItem('el_cfg', JSON.stringify(cfg));
+      }
+    }
 
     init();
   </script>
