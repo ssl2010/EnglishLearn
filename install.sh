@@ -110,7 +110,15 @@ create_user() {
     info "创建系统用户..."
 
     if ! id -u englishlearn >/dev/null 2>&1; then
-        useradd -r -s /bin/bash -d "$APP_DIR" -m englishlearn
+        # 尝试使用 useradd（需要完整路径）
+        if command -v /usr/sbin/useradd >/dev/null 2>&1; then
+            /usr/sbin/useradd -r -s /bin/bash -d "$APP_DIR" -m englishlearn
+        # 如果没有 useradd，使用 adduser（Debian/Ubuntu）
+        elif command -v adduser >/dev/null 2>&1; then
+            adduser --system --home "$APP_DIR" --shell /bin/bash --group englishlearn
+        else
+            error "无法找到 useradd 或 adduser 命令，请手动创建用户 englishlearn"
+        fi
         success "用户 englishlearn 创建成功"
     else
         info "用户 englishlearn 已存在"
