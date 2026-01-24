@@ -60,6 +60,9 @@ from .services import (
     ensure_media_dir,
 )
 
+# Import backup router
+from .routers import backup as backup_router
+
 
 app = FastAPI(title="English Learning MVP", version="0.1.0")
 _cleanup_thread_started = False
@@ -73,6 +76,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register backup router
+app.include_router(backup_router.router, prefix="/api/admin/backup")
 
 
 def _get_session_ttl() -> int:

@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>系统管理</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <style>
+    * { box-sizing: border-box; }
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0;background:#f6f7fb;color:#1a202c;line-height:1.6}
+    .wrap{max-width:1400px;margin:0 auto;padding:32px 24px}
+    .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #e2e8f0}
+    .header h1{margin:0;font-size:32px;font-weight:700;display:flex;align-items:center;gap:12px}
+    .header h1 .emoji{font-size:36px}
+    .tabs{display:flex;gap:8px;margin-bottom:24px;border-bottom:2px solid #e2e8f0}
+    .tab{padding:12px 24px;background:transparent;border:0;cursor:pointer;font-size:15px;font-weight:500;color:#64748b;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.2s}
+    .tab:hover{color:#0b5fff;background:#f1f5f9}
+    .tab.active{color:#0b5fff;border-bottom-color:#0b5fff}
+    .tab-content{display:none}
+    .tab-content.active{display:block}
+
+    .card{background:#fff;border-radius:16px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:24px}
+    .card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #f1f5f9}
+    .card-title{font-size:20px;font-weight:700;color:#1a202c}
+    .card-subtitle{font-size:14px;color:#64748b;margin-top:4px}
+
+    .btn{border:0;border-radius:10px;padding:11px 20px;background:#0b5fff;color:#fff;cursor:pointer;font-size:14px;font-weight:500;transition:all 0.2s}
+    .btn:hover{background:#0847cc;transform:translateY(-1px)}
+    .btn.secondary{background:#fff;color:#1a202c;border:1.5px solid #e2e8f0}
+    .btn.secondary:hover{background:#f7fafc}
+    .btn.danger{background:#dc2626}
+    .btn.danger:hover{background:#b91c1c}
+    .btn.success{background:#10b981}
+    .btn.success:hover{background:#059669}
+    .btn-small{padding:8px 14px;font-size:13px}
+
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+    .stat-card{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;border-radius:12px;padding:20px}
+    .stat-card.green{background:linear-gradient(135deg,#10b981 0%,#059669 100%)}
+    .stat-card.blue{background:linear-gradient(135deg,#0b5fff 0%,#0847cc 100%)}
+    .stat-card.orange{background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%)}
+    .stat-card.purple{background:linear-gradient(135deg,#8b5cf6 0%,#7c3aed 100%)}
+    .stat-label{font-size:13px;opacity:0.9;margin-bottom:8px}
+    .stat-value{font-size:32px;font-weight:700}
+    .stat-unit{font-size:16px;font-weight:400;margin-left:4px}
+
+    table{width:100%;border-collapse:collapse;margin-top:16px}
+    th,td{padding:14px 12px;text-align:left;border-bottom:1px solid#e2e8f0}
+    th{background:#f8fafc;font-weight:600;font-size:13px;color:#64748b;text-transform:uppercase}
+    tr:hover{background:#f8fafc}
+    .actions{display:flex;gap:8px}
+
+    .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center}
+    .modal.active{display:flex}
+    .modal-content{background:#fff;border-radius:16px;padding:32px;max-width:500px;width:90%;max-height:90vh;overflow-y:auto}
+    .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+    .modal-title{font-size:20px;font-weight:700}
+    .close-btn{cursor:pointer;font-size:28px;color:#718096;line-height:1}
+    .close-btn:hover{color:#1a202c}
+
+    .form-group{margin-bottom:16px}
+    label{display:block;margin-bottom:8px;font-size:13px;font-weight:600;color:#334155}
+    input[type="text"],input[type="time"],input[type="number"],textarea,select{width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;font-family:inherit}
+    input[type="checkbox"]{margin-right:8px}
+    textarea{min-height:80px}
+
+    .checkbox-label{display:flex;align-items:center;padding:12px;background:#f8fafc;border-radius:8px;cursor:pointer;margin-bottom:8px}
+    .checkbox-label:hover{background:#f1f5f9}
+    .checkbox-label input{cursor:pointer}
+
+    .alert{padding:16px;border-radius:10px;margin-bottom:16px}
+    .alert.info{background:#eff6ff;border:1px solid #3b82f6;color:#1e40af}
+    .alert.success{background:#d1fae5;border:1px solid #10b981;color:#065f46}
+    .alert.warning{background:#fef3c7;border:1px solid #f59e0b;color:#92400e}
+    .alert.danger{background:#fee2e2;border:1px solid #dc2626;color:#991b1b}
+
+    .empty{text-align:center;padding:48px;color:#64748b}
+    .loading{text-align:center;padding:32px;color:#64748b}
+    .progress{margin-top:16px}
+    .progress-bar{background:#e2e8f0;border-radius:8px;height:8px;overflow:hidden}
+    .progress-fill{background:#0b5fff;height:100%;transition:width 0.3s}
+
+    .info-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+    .info-item{padding:12px;background:#f8fafc;border-radius:8px}
+    .info-label{font-size:12px;color:#64748b;margin-bottom:4px}
+    .info-value{font-size:16px;font-weight:600;color:#1a202c}
+
+    .help-text{font-size:13px;color:#64748b;margin-top:8px;line-height:1.5}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h1><span class="emoji">⚙️</span> 系统管理</h1>
+      <button class="btn secondary" onclick="refreshAll()">🔄 刷新</button>
+    </div>
+
+    <!-- 标签页 -->
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('backup')">📦 备份管理</button>
+      <button class="tab" onclick="showTab('settings')">⚙️ 系统设置</button>
+      <button class="tab" onclick="showTab('system')">💻 系统信息</button>
+    </div>
+
+    <!-- 备份管理标签页 -->
+    <div id="backupTab" class="tab-content active">
+      <!-- 统计卡片 -->
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-label">备份总数</div>
+          <div class="stat-value" id="statBackupCount">-</div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-label">备份占用空间</div>
+          <div class="stat-value" id="statBackupSize">-</div>
+        </div>
+        <div class="stat-card blue">
+          <div class="stat-label">磁盘可用空间</div>
+          <div class="stat-value" id="statDiskFree">-</div>
+        </div>
+        <div class="stat-card orange">
+          <div class="stat-label">磁盘使用率</div>
+          <div class="stat-value"><span id="statDiskUsage">-</span><span class="stat-unit">%</span></div>
+        </div>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="card">
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <button class="btn success" onclick="openCreateBackupModal()">+ 创建备份</button>
+          <button class="btn secondary" onclick="cleanupOldBackups()">🧹 清理旧备份</button>
+        </div>
+      </div>
+
+      <!-- 备份列表 -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">备份列表</div>
+            <div class="card-subtitle">点击下载备份到本地保存</div>
+          </div>
+        </div>
+        <div id="backupList">
+          <div class="loading">加载中...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 系统设置标签页 -->
+    <div id="settingsTab" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">自动备份设置</div>
+            <div class="card-subtitle">配置自动备份,无需手动操作</div>
+          </div>
+          <button class="btn success" onclick="saveBackupConfig()">💾 保存设置</button>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="autoBackupEnabled" checked>
+            <span><strong>启用自动备份</strong> - 系统将按照设定时间自动创建备份</span>
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label>自动备份时间</label>
+          <input type="time" id="autoBackupTime" value="02:00">
+          <div class="help-text">建议设置在凌晨,避免影响白天使用</div>
+        </div>
+
+        <div class="form-group">
+          <label>备份保留天数</label>
+          <input type="number" id="backupRetentionDays" value="30" min="1" max="365">
+          <div class="help-text">超过此天数的旧备份将被自动清理,节省磁盘空间</div>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="autoCleanupEnabled" checked>
+            <span><strong>自动清理旧备份</strong> - 定期删除过期备份,释放磁盘空间</span>
+          </label>
+        </div>
+
+        <div class="alert warning">
+          <strong>⚠️ 重要提示</strong>
+          <p style="margin:8px 0 0 0">建议定期下载备份到本地或其他存储设备,避免服务器故障导致数据丢失。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 系统信息标签页 -->
+    <div id="systemTab" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">系统资源使用情况</div>
+        </div>
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-label">CPU 使用率</div>
+            <div class="info-value" id="cpuUsage">-</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">内存使用率</div>
+            <div class="info-value" id="memoryUsage">-</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">磁盘使用率</div>
+            <div class="info-value" id="diskUsagePercent">-</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">数据总大小</div>
+            <div class="info-value" id="totalDataSize">-</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">系统详细信息</div>
+        </div>
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-label">操作系统</div>
+            <div class="info-value" id="osInfo">-</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">主机名</div>
+            <div class="info-value" id="hostname">-</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Python 版本</div>
+            <div class="info-value" id="pythonVersion">-</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">CPU 核心数</div>
+            <div class="info-value" id="cpuCount">-</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">存储详情</div>
+        </div>
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-label">数据库大小</div>
+            <div class="info-value" id="dbSize">-</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">媒体文件大小</div>
+            <div class="info-value" id="mediaSize">-</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">内存总量</div>
+            <div class="info-value" id="memoryTotal">-</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">磁盘总量</div>
+            <div class="info-value" id="diskTotal">-</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 创建备份模态框 -->
+  <div id="createBackupModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">创建备份</h3>
+        <span class="close-btn" onclick="closeCreateBackupModal()">×</span>
+      </div>
+
+      <div class="alert info" style="margin-bottom:16px">
+        <strong>📦 备份内容</strong>
+        <p style="margin:8px 0 0 0">此备份将包含<strong>所有数据</strong>:数据库、学生信息、练习记录、媒体文件等。</p>
+      </div>
+
+      <div class="form-group">
+        <label>备份描述 (可选)</label>
+        <textarea id="backupDescription" placeholder="例如：2026年1月月度备份"></textarea>
+        <div class="help-text">添加描述有助于日后识别备份</div>
+      </div>
+
+      <div style="display:flex;gap:12px;justify-content:flex-end">
+        <button class="btn secondary" onclick="closeCreateBackupModal()">取消</button>
+        <button class="btn success" onclick="createBackup()">创建备份</button>
+      </div>
+
+      <div id="createProgress" class="progress" style="display:none">
+        <div class="progress-bar">
+          <div class="progress-fill" id="createProgressFill" style="width:0%"></div>
+        </div>
+        <div style="text-align:center;margin-top:8px;font-size:13px;color:#64748b" id="createProgressText">正在创建备份...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 恢复备份模态框 -->
+  <div id="restoreBackupModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">恢复系统备份</h3>
+        <span class="close-btn" onclick="closeRestoreBackupModal()">×</span>
+      </div>
+
+      <div class="alert danger">
+        <strong>⚠️ 重要警告</strong>
+        <p style="margin:8px 0 0 0"><strong>此操作将覆盖当前所有数据!</strong></p>
+        <p style="margin:8px 0 0 0">建议先创建当前状态的备份,以防恢复后需要回退。</p>
+      </div>
+
+      <div class="alert info" style="margin-top:12px">
+        <strong>📋 恢复说明</strong>
+        <p style="margin:8px 0 0 0">系统将自动恢复数据库和媒体文件,恢复后请刷新页面查看最新数据。</p>
+      </div>
+
+      <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:20px">
+        <button class="btn secondary" onclick="closeRestoreBackupModal()">取消</button>
+        <button class="btn danger" onclick="confirmRestore()">确认恢复</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentRestoreFilename = null;
+
+    async function api(url, options = {}) {
+      const res = await fetch(url, {
+        headers: {'Content-Type': 'application/json'},
+        ...options
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({detail: '请求失败'}));
+        throw new Error(error.detail || '请求失败');
+      }
+      return res.json();
+    }
+
+    function showTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+      event.target.classList.add('active');
+      document.getElementById(tab + 'Tab').classList.add('active');
+
+      if (tab === 'system') {
+        loadSystemInfo();
+      } else if (tab === 'settings') {
+        loadBackupConfig();
+      }
+    }
+
+    async function loadStats() {
+      try {
+        const data = await api('/api/admin/backup/space');
+        document.getElementById('statBackupCount').textContent = data.backup_count;
+        document.getElementById('statBackupSize').textContent = data.backup_total_size_human;
+        document.getElementById('statDiskFree').textContent = data.disk_free_human;
+        document.getElementById('statDiskUsage').textContent = data.disk_usage_percent;
+      } catch (e) {
+        console.error('加载统计失败:', e);
+      }
+    }
+
+    async function loadBackupList() {
+      try {
+        const backups = await api('/api/admin/backup/list');
+        const container = document.getElementById('backupList');
+
+        if (backups.length === 0) {
+          container.innerHTML = '<div class="empty">暂无备份<br>点击"创建备份"按钮开始备份</div>';
+          return;
+        }
+
+        const table = `
+          <table>
+            <thead>
+              <tr>
+                <th>文件名</th>
+                <th>大小</th>
+                <th>创建时间</th>
+                <th>描述</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${backups.map(b => `
+                <tr>
+                  <td style="font-family:monospace;font-size:13px">${b.filename}</td>
+                  <td><strong>${b.size_human}</strong></td>
+                  <td>${new Date(b.created_at).toLocaleString('zh-CN')}</td>
+                  <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${b.description || '-'}</td>
+                  <td>
+                    <div class="actions">
+                      <button class="btn btn-small" onclick="downloadBackup('${b.filename}')">⬇️ 下载</button>
+                      <button class="btn btn-small secondary" onclick="openRestoreBackupModal('${b.filename}')">🔄 恢复</button>
+                      <button class="btn btn-small danger" onclick="deleteBackup('${b.filename}')">🗑️ 删除</button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+
+        container.innerHTML = table;
+      } catch (e) {
+        console.error('加载备份列表失败:', e);
+        const errorMsg = e.message === 'Not Found'
+          ? '备份功能未就绪，请联系管理员检查系统配置'
+          : e.message;
+        document.getElementById('backupList').innerHTML = `<div class="empty" style="color:#dc2626">加载失败: ${errorMsg}<br><br>请刷新页面重试，或联系管理员</div>`;
+      }
+    }
+
+    async function loadBackupConfig() {
+      try {
+        const config = await api('/api/admin/backup/config');
+        document.getElementById('autoBackupEnabled').checked = config.auto_backup_enabled;
+        document.getElementById('autoBackupTime').value = config.auto_backup_time;
+        document.getElementById('backupRetentionDays').value = config.backup_retention_days;
+        document.getElementById('autoCleanupEnabled').checked = config.auto_cleanup_enabled;
+      } catch (e) {
+        console.error('加载配置失败:', e);
+      }
+    }
+
+    async function saveBackupConfig() {
+      try {
+        const config = {
+          auto_backup_enabled: document.getElementById('autoBackupEnabled').checked,
+          auto_backup_time: document.getElementById('autoBackupTime').value,
+          backup_retention_days: parseInt(document.getElementById('backupRetentionDays').value),
+          auto_cleanup_enabled: document.getElementById('autoCleanupEnabled').checked
+        };
+
+        await api('/api/admin/backup/config', {
+          method: 'POST',
+          body: JSON.stringify(config)
+        });
+
+        alert('✅ 设置已保存!\n\n自动备份将按照新的配置执行。');
+      } catch (e) {
+        alert('❌ 保存失败: ' + e.message);
+      }
+    }
+
+    async function loadSystemInfo() {
+      try {
+        const data = await api('/api/admin/backup/system-info');
+
+        // 资源使用情况
+        document.getElementById('cpuUsage').textContent = `${data.cpu.usage_percent}%`;
+        document.getElementById('memoryUsage').textContent = `${data.memory.usage_percent}%`;
+        document.getElementById('diskUsagePercent').textContent = `${data.disk.usage_percent}%`;
+        document.getElementById('totalDataSize').textContent = data.data.total_data_size_human;
+
+        // 系统信息
+        document.getElementById('osInfo').textContent = `${data.system.os} ${data.system.os_version}`;
+        document.getElementById('hostname').textContent = data.system.hostname;
+        document.getElementById('pythonVersion').textContent = data.system.python_version;
+        document.getElementById('cpuCount').textContent = `${data.cpu.count} 核`;
+
+        // 存储详情
+        document.getElementById('dbSize').textContent = data.data.database_size_human;
+        document.getElementById('mediaSize').textContent = data.data.media_size_human;
+        document.getElementById('memoryTotal').textContent = data.memory.total_human;
+        document.getElementById('diskTotal').textContent = data.disk.total_human;
+      } catch (e) {
+        console.error('加载系统信息失败:', e);
+        // 显示错误信息
+        const errorMsg = e.message === 'Not Found'
+          ? '系统信息功能未就绪，请联系管理员检查系统配置'
+          : e.message;
+        document.getElementById('cpuUsage').textContent = '-';
+        document.getElementById('memoryUsage').textContent = '-';
+        document.getElementById('diskUsagePercent').textContent = '-';
+        document.getElementById('totalDataSize').textContent = '加载失败';
+        alert(`无法加载系统信息:\n${errorMsg}\n\n请刷新页面重试，或联系管理员`);
+      }
+    }
+
+    function openCreateBackupModal() {
+      document.getElementById('createBackupModal').classList.add('active');
+    }
+
+    function closeCreateBackupModal() {
+      document.getElementById('createBackupModal').classList.remove('active');
+      document.getElementById('createProgress').style.display = 'none';
+      document.getElementById('backupDescription').value = '';
+    }
+
+    async function createBackup() {
+      const description = document.getElementById('backupDescription').value.trim();
+
+      const progress = document.getElementById('createProgress');
+      const progressFill = document.getElementById('createProgressFill');
+      const progressText = document.getElementById('createProgressText');
+
+      progress.style.display = 'block';
+      progressFill.style.width = '30%';
+      progressText.textContent = '正在创建备份...';
+
+      try {
+        const data = await api('/api/admin/backup/create', {
+          method: 'POST',
+          body: JSON.stringify({
+            description: description || null
+          })
+        });
+
+        progressFill.style.width = '100%';
+        progressText.textContent = `✅ 备份创建成功! (${data.size_human})`;
+        progressText.style.color = '#10b981';
+
+        setTimeout(() => {
+          closeCreateBackupModal();
+          refreshAll();
+        }, 1500);
+
+      } catch (e) {
+        progressText.textContent = `❌ 创建失败: ${e.message}`;
+        progressText.style.color = '#dc2626';
+      }
+    }
+
+    function openRestoreBackupModal(filename) {
+      currentRestoreFilename = filename;
+      document.getElementById('restoreBackupModal').classList.add('active');
+    }
+
+    function closeRestoreBackupModal() {
+      document.getElementById('restoreBackupModal').classList.remove('active');
+      currentRestoreFilename = null;
+    }
+
+    async function confirmRestore() {
+      if (!currentRestoreFilename) return;
+
+      if (!confirm(`⚠️ 警告: 此操作将覆盖当前所有数据!\n\n确认要从以下备份恢复吗?\n\n${currentRestoreFilename}\n\n建议先下载当前状态的备份再继续!`)) {
+        return;
+      }
+
+      try {
+        await api('/api/admin/backup/restore', {
+          method: 'POST',
+          body: JSON.stringify({
+            filename: currentRestoreFilename
+          })
+        });
+
+        alert('✅ 系统恢复成功!\n\n请刷新页面以查看恢复后的数据。');
+        closeRestoreBackupModal();
+        setTimeout(() => window.location.reload(), 1000);
+
+      } catch (e) {
+        alert(`❌ 恢复失败: ${e.message}`);
+      }
+    }
+
+    function downloadBackup(filename) {
+      window.location.href = `/api/admin/backup/download/${filename}`;
+    }
+
+    async function deleteBackup(filename) {
+      if (!confirm(`确认要删除备份吗?\n\n${filename}\n\n此操作无法撤销!`)) {
+        return;
+      }
+
+      try {
+        await api(`/api/admin/backup/delete/${filename}`, {method: 'DELETE'});
+        alert('✅ 删除成功');
+        refreshAll();
+      } catch (e) {
+        alert(`❌ 删除失败: ${e.message}`);
+      }
+    }
+
+    async function cleanupOldBackups() {
+      if (!confirm('确认清理 30 天前的旧备份吗?\n\n此操作无法撤销!')) {
+        return;
+      }
+
+      try {
+        const data = await api('/api/admin/backup/cleanup?keep_days=30', {method: 'POST'});
+        alert(`✅ 清理完成!\n\n删除 ${data.deleted_count} 个备份文件\n释放空间 ${data.freed_space_human}`);
+        refreshAll();
+      } catch (e) {
+        alert(`❌ 清理失败: ${e.message}`);
+      }
+    }
+
+    async function refreshAll() {
+      await Promise.all([loadStats(), loadBackupList()]);
+    }
+
+    // 页面加载时执行
+    window.addEventListener('DOMContentLoaded', () => {
+      try {
+        if (window.self !== window.top) {
+          window.parent.postMessage({type: 'appPage', page: 'backup.html'}, '*');
+        }
+      } catch (e) {}
+
+      refreshAll();
+      loadBackupConfig();
+    });
+  </script>
+</body>
+</html>

@@ -75,6 +75,7 @@
       {label: '学生管理', src: 'profile.html'}
     ];
     const accountMenuItem = {label: '我的账号', src: 'account.html'};
+    const backupMenuItem = {label: '系统管理', src: 'backup.html'};
     const adminMenuItem = {label: '账号管理', src: 'admin-accounts.html'};
 
     const AVATARS = [
@@ -119,6 +120,7 @@
       'library.html': {title: '资料库维护'},
       'profile.html': {title: '学生管理'},
       'account.html': {title: '我的账号'},
+      'backup.html': {title: '系统管理'},
       'admin-accounts.html': {title: '账号管理'}
     };
 
@@ -133,7 +135,7 @@
     };
 
     function getMenuItems(){
-      const items = [...baseMenuItems, accountMenuItem];
+      const items = [...baseMenuItems, accountMenuItem, backupMenuItem];
       if(state.account && state.account.is_super_admin){
         items.push(adminMenuItem);
       }
@@ -217,7 +219,7 @@
     }
 
     function isLibraryPage(page){
-      return page === 'library.html' || page === 'library-edit.html' || page === 'library-items.html';
+      return page === 'library.html' || page === 'library-edit.html' || page === 'library-items.html' || page === 'backup.html';
     }
 
     function getCurrentPage(){
