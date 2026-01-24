@@ -98,6 +98,19 @@ python3 init_db.py
 
 系统会自动创建数据库并加载示例资料库（人教版PEP教材）。
 
+**如果是升级现有系统**，需要运行数据库迁移：
+
+```bash
+cd backend
+python3 migration_manager.py migrate
+```
+
+查看迁移状态：
+
+```bash
+python3 migration_manager.py status
+```
+
 ### 4. 启动服务
 
 ```bash

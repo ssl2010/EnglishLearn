@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS students (
     grade TEXT,
     account_id INTEGER NOT NULL,
     avatar TEXT DEFAULT 'rabbit',
+    weekly_target_days INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE

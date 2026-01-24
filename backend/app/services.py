@@ -825,7 +825,31 @@ def get_mastery_threshold() -> int:
     except Exception:
         return 2
 
-def get_weekly_target_days() -> int:
+def get_weekly_target_days(student_id: int = None) -> int:
+    """
+    获取周练习目标天数
+
+    Args:
+        student_id: 学生ID，如果提供则优先使用学生的个性化设置
+
+    Returns:
+        周练习目标天数（1-7）
+    """
+    # 如果提供了学生ID，优先使用学生的个性化设置
+    if student_id is not None:
+        try:
+            with db() as conn:
+                row = conn.execute(
+                    "SELECT weekly_target_days FROM students WHERE id = ?",
+                    (student_id,)
+                ).fetchone()
+                if row and row["weekly_target_days"] is not None:
+                    value = int(row["weekly_target_days"])
+                    return max(1, min(7, value))
+        except Exception:
+            pass
+
+    # 使用全局默认设置
     try:
         value = int(get_setting("weekly_target_days", "4"))
         return max(1, min(7, value))
@@ -4415,9 +4439,18 @@ def _get_active_learning_bases(conn, student_id: int) -> List[Dict]:
     return bases
 
 
-def _get_week_bits(conn, student_id: int, base_ids: List[int]) -> Tuple[str, int]:
+def _get_week_bits(conn, student_id: int, base_ids: List[int]) -> Tuple[str, int, int]:
+    """
+    获取本周练习位图和统计
+
+    Returns:
+        Tuple[str, int, int]: (week_bits, week_practice_days, week_practice_count)
+        - week_bits: 7位字符串，表示本周每天是否练习
+        - week_practice_days: 本周练习天数
+        - week_practice_count: 本周练习次数
+    """
     if not base_ids:
-        return "0000000", 0
+        return "0000000", 0, 0
     placeholders = ",".join(["?"] * len(base_ids))
     cutoff = datetime.now(timezone.utc) - timedelta(days=14)
     rows = conn.execute(
@@ -4432,16 +4465,24 @@ def _get_week_bits(conn, student_id: int, base_ids: List[int]) -> Tuple[str, int
     ).fetchall()
 
     practice_dates = set()
+    today = datetime.now(_TZ_UTC8).date()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+    week_practice_count = 0
+
     for row in rows:
         d = _to_utc8_date(row["created_at"])
         if d:
             practice_dates.add(d)
+            # 统计本周练习次数
+            if week_start <= d <= week_end:
+                week_practice_count += 1
 
-    today = datetime.now(_TZ_UTC8).date()
-    week_start = today - timedelta(days=today.weekday())
     week_days = [week_start + timedelta(days=i) for i in range(7)]
     bits = "".join("1" if d in practice_dates else "0" for d in week_days)
-    return bits, sum(1 for d in week_days if d in practice_dates)
+    week_practice_days = sum(1 for d in week_days if d in practice_dates)
+
+    return bits, week_practice_days, week_practice_count
 
 
 def _get_library_stats(
@@ -4461,6 +4502,7 @@ def _get_library_stats(
         "wrong_items_30d": 0,
         "week_bits": "0000000",
         "week_practice_days": 0,
+        "week_practice_count": 0,
         "last_practice_at": None,
     }
     if not base_ids:
@@ -4542,7 +4584,7 @@ def _get_library_stats(
         [student_id, *base_ids],
     ).fetchone()
 
-    week_bits, week_days = _get_week_bits(conn, student_id, base_ids)
+    week_bits, week_days, week_count = _get_week_bits(conn, student_id, base_ids)
 
     stats.update(
         {
@@ -4555,6 +4597,7 @@ def _get_library_stats(
             "wrong_items_30d": int(wrong_row["c"]) if wrong_row else 0,
             "week_bits": week_bits,
             "week_practice_days": week_days,
+            "week_practice_count": week_count,
             "last_practice_at": _format_utc8_date(last_row["t"] if last_row else None),
         }
     )
@@ -4655,10 +4698,10 @@ def _media_url(path: Optional[str]) -> Optional[str]:
 
 def get_dashboard_overview(account_id: int, days: int = 30) -> Dict[str, Any]:
     mastery_threshold = get_mastery_threshold()
-    weekly_target_days = get_weekly_target_days()
+    global_weekly_target = get_weekly_target_days()
     with db() as conn:
         students = conn.execute(
-            "SELECT id, name, grade, avatar FROM students WHERE account_id = ? ORDER BY id LIMIT 3",
+            "SELECT id, name, grade, avatar, weekly_target_days FROM students WHERE account_id = ? ORDER BY id LIMIT 10",
             (account_id,),
         ).fetchall()
 
@@ -4669,6 +4712,9 @@ def get_dashboard_overview(account_id: int, days: int = 30) -> Dict[str, Any]:
             active_bases = _get_active_learning_bases(conn, student_id)
             base_ids = [int(b["base_id"]) for b in active_bases]
             stats = _get_library_stats(conn, student_id, base_ids, days, mastery_threshold)
+
+            # 获取学生的个性化目标，如果未设置则使用全局默认值
+            student_weekly_target = get_weekly_target_days(student_id)
 
             students_out.append(
                 {
@@ -4684,6 +4730,8 @@ def get_dashboard_overview(account_id: int, days: int = 30) -> Dict[str, Any]:
                     "mastery_rate_in_learned": stats["mastery_rate_in_learned"],
                     "week_bits": stats["week_bits"],
                     "week_practice_days": stats["week_practice_days"],
+                    "week_practice_count": stats["week_practice_count"],
+                    "weekly_target_days": student_weekly_target,
                     "wrong_items_30d": stats["wrong_items_30d"],
                     "last_practice_at": stats["last_practice_at"],
                 }
@@ -4691,7 +4739,7 @@ def get_dashboard_overview(account_id: int, days: int = 30) -> Dict[str, Any]:
 
     return {
         "days": days,
-        "weekly_target_days": weekly_target_days,
+        "weekly_target_days": global_weekly_target,
         "mastery_threshold": mastery_threshold,
         "students": students_out,
     }
@@ -4699,7 +4747,7 @@ def get_dashboard_overview(account_id: int, days: int = 30) -> Dict[str, Any]:
 
 def get_dashboard_student(student_id: int, account_id: int, days: int = 30, max_bases: int = 6) -> Dict[str, Any]:
     mastery_threshold = get_mastery_threshold()
-    weekly_target_days = get_weekly_target_days()
+    weekly_target_days = get_weekly_target_days(student_id)
     with db() as conn:
         student_row = conn.execute(
             "SELECT id, name, grade, avatar FROM students WHERE id = ? AND account_id = ?",

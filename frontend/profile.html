@@ -118,9 +118,8 @@
       <div class="panel-header">
         <div>
           <h2>新建学生</h2>
-          <div class="subtext">填写基本信息后保存</div>
+          <div class="subtext">填写基本信息后创建</div>
         </div>
-        <button id="closeCreateBtn" class="btn ghost">收起</button>
       </div>
       <div class="editor-layout">
         <div class="editor-section">
@@ -146,8 +145,8 @@
         </div>
       </div>
       <div class="form-actions">
-        <button id="createSaveBtn" class="btn primary">保存</button>
-        <button id="createResetBtn" class="btn">清空</button>
+        <button id="createSaveBtn" class="btn primary">创建</button>
+        <button id="createResetBtn" class="btn">取消</button>
       </div>
       <div id="createStatus" class="status"></div>
     </section>
@@ -190,21 +189,21 @@
 
     const GRADES = [
       {code: '', label: '未设置'},
-      {code: 'K1', label: '小班'},
-      {code: 'K2', label: '中班'},
-      {code: 'K3', label: '大班'},
-      {code: 'G1', label: '一年级'},
-      {code: 'G2', label: '二年级'},
-      {code: 'G3', label: '三年级'},
-      {code: 'G4', label: '四年级'},
-      {code: 'G5', label: '五年级'},
-      {code: 'G6', label: '六年级'},
-      {code: 'G7', label: '初一'},
-      {code: 'G8', label: '初二'},
-      {code: 'G9', label: '初三'},
-      {code: 'G10', label: '高一'},
-      {code: 'G11', label: '高二'},
-      {code: 'G12', label: '高三'}
+      {code: 'K1', label: '幼儿园小班'},
+      {code: 'K2', label: '幼儿园中班'},
+      {code: 'K3', label: '幼儿园大班'},
+      {code: 'G1', label: '小学一年级'},
+      {code: 'G2', label: '小学二年级'},
+      {code: 'G3', label: '小学三年级'},
+      {code: 'G4', label: '小学四年级'},
+      {code: 'G5', label: '小学五年级'},
+      {code: 'G6', label: '小学六年级'},
+      {code: 'G7', label: '初中一年级'},
+      {code: 'G8', label: '初中二年级'},
+      {code: 'G9', label: '初中三年级'},
+      {code: 'G10', label: '高中一年级'},
+      {code: 'G11', label: '高中二年级'},
+      {code: 'G12', label: '高中三年级'}
     ];
 
     const GRADE_GROUPS = [
@@ -648,8 +647,26 @@
       gradeWrap.appendChild(gradeLabel);
       gradeWrap.appendChild(gradeSelect);
 
+      const targetWrap = document.createElement('div');
+      targetWrap.className = 'editor-field';
+      const targetLabel = document.createElement('label');
+      targetLabel.textContent = '周练习目标';
+      const targetInput = document.createElement('input');
+      targetInput.type = 'number';
+      targetInput.min = '1';
+      targetInput.max = '7';
+      targetInput.value = student.weekly_target_days || '';
+      targetInput.placeholder = '使用系统默认';
+      const targetNote = document.createElement('div');
+      targetNote.className = 'upload-note';
+      targetNote.textContent = '每周练习目标天数（1-7天），留空则使用系统默认值';
+      targetWrap.appendChild(targetLabel);
+      targetWrap.appendChild(targetInput);
+      targetWrap.appendChild(targetNote);
+
       infoFields.appendChild(nameWrap);
       infoFields.appendChild(gradeWrap);
+      infoFields.appendChild(targetWrap);
       infoSection.appendChild(infoTitle);
       infoSection.appendChild(infoFields);
 
@@ -701,6 +718,20 @@
         const name = nameInput.value.trim();
         const grade = gradeSelect.dataset.value || '';
         let avatar = getAvatarSelection(avatarPicker);
+        const weeklyTargetValue = targetInput.value.trim();
+
+        // 空字符串表示清空（设置为NULL使用系统默认），有值则验证范围
+        let weekly_target_days = null;
+        if(weeklyTargetValue === ''){
+          weekly_target_days = -1; // 哨兵值，表示清空为NULL
+        }else{
+          weekly_target_days = parseInt(weeklyTargetValue, 10);
+          if(isNaN(weekly_target_days) || weekly_target_days < 1 || weekly_target_days > 7){
+            setStatus('周练习目标必须在1-7天之间', 'error');
+            return;
+          }
+        }
+
         if(!name){
           setStatus('请输入姓名', 'error');
           return;
@@ -715,9 +746,10 @@
             const uploadRes = await uploadAvatar(student.id, avatarFile.files[0]);
             avatar = uploadRes.avatar;
           }
+          const payload = {name, grade, avatar, weekly_target_days};
           const res = await apiJSON(`/api/students/${student.id}`, {
             method: 'PUT',
-            body: JSON.stringify({name, grade, avatar})
+            body: JSON.stringify(payload)
           });
           updateCfg(res);
           setStatus('学生信息已更新', 'success');
@@ -737,6 +769,7 @@
         gradeSelect.querySelectorAll('.grade-option').forEach(btn => {
           btn.classList.toggle('active', btn.dataset.code === student.grade);
         });
+        targetInput.value = student.weekly_target_days || '';
         renderAvatarPicker(avatarPicker, student.avatar || 'judy');
         avatarFile.value = '';
       });
@@ -815,10 +848,6 @@
       }
     });
 
-    document.getElementById('closeCreateBtn').addEventListener('click', () => {
-      closeCreatePanel();
-    });
-
     document.getElementById('createAvatarFile').addEventListener('change', (e) => {
       const picker = document.getElementById('createAvatarPicker');
       const file = e.target.files && e.target.files[0];
@@ -837,6 +866,7 @@
       renderAvatarPicker(document.getElementById('createAvatarPicker'), 'judy', 'createAvatarValue');
       document.getElementById('createAvatarFile').value = '';
       setCreateStatus('');
+      closeCreatePanel(); // 取消时收起创建栏
     });
 
     document.getElementById('createSaveBtn').addEventListener('click', async () => {
@@ -863,12 +893,17 @@
           await uploadAvatar(res.student_id, avatarFile);
         }
         setCreateStatus('学生创建成功', 'success');
+        // 清空表单
         document.getElementById('createNameInput').value = '';
         document.getElementById('createGradeSelect').value = '';
         renderAvatarPicker(document.getElementById('createAvatarPicker'), 'rabbit', 'createAvatarValue');
         document.getElementById('createAvatarFile').value = '';
-        state.activeId = res.student_id || null;
+        state.activeId = null; // 保持收起状态
         await loadStudents();
+        // 创建成功后自动收起创建栏
+        setTimeout(() => {
+          closeCreatePanel();
+        }, 500); // 延迟500ms让用户看到成功提示
       }catch(e){
         setCreateStatus(e.message, 'error');
       }

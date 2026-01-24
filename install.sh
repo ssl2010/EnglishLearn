@@ -169,6 +169,9 @@ init_database() {
 
     if [[ -f "$DB_PATH" ]]; then
         warn "数据库已存在,跳过初始化"
+        info "运行数据库迁移..."
+        cd "$APP_DIR/backend"
+        sudo -u englishlearn "$APP_DIR/venv/bin/python" migration_manager.py migrate
     else
         cd "$APP_DIR/backend"
         sudo -u englishlearn "$APP_DIR/venv/bin/python" init_db.py
@@ -180,6 +183,9 @@ init_database() {
         fi
 
         success "数据库初始化完成"
+
+        info "运行数据库迁移..."
+        sudo -u englishlearn DATABASE_URL="sqlite:///${DB_PATH}" "$APP_DIR/venv/bin/python" migration_manager.py migrate
     fi
 }
 

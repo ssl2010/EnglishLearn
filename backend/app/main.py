@@ -90,9 +90,9 @@ def _get_session_ttl() -> int:
 
 def _get_max_students() -> int:
     try:
-        value = int(os.environ.get("EL_MAX_STUDENTS_PER_ACCOUNT", "3") or 3)
+        value = int(os.environ.get("EL_MAX_STUDENTS_PER_ACCOUNT", "10") or 10)
     except ValueError:
-        value = 3
+        value = 10
     return max(1, value)
 
 
@@ -646,6 +646,7 @@ class UpdateStudentReq(BaseModel):
     name: Optional[str] = None
     grade: Optional[str] = None
     avatar: Optional[str] = None
+    weekly_target_days: Optional[int] = Field(default=None, ge=-1, le=7)  # -1表示清空为NULL
 
 
 @app.put("/api/students/{student_id}")
@@ -655,7 +656,7 @@ def api_update_student(student_id: int, req: UpdateStudentReq, request: Request)
     account_id = _require_account_id(request)
     with db() as conn:
         _assert_student_owned(conn, account_id, student_id)
-        update_student(conn, student_id, account_id, req.name, req.grade, req.avatar)
+        update_student(conn, student_id, account_id, req.name, req.grade, req.avatar, req.weekly_target_days)
         student = get_student(conn, student_id, account_id)
     return student
 

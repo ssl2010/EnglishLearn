@@ -128,8 +128,15 @@ def update_student(
     name: str = None,
     grade: str = None,
     avatar: str = None,
+    weekly_target_days: int = None,
 ) -> None:
-    """更新学生信息"""
+    """更新学生信息
+
+    注意: weekly_target_days 可以是:
+    - None: 不更新该字段
+    - 整数值(1-7): 设置为该值
+    - 空字符串(""): 从 API 层传入，表示清空字段（设置为 NULL）
+    """
     updates = []
     args = []
 
@@ -142,6 +149,15 @@ def update_student(
     if avatar is not None:
         updates.append("avatar = ?")
         args.append(avatar)
+
+    # 特殊处理 weekly_target_days：允许设置为 NULL
+    # 使用 -1 作为哨兵值表示"清空为 NULL"
+    if weekly_target_days is not None:
+        if weekly_target_days == -1:
+            updates.append("weekly_target_days = NULL")
+        else:
+            updates.append("weekly_target_days = ?")
+            args.append(weekly_target_days)
 
     if updates:
         updates.append("updated_at = ?")

@@ -164,6 +164,15 @@
       clawhauser: '🐆', gazelle: '🦌', finnick: '🦊', yax: '🐂'
     };
 
+    const GRADE_MAP = {
+      '': '未设置',
+      'K1': '幼儿园小班', 'K2': '幼儿园中班', 'K3': '幼儿园大班',
+      'G1': '小学一年级', 'G2': '小学二年级', 'G3': '小学三年级',
+      'G4': '小学四年级', 'G5': '小学五年级', 'G6': '小学六年级',
+      'G7': '初中一年级', 'G8': '初中二年级', 'G9': '初中三年级',
+      'G10': '高中一年级', 'G11': '高中二年级', 'G12': '高中三年级'
+    };
+
     const state = {
       currentStudentId: null,
       basesExpanded: false
@@ -280,8 +289,8 @@
       name.textContent = student.student_name || '学生';
       const meta = document.createElement('div');
       meta.className = 'student-meta';
-      const grade = student.grade ? `${student.grade}` : '未设置年级';
-      meta.textContent = `${grade} · ${student.active_bases_count || 0} 个资料库`;
+      const gradeLabel = GRADE_MAP[student.grade || ''] || student.grade || '未设置年级';
+      meta.textContent = `${gradeLabel} · ${student.active_bases_count || 0} 个资料库`;
       nameWrap.appendChild(name);
       nameWrap.appendChild(meta);
       head.appendChild(avatarNode);
@@ -305,8 +314,18 @@
       week.className = 'metric';
       const weekRow = document.createElement('div');
       weekRow.className = 'metric-row';
-      weekRow.innerHTML = `<span>本周练习</span><span class="metric-value">${student.week_practice_days || 0} / ${weeklyTargetDays}</span>`;
+      weekRow.innerHTML = `<span>本周练习</span><span class="metric-value">${student.week_practice_days || 0} / ${student.weekly_target_days || weeklyTargetDays}</span>`;
       week.appendChild(weekRow);
+
+      // 添加练习次数显示
+      const weekCountRow = document.createElement('div');
+      weekCountRow.className = 'metric-subtext';
+      weekCountRow.style.marginTop = '4px';
+      weekCountRow.style.fontSize = '12px';
+      weekCountRow.style.color = '#64748b';
+      weekCountRow.textContent = `练习次数：${student.week_practice_count || 0} 次`;
+      week.appendChild(weekCountRow);
+
       const weekWrap = document.createElement('div');
       weekWrap.className = 'week';
       weekWrap.appendChild(renderWeekGrid(student.week_bits));
@@ -369,7 +388,7 @@
           return;
         }
         students.forEach(student => {
-          grid.appendChild(renderOverviewCard(student, data.weekly_target_days || 0));
+          grid.appendChild(renderOverviewCard(student, student.weekly_target_days || data.weekly_target_days || 0));
         });
       }catch(err){
         setError(err.message || '加载失败');
@@ -494,6 +513,7 @@
         const libraryMeta = document.getElementById('libraryMeta');
         libraryMeta.innerHTML = `
           <div>近30天练习天数：${library.practice_days_30d ?? 0}</div>
+          <div>本周练习次数：${library.week_practice_count ?? 0} 次</div>
           <div>近30天错题数：${library.wrong_items_30d ?? 0}</div>
           <div>最近练习：${library.last_practice_at || '-'}</div>
         `;
