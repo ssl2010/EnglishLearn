@@ -837,16 +837,24 @@ def ensure_media_dir() -> None:
 
 
 def _save_crop_images(image_bytes_list: List[bytes], items: List[Dict]) -> None:
-    """Attach crop_url to items if bbox/page_index provided."""
+    """Attach crop_url to items if bbox/page_index provided.
+
+    By default, crop images are NOT saved to disk to prevent filesystem bloat.
+    Only bbox information is attached to items for on-demand generation.
+    Set environment variable SAVE_CROP_IMAGES=1 to enable saving.
+    """
     if not items:
         return
-    ensure_media_dir()
-    crop_dir = os.path.join(MEDIA_DIR, "uploads", "crops")
-    os.makedirs(crop_dir, exist_ok=True)
 
     import logging
     logger = logging.getLogger("uvicorn.error")
     debug_bbox = os.environ.get("EL_DEBUG_BBOX_PROCESSING", "0") == "1"
+    save_crops = os.environ.get("SAVE_CROP_IMAGES", "0") == "1"
+
+    if save_crops:
+        ensure_media_dir()
+        crop_dir = os.path.join(MEDIA_DIR, "uploads", "crops")
+        os.makedirs(crop_dir, exist_ok=True)
 
     images: List[Image.Image] = []
     for b in image_bytes_list:
@@ -973,17 +981,29 @@ def _save_crop_images(image_bytes_list: List[bytes], items: List[Dict]) -> None:
         if not str(it.get("student_text") or "").strip():
             if (bottom - top) > int(h * 0.18) or (right - left) > int(w * 0.9):
                 continue
-        try:
-            crop = img.crop((left, top, right, bottom))
-        except Exception:
-            continue
-        fname = f"crop_{uuid.uuid4().hex}.jpg"
-        out_path = os.path.join(crop_dir, fname)
-        try:
-            crop.save(out_path, format="JPEG", quality=90)
-        except Exception:
-            continue
-        it["crop_url"] = f"/media/uploads/crops/{fname}"
+
+        # Store bbox information for on-demand crop generation
+        it["crop_bbox"] = {
+            "left": left,
+            "top": top,
+            "right": right,
+            "bottom": bottom,
+            "page_index": page_index
+        }
+
+        # Only save crop image if explicitly enabled
+        if save_crops:
+            try:
+                crop = img.crop((left, top, right, bottom))
+            except Exception:
+                continue
+            fname = f"crop_{uuid.uuid4().hex}.jpg"
+            out_path = os.path.join(crop_dir, fname)
+            try:
+                crop.save(out_path, format="JPEG", quality=90)
+            except Exception:
+                continue
+            it["crop_url"] = f"/media/uploads/crops/{fname}"
 
 
 def _save_debug_overlay(image_bytes_list: List[bytes], items: List[Dict]) -> List[str]:

@@ -188,6 +188,71 @@
           <p style="margin:8px 0 0 0">建议定期下载备份到本地或其他存储设备,避免服务器故障导致数据丢失。</p>
         </div>
       </div>
+
+      <!-- 系统升级卡片 -->
+      <div class="card" style="margin-top:24px">
+        <div class="card-header">
+          <div>
+            <div class="card-title">系统升级</div>
+            <div class="card-subtitle">一键升级到最新版本</div>
+          </div>
+          <button class="btn" onclick="checkUpdate()" id="checkUpdateBtn">🔍 检查更新</button>
+        </div>
+
+        <!-- 版本信息 -->
+        <div id="versionInfo" class="alert info" style="display:none">
+          <strong>📌 当前版本</strong>
+          <p style="margin:8px 0 0 0">
+            分支: <code id="currentBranch">-</code><br>
+            提交: <code id="currentCommit">-</code>
+          </p>
+        </div>
+
+        <!-- 更新可用提示 -->
+        <div id="updateAvailable" class="alert success" style="display:none">
+          <strong>🎉 发现新版本!</strong>
+          <p style="margin:8px 0 0 0">
+            新版本: <code id="remoteCommit">-</code><br>
+            <span id="updateMessage">-</span>
+          </p>
+        </div>
+
+        <!-- 已是最新提示 -->
+        <div id="noUpdateAvailable" class="alert" style="display:none">
+          <strong>✅ 已是最新版本</strong>
+          <p style="margin:8px 0 0 0">当前系统已是最新版本，无需升级。</p>
+        </div>
+
+        <!-- 升级选项 -->
+        <div id="upgradeOptions" style="display:none;margin-top:16px">
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="autoBackupBeforeUpgrade" checked>
+              <span><strong>升级前自动备份</strong> - 升级前创建系统备份（强烈推荐）</span>
+            </label>
+          </div>
+
+          <button class="btn success" onclick="upgradeSystem()" id="upgradeBtn">
+            ⬆️ 开始升级
+          </button>
+        </div>
+
+        <!-- 升级日志 -->
+        <div id="upgradeLogContainer" style="display:none;margin-top:16px">
+          <strong>升级日志:</strong>
+          <pre id="upgradeLog" style="background:#f8fafc;padding:12px;border-radius:8px;max-height:300px;overflow-y:auto;font-size:13px;margin-top:8px"></pre>
+        </div>
+
+        <div class="alert warning" style="margin-top:16px">
+          <strong>⚠️ 升级注意事项</strong>
+          <ul style="margin:8px 0 0 0;padding-left:20px">
+            <li>升级过程中服务会短暂重启，期间无法访问</li>
+            <li>升级前会自动创建备份，确保数据安全</li>
+            <li>升级仅适用于通过 Git 部署的系统</li>
+            <li>如果使用开发环境，升级后需手动重启服务</li>
+          </ul>
+        </div>
+      </div>
     </div>
 
     <!-- 系统信息标签页 -->
@@ -591,6 +656,92 @@
         refreshAll();
       } catch (e) {
         alert(`❌ 清理失败: ${e.message}`);
+      }
+    }
+
+    // ============ 系统升级功能 ============
+
+    async function checkUpdate() {
+      const btn = document.getElementById('checkUpdateBtn');
+      btn.disabled = true;
+      btn.textContent = '🔍 检查中...';
+
+      try {
+        const status = await api('/api/admin/backup/git-status');
+
+        if (!status.is_git_repo) {
+          alert('⚠️ 当前不是 Git 仓库\n\n无法使用自动升级功能。\n如需升级，请手动部署或重新安装。');
+          return;
+        }
+
+        // 显示版本信息
+        document.getElementById('versionInfo').style.display = 'block';
+        document.getElementById('currentBranch').textContent = status.current_branch;
+        document.getElementById('currentCommit').textContent = status.current_commit;
+        document.getElementById('remoteCommit').textContent = status.remote_commit;
+        document.getElementById('updateMessage').textContent = status.message;
+
+        if (status.update_available) {
+          // 有新版本
+          document.getElementById('updateAvailable').style.display = 'block';
+          document.getElementById('noUpdateAvailable').style.display = 'none';
+          document.getElementById('upgradeOptions').style.display = 'block';
+        } else {
+          // 已是最新
+          document.getElementById('updateAvailable').style.display = 'none';
+          document.getElementById('noUpdateAvailable').style.display = 'block';
+          document.getElementById('upgradeOptions').style.display = 'none';
+        }
+
+      } catch (e) {
+        alert(`❌ 检查更新失败:\n${e.message}\n\n请确保网络连接正常`);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🔍 检查更新';
+      }
+    }
+
+    async function upgradeSystem() {
+      if (!confirm('⚠️ 确认升级系统吗?\n\n升级过程中服务会短暂重启，期间无法访问。\n升级前会自动创建备份，确保数据安全。')) {
+        return;
+      }
+
+      const btn = document.getElementById('upgradeBtn');
+      const logContainer = document.getElementById('upgradeLogContainer');
+      const logElement = document.getElementById('upgradeLog');
+
+      btn.disabled = true;
+      btn.textContent = '⬆️ 升级中...';
+      logContainer.style.display = 'block';
+      logElement.textContent = '正在准备升级...\n';
+
+      try {
+        const autoBackup = document.getElementById('autoBackupBeforeUpgrade').checked;
+
+        const data = await api('/api/admin/backup/upgrade', {
+          method: 'POST',
+          body: JSON.stringify({
+            auto_backup: autoBackup,
+            skip_pip: false
+          })
+        });
+
+        // 显示升级日志
+        logElement.textContent = data.log.join('\n');
+
+        if (data.success) {
+          alert(`🎉 升级成功!\n\n${data.message}\n\n${data.note || ''}\n\n页面将在 3 秒后刷新...`);
+          setTimeout(() => {
+            window.location.reload();
+          }, 3000);
+        }
+
+      } catch (e) {
+        logElement.textContent += `\n\n❌ 升级失败: ${e.message}`;
+        alert(`❌ 升级失败:\n${e.message}\n\n请查看升级日志了解详情`);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '⬆️ 开始升级';
       }
     }
 

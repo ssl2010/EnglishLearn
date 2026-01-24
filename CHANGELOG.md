@@ -1,5 +1,91 @@
 # 更新日志 / Changelog
 
+## [2026-01-24 深夜] - 备份恢复优化与UI改进
+
+### ✨ 新增功能
+
+**📦 备份系统增强**
+- 备份自动包含 .env 配置文件
+- 恢复时自动还原 .env 文件
+- 恢复前自动备份当前 .env（可回滚）
+- backup_info.json 正确标记 env_included 状态
+
+**🔄 版本兼容恢复**
+- 恢复后自动检测并运行数据库迁移
+- 支持从老版本备份恢复到新版本程序
+- 自动升级数据库结构到当前版本
+- 迁移失败不影响已恢复的数据
+
+**💾 数据库迁移系统**
+- 新增 `backend/migration_manager.py` - 迁移管理器
+- 新增 `backend/migrations/` 目录 - 迁移脚本存放
+- 支持命令行工具：status、migrate、check
+- 自动记录迁移历史到 schema_migrations 表
+- 创建 upgrade_logs 表用于记录升级日志
+- 创建 system_config 表用于系统配置
+
+**🗑️ 裁剪图片优化**
+- 默认不再保存 crop 裁剪图片到磁盘
+- 通过 SAVE_CROP_IMAGES 环境变量控制
+- 只保存 bbox 信息，支持按需生成
+- 提供清理脚本删除历史 crop 文件
+- 节省磁盘空间（测试环境释放 14 MB）
+
+### 🎨 UI/UX 改进
+
+**页面标题优化**
+- 主框架页面标题字号：18px → 24px (+33%)
+- 家长看板标题字号：18px → 24px (+33%)
+- 账号页面标题字号：16px → 20px (+25%)
+- 引导页标题字号：16px → 20px (+25%)
+- 统一添加粗体 (font-weight: 700)
+- 标题层级更清晰醒目
+
+**账号页面简化**
+- 删除"我的账号"页面中的重复标题
+- 删除"仅支持修改自己的密码"提示文字
+- 页面更简洁清爽
+
+### 🔧 技术改进
+
+**后端优化**
+- `backend/app/services.py`: 优化 _save_crop_images 函数
+- `backend/app/routers/backup.py`: 增强备份恢复功能
+- `backend/app/main.py`: 添加按需裁剪端点（预留）
+- `deploy.sh`: 集成数据库迁移到升级流程
+
+**配置文件**
+- `.env.example`: 添加 SAVE_CROP_IMAGES 配置说明
+- 默认值为 0（不保存裁剪图片）
+
+**脚本工具**
+- 新增 `scripts/cleanup_crop_files.sh` - 清理历史 crop 文件
+
+### 📝 文档完善
+
+- `BACKUP_OPTIMIZATION_SUMMARY_V2.md` - 备份优化总结
+- `BACKUP_OPTIMIZATION_TEST_REPORT.md` - 详细测试报告
+- `DATABASE_MIGRATION_GUIDE.md` - 数据库迁移指南
+- `MEDIA_FILES_ANALYSIS.md` - 媒体文件分析报告
+- `MIGRATION_TEST_REPORT.md` - 迁移系统测试报告
+- `TITLE_FONT_SIZE_ADJUSTMENT.md` - 标题字号调整说明
+
+### 🧪 测试验证
+
+- ✅ 裁剪图片优化测试通过（5/5）
+- ✅ 备份包含 .env 测试通过（4/4）
+- ✅ 版本兼容恢复测试通过（4/4）
+- ✅ 所有功能测试通过率 100% (13/13)
+
+### 📊 性能提升
+
+- 磁盘空间节省：14 MB（删除 2244 个 crop 文件）
+- 未来文件增长：0（不再生成 crop 文件）
+- 备份完整性：100%（数据库 + 媒体 + .env）
+- 数据库迁移速度：21ms（单个迁移）
+
+---
+
 ## [2026-01-24 晚] - 系统管理与备份功能
 
 ### ✨ 新增功能

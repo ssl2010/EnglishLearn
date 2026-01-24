@@ -45,6 +45,7 @@ Env overrides:
   BACKUP_DIR=\$SCRIPT_DIR/EL_Backup
   PYTHON_BIN=\$APP_DIR/venv/bin/python
   SKIP_PIP=1           (skip pip install on update)
+  SKIP_MIGRATION=1     (skip database migrations on update)
   SKIP_ENV=1           (skip copying .env to /etc)
   BACKUP_NO_STOP=1     (backup without stopping service)
   FORCE=1              (restore without confirmation)
@@ -100,6 +101,21 @@ update_code() {
     "$PYTHON_BIN" -m pip install -r "$APP_DIR/backend/requirements.txt"
   else
     echo "SKIP_PIP=1 set, skipping pip install."
+  fi
+
+  # 执行数据库迁移
+  if [[ "${SKIP_MIGRATION:-}" != "1" ]]; then
+    echo "Running database migrations..."
+    if [[ -f "$APP_DIR/backend/migration_manager.py" ]]; then
+      "$PYTHON_BIN" "$APP_DIR/backend/migration_manager.py" migrate
+      if [[ $? -ne 0 ]]; then
+        echo "⚠️  Database migration failed, but continuing..."
+      fi
+    else
+      echo "⚠️  Migration manager not found, skipping migrations"
+    fi
+  else
+    echo "SKIP_MIGRATION=1 set, skipping database migrations."
   fi
 
   if [[ "${FORCE_ENV_SYNC:-}" == "1" ]] && [[ -f "$APP_DIR/.env" ]]; then

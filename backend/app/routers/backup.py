@@ -1,6 +1,6 @@
 """
 备份管理 API
-提供完整的系统备份、恢复、下载功能
+提供完整的系统备份、恢复、下载、升级功能
 所有操作通过 Web 界面完成,无需 SSH 登录服务器
 """
 from fastapi import APIRouter, HTTPException, BackgroundTasks
@@ -8,10 +8,12 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import os
+import sys
 import datetime
 import shutil
 import tarfile
 import json
+import subprocess
 from pathlib import Path
 
 router = APIRouter(tags=["备份管理"])
@@ -22,8 +24,32 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(o
 
 BACKUP_DIR = os.getenv("BACKUP_DIR", os.path.join(PROJECT_ROOT, "backups"))
 DATA_DIR = os.getenv("DATA_DIR", os.path.join(PROJECT_ROOT, "backend", "data"))
-DB_PATH = os.getenv("DATABASE_URL", f"{DATA_DIR}/el.db").replace("sqlite:///", "")
-MEDIA_DIR = os.getenv("MEDIA_DIR", f"{DATA_DIR}/media")
+
+# 数据库路径自动检测
+db_path_env = os.getenv("DATABASE_URL", f"{DATA_DIR}/el.db").replace("sqlite:///", "")
+if not os.path.exists(db_path_env):
+    # 尝试 backend/el.db
+    alt_db_path = os.path.join(PROJECT_ROOT, "backend", "el.db")
+    if os.path.exists(alt_db_path):
+        DB_PATH = alt_db_path
+        DATA_DIR = os.path.join(PROJECT_ROOT, "backend")
+    else:
+        DB_PATH = db_path_env
+else:
+    DB_PATH = db_path_env
+
+# 媒体文件路径自动检测
+media_dir_env = os.getenv("MEDIA_DIR", f"{DATA_DIR}/media")
+if not os.path.exists(media_dir_env):
+    # 尝试 backend/media
+    alt_media_dir = os.path.join(PROJECT_ROOT, "backend", "media")
+    if os.path.exists(alt_media_dir):
+        MEDIA_DIR = alt_media_dir
+    else:
+        MEDIA_DIR = media_dir_env
+else:
+    MEDIA_DIR = media_dir_env
+
 APP_DIR = os.getenv("APP_DIR", PROJECT_ROOT)
 
 # 备份配置文件路径
@@ -151,6 +177,10 @@ async def create_backup(request: BackupCreateRequest):
     filepath = os.path.join(BACKUP_DIR, filename)
 
     try:
+        # 检查 .env 文件是否存在
+        env_path = os.path.join(PROJECT_ROOT, ".env")
+        env_exists = os.path.exists(env_path)
+
         # 创建备份信息
         backup_info = {
             "backup_time": datetime.datetime.now().isoformat(),
@@ -158,6 +188,7 @@ async def create_backup(request: BackupCreateRequest):
             "version": "1.0",
             "db_included": True,
             "media_included": True,
+            "env_included": env_exists,  # 根据实际情况设置
             "restore_note": "此备份包含所有系统数据，可恢复到备份时刻的状态"
         }
 
@@ -180,6 +211,10 @@ async def create_backup(request: BackupCreateRequest):
             # 添加媒体文件目录
             if os.path.exists(MEDIA_DIR):
                 tar.add(MEDIA_DIR, arcname='media')
+
+            # 添加 .env 文件（如果存在）
+            if env_exists:
+                tar.add(env_path, arcname='.env')
 
         # 获取文件大小
         size = os.path.getsize(filepath)
@@ -275,17 +310,65 @@ async def restore_backup(request: RestoreRequest):
             # 复制新媒体目录
             shutil.copytree(media_dir, MEDIA_DIR)
 
+        # 恢复 .env 文件（如果备份中包含）
+        env_file = os.path.join(temp_dir, ".env")
+        if os.path.exists(env_file):
+            env_dest = os.path.join(PROJECT_ROOT, ".env")
+            # 备份当前 .env（如果存在）
+            if os.path.exists(env_dest):
+                env_backup = f"{env_dest}.before_restore_{timestamp}"
+                shutil.copy2(env_dest, env_backup)
+            # 恢复 .env
+            shutil.copy2(env_file, env_dest)
+
         # 清理临时目录
         shutil.rmtree(temp_dir)
 
+        # 检查并运行数据库迁移（支持从老版本恢复）
+        migration_result = None
+        try:
+            # 导入迁移管理器
+            migration_manager_path = os.path.join(PROJECT_ROOT, "backend", "migration_manager.py")
+            if os.path.exists(migration_manager_path):
+                # 使用 subprocess 运行迁移，避免导入问题
+                result = subprocess.run(
+                    [sys.executable, migration_manager_path, "migrate"],
+                    cwd=PROJECT_ROOT,
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+
+                if result.returncode == 0:
+                    migration_result = {
+                        "success": True,
+                        "message": "数据库迁移成功",
+                        "output": result.stdout
+                    }
+                else:
+                    migration_result = {
+                        "success": False,
+                        "message": "数据库迁移失败，但数据已恢复",
+                        "error": result.stderr
+                    }
+        except Exception as e:
+            migration_result = {
+                "success": False,
+                "message": f"无法运行数据库迁移: {str(e)}"
+            }
+
         # 读取备份信息
         backup_info = None
+        env_restored = False
         try:
             with tarfile.open(filepath, 'r:gz') as tar:
-                if 'backup_info.json' in tar.getnames():
+                members = tar.getnames()
+                if 'backup_info.json' in members:
                     info_file = tar.extractfile('backup_info.json')
                     if info_file:
                         backup_info = json.loads(info_file.read().decode('utf-8'))
+                if '.env' in members:
+                    env_restored = True
         except:
             pass
 
@@ -294,10 +377,15 @@ async def restore_backup(request: RestoreRequest):
             "message": "系统恢复成功!",
             "restored_from": request.filename,
             "backup_time": backup_info.get('backup_time') if backup_info else None,
-            "note": "数据已恢复,建议刷新页面以加载最新数据",
+            "env_restored": env_restored,
+            "migration_result": migration_result,
+            "note": ("数据已恢复,建议刷新页面以加载最新数据。" +
+                    ("如果恢复了 .env 文件,请重启服务以使配置生效。" if env_restored else "") +
+                    (" 数据库迁移已自动运行。" if migration_result and migration_result.get("success") else "")),
             "rollback_files": {
                 "db": f"{DB_PATH}.before_restore_{timestamp}",
-                "media": f"{MEDIA_DIR}_before_restore_{timestamp}"
+                "media": f"{MEDIA_DIR}_before_restore_{timestamp}",
+                "env": f"{os.path.join(PROJECT_ROOT, '.env')}.before_restore_{timestamp}" if env_restored else None
             }
         }
 
@@ -500,3 +588,266 @@ async def get_system_info():
             "total_data_size_human": get_human_size(db_size + media_size)
         }
     }
+
+
+@router.get("/git-status")
+async def get_git_status():
+    """
+    获取 Git 仓库状态
+
+    检查当前分支、是否有新版本可用等
+    """
+    import subprocess
+
+    try:
+        # 检查是否是 Git 仓库
+        if not os.path.exists(os.path.join(APP_DIR, ".git")):
+            return {
+                "is_git_repo": False,
+                "message": "当前不是 Git 仓库，无法使用自动升级功能"
+            }
+
+        # 获取当前分支
+        branch_result = subprocess.run(
+            ["git", "-C", APP_DIR, "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        current_branch = branch_result.stdout.strip()
+
+        # 获取当前 commit
+        commit_result = subprocess.run(
+            ["git", "-C", APP_DIR, "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        current_commit = commit_result.stdout.strip()
+
+        # 获取远程更新（不拉取）
+        fetch_result = subprocess.run(
+            ["git", "-C", APP_DIR, "fetch", "origin", current_branch],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        # 检查是否有新版本
+        status_result = subprocess.run(
+            ["git", "-C", APP_DIR, "rev-list", "--count", f"HEAD..origin/{current_branch}"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        commits_behind = int(status_result.stdout.strip() or "0")
+
+        # 获取最新的远程 commit
+        remote_commit_result = subprocess.run(
+            ["git", "-C", APP_DIR, "rev-parse", "--short", f"origin/{current_branch}"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        remote_commit = remote_commit_result.stdout.strip()
+
+        return {
+            "is_git_repo": True,
+            "current_branch": current_branch,
+            "current_commit": current_commit,
+            "remote_commit": remote_commit,
+            "commits_behind": commits_behind,
+            "update_available": commits_behind > 0,
+            "message": f"发现 {commits_behind} 个新版本" if commits_behind > 0 else "已是最新版本"
+        }
+
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="Git 操作超时")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取 Git 状态失败: {str(e)}")
+
+
+class UpgradeRequest(BaseModel):
+    """升级请求"""
+    auto_backup: bool = True  # 升级前是否自动备份
+    skip_pip: bool = False    # 是否跳过 pip install
+
+
+@router.post("/upgrade")
+async def upgrade_system(request: UpgradeRequest, background_tasks: BackgroundTasks):
+    """
+    一键升级系统
+
+    执行步骤:
+    1. 检查 Git 仓库状态
+    2. 创建自动备份（如果启用）
+    3. 拉取最新代码 (git pull)
+    4. 安装依赖 (pip install)
+    5. 重启服务
+
+    注意: 此操作会重启服务,导致短暂不可用
+    """
+    import subprocess
+
+    try:
+        # 检查是否是 Git 仓库
+        if not os.path.exists(os.path.join(APP_DIR, ".git")):
+            raise HTTPException(
+                status_code=400,
+                detail="当前不是 Git 仓库，无法使用自动升级功能。请使用手动部署方式。"
+            )
+
+        # 获取当前分支
+        branch_result = subprocess.run(
+            ["git", "-C", APP_DIR, "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        current_branch = branch_result.stdout.strip()
+
+        # 检查是否有本地未提交的更改
+        status_result = subprocess.run(
+            ["git", "-C", APP_DIR, "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if status_result.stdout.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="检测到本地有未提交的更改，请先处理这些更改后再升级"
+            )
+
+        upgrade_log = []
+
+        # 步骤 1: 自动备份
+        if request.auto_backup:
+            upgrade_log.append("📦 正在创建升级前备份...")
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"EnglishLearn_升级前备份_{timestamp}.tar.gz"
+            filepath = os.path.join(BACKUP_DIR, filename)
+
+            ensure_backup_dir()
+
+            with tarfile.open(filepath, "w:gz") as tar:
+                if os.path.exists(DB_PATH):
+                    tar.add(DB_PATH, arcname='el.db')
+                if os.path.exists(MEDIA_DIR):
+                    tar.add(MEDIA_DIR, arcname='media')
+
+            upgrade_log.append(f"✅ 备份已创建: {filename}")
+
+        # 步骤 2: 拉取最新代码
+        upgrade_log.append("📥 正在拉取最新代码...")
+        pull_result = subprocess.run(
+            ["git", "-C", APP_DIR, "pull", "--rebase", "origin", current_branch],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+
+        if pull_result.returncode != 0:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Git pull 失败: {pull_result.stderr}"
+            )
+
+        upgrade_log.append("✅ 代码已更新")
+        upgrade_log.append(pull_result.stdout)
+
+        # 步骤 3: 安装依赖
+        if not request.skip_pip:
+            upgrade_log.append("📦 正在安装 Python 依赖...")
+
+            # 获取 Python 路径
+            python_bin = os.path.join(APP_DIR, "venv", "bin", "python")
+            if not os.path.exists(python_bin):
+                python_bin = "python3"  # 开发环境 fallback
+
+            pip_result = subprocess.run(
+                [python_bin, "-m", "pip", "install", "-r",
+                 os.path.join(APP_DIR, "backend", "requirements.txt")],
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+
+            if pip_result.returncode != 0:
+                upgrade_log.append(f"⚠️  依赖安装警告: {pip_result.stderr}")
+            else:
+                upgrade_log.append("✅ 依赖已更新")
+
+        # 步骤 4: 执行数据库迁移
+        upgrade_log.append("🗄️  检查数据库迁移...")
+
+        try:
+            # 导入迁移管理器
+            sys.path.insert(0, os.path.join(APP_DIR, "backend"))
+            from migration_manager import MigrationManager
+
+            # 创建迁移管理器实例
+            manager = MigrationManager(DB_PATH)
+
+            # 检查是否需要迁移
+            if manager.check_migration_needed():
+                upgrade_log.append("📋 发现待执行的数据库迁移")
+
+                # 执行迁移
+                migration_results = manager.migrate_all(stop_on_error=True)
+
+                if migration_results['failed'] > 0:
+                    raise Exception(
+                        f"数据库迁移失败: {migration_results['failed']} 个迁移失败"
+                    )
+
+                upgrade_log.append(
+                    f"✅ 数据库迁移完成: "
+                    f"成功 {migration_results['success']} 个"
+                )
+            else:
+                upgrade_log.append("✅ 数据库已是最新版本，无需迁移")
+
+        except ImportError:
+            upgrade_log.append("⚠️  未找到迁移管理器，跳过数据库迁移")
+        except Exception as e:
+            upgrade_log.append(f"❌ 数据库迁移失败: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"数据库迁移失败: {str(e)}"
+            )
+
+        # 步骤 5: 重启服务
+        upgrade_log.append("🔄 准备重启服务...")
+
+        # 检查是否是 systemd 服务
+        service_check = subprocess.run(
+            ["systemctl", "is-active", "englishlearn"],
+            capture_output=True,
+            text=True
+        )
+
+        if service_check.returncode == 0:
+            # 生产环境 - 使用 systemd
+            subprocess.run(["systemctl", "restart", "englishlearn"], timeout=30)
+            upgrade_log.append("✅ 服务已重启 (systemd)")
+        else:
+            # 开发环境 - 提示手动重启
+            upgrade_log.append("⚠️  请手动重启开发服务器")
+
+        upgrade_log.append("🎉 升级完成！")
+
+        return {
+            "success": True,
+            "message": "系统升级成功",
+            "log": upgrade_log,
+            "note": "如果使用开发服务器，请手动重启"
+        }
+
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="升级操作超时")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"升级失败: {str(e)}")

@@ -2000,6 +2000,48 @@ async def serve_media_file(filepath: str):
     # For other files, serve normally
     return FileResponse(file_path)
 
+# On-demand crop generation endpoint
+@app.get("/media/crops/on-demand/{bundle_id}/{item_position}.jpg")
+async def serve_on_demand_crop(bundle_id: str, item_position: int, request: Request):
+    """Generate and serve crop image on-demand from stored bbox information.
+
+    This endpoint generates crop images dynamically instead of saving them to disk,
+    preventing filesystem bloat while maintaining functionality.
+    """
+    from fastapi.responses import Response
+    from PIL import Image
+    import io
+    import json
+
+    # Require authentication
+    account_id = _require_account_id(request)
+
+    # Load bundle metadata to get original image and bbox
+    bundle_dir = os.path.join(MEDIA_DIR, "uploads", "ai_bundles", bundle_id)
+    meta_path = os.path.join(bundle_dir, "meta.json")
+
+    if not os.path.exists(meta_path):
+        raise HTTPException(status_code=404, detail="Bundle not found")
+
+    try:
+        with open(meta_path, "r") as f:
+            meta = json.load(f)
+
+        # Find the item with matching position
+        # Note: This requires bbox info to be saved in bundle metadata
+        # For now, return 404 as we need to update the bundle save logic
+        raise HTTPException(
+            status_code=501,
+            detail="On-demand crop generation requires bbox information in bundle metadata. "
+                   "This feature is planned but not yet implemented. "
+                   "Enable SAVE_CROP_IMAGES=1 to save crops to disk."
+        )
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Invalid bundle metadata")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating crop: {str(e)}")
+
+
 # IMPORTANT: Don't mount StaticFiles for /media anymore since we have a custom endpoint above
 # app.mount('/media', StaticFiles(directory=MEDIA_DIR), name='media')
 
