@@ -166,8 +166,16 @@
 
         <div class="form-group">
           <label>自动备份时间</label>
-          <input type="time" id="autoBackupTime" value="02:00">
-          <div class="help-text">建议设置在凌晨,避免影响白天使用</div>
+          <input type="time" id="autoBackupTime" value="02:00" disabled style="background:#f1f5f9;cursor:not-allowed">
+          <div class="help-text" style="margin-top:12px">
+            <strong>当前备份时间: 每天凌晨 02:00</strong><br>
+            此时间由 systemd timer 控制，无法在 Web 界面修改。如需更改，请在服务器上执行：
+            <pre style="background:#f8fafc;padding:8px 12px;border-radius:6px;margin:8px 0;font-size:12px;overflow-x:auto">sudo systemctl edit englishlearn-backup.timer</pre>
+            在打开的编辑器中添加以下内容（示例：改为每天 03:30）：
+            <pre style="background:#f8fafc;padding:8px 12px;border-radius:6px;margin:8px 0;font-size:12px;overflow-x:auto">[Timer]
+OnCalendar=*-*-* 03:30:00</pre>
+            保存后执行：<code style="background:#f8fafc;padding:2px 6px;border-radius:4px">sudo systemctl daemon-reload</code>
+          </div>
         </div>
 
         <div class="form-group">
@@ -498,7 +506,7 @@
       try {
         const config = {
           auto_backup_enabled: document.getElementById('autoBackupEnabled').checked,
-          auto_backup_time: document.getElementById('autoBackupTime').value,
+          auto_backup_time: document.getElementById('autoBackupTime').value,  // 保留但不会生效
           backup_retention_days: parseInt(document.getElementById('backupRetentionDays').value),
           auto_cleanup_enabled: document.getElementById('autoCleanupEnabled').checked
         };
@@ -508,7 +516,7 @@
           body: JSON.stringify(config)
         });
 
-        alert('✅ 设置已保存!\n\n自动备份将按照新的配置执行。');
+        alert('✅ 设置已保存!\n\n注意：备份时间由系统定时任务控制，如需修改请参考页面说明。');
       } catch (e) {
         alert('❌ 保存失败: ' + e.message);
       }
