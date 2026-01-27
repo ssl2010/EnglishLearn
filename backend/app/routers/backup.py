@@ -122,6 +122,128 @@ def save_backup_config(config: BackupConfig):
         json.dump(config.dict(), f, indent=2, ensure_ascii=False)
 
 
+def parse_env_file(filepath: str) -> dict:
+    """解析 .env 文件，返回 {key: value} 字典"""
+    result = {}
+    if not os.path.exists(filepath):
+        return result
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                # 跳过空行和注释
+                if not line or line.startswith('#'):
+                    continue
+                # 解析 KEY=VALUE
+                if '=' in line:
+                    key, _, value = line.partition('=')
+                    key = key.strip()
+                    value = value.strip()
+                    # 移除引号
+                    if value and value[0] in ('"', "'") and value[-1] == value[0]:
+                        value = value[1:-1]
+                    result[key] = value
+    except Exception:
+        pass
+    return result
+
+
+def check_and_merge_env_config(app_dir: str) -> dict:
+    """
+    检查并合并环境配置
+
+    比较 .env.example 和当前 .env（或 /etc/englishlearn.env），
+    将缺失的配置项添加到用户的 .env 文件中。
+
+    返回: {"new_keys": [...], "env_file": "..."}
+    """
+    result = {"new_keys": [], "env_file": None}
+
+    # 查找 .env.example
+    example_path = os.path.join(app_dir, ".env.example")
+    if not os.path.exists(example_path):
+        return result
+
+    # 查找用户的 .env 文件
+    # 优先使用 /etc/englishlearn.env（生产环境）
+    env_paths = [
+        "/etc/englishlearn.env",
+        os.path.join(app_dir, ".env"),
+    ]
+
+    user_env_path = None
+    for path in env_paths:
+        if os.path.exists(path):
+            user_env_path = path
+            break
+
+    if not user_env_path:
+        # 没有现有配置文件，不做处理
+        return result
+
+    result["env_file"] = user_env_path
+
+    # 解析配置文件
+    example_config = parse_env_file(example_path)
+    user_config = parse_env_file(user_env_path)
+
+    # 找出缺失的配置项
+    missing_keys = []
+    for key in example_config:
+        if key not in user_config:
+            missing_keys.append(key)
+
+    if not missing_keys:
+        return result
+
+    # 读取原始 .env.example 文件内容，保留注释结构
+    try:
+        with open(example_path, 'r', encoding='utf-8') as f:
+            example_lines = f.readlines()
+    except Exception:
+        return result
+
+    # 构建要添加的内容块
+    # 按照 .env.example 的顺序，提取缺失配置项及其前面的注释
+    lines_to_add = []
+    current_comments = []
+    added_keys = set()
+
+    for line in example_lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            current_comments.append(line)
+        elif '=' in stripped:
+            key = stripped.partition('=')[0].strip()
+            if key in missing_keys and key not in added_keys:
+                # 添加注释和配置行
+                if current_comments:
+                    lines_to_add.extend(current_comments)
+                lines_to_add.append(line)
+                added_keys.add(key)
+            current_comments = []
+        else:
+            current_comments = []
+
+    if not lines_to_add:
+        return result
+
+    # 追加到用户的 .env 文件
+    try:
+        with open(user_env_path, 'a', encoding='utf-8') as f:
+            f.write("\n\n# ============================================================\n")
+            f.write(f"# 以下配置由系统升级自动添加 ({datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n")
+            f.write("# ============================================================\n")
+            f.writelines(lines_to_add)
+
+        result["new_keys"] = list(added_keys)
+    except Exception as e:
+        # 写入失败，记录但不中断升级
+        pass
+
+    return result
+
+
 @router.get("/list", response_model=List[BackupInfo])
 async def list_backups():
     """列出所有备份"""
@@ -779,7 +901,19 @@ async def upgrade_system(request: UpgradeRequest, background_tasks: BackgroundTa
             else:
                 upgrade_log.append("✅ 依赖已更新")
 
-        # 步骤 4: 执行数据库迁移
+        # 步骤 4: 检查并合并环境配置
+        upgrade_log.append("⚙️  检查环境配置...")
+        env_update_result = check_and_merge_env_config(APP_DIR)
+        if env_update_result.get("new_keys"):
+            upgrade_log.append(f"✅ 已添加 {len(env_update_result['new_keys'])} 个新配置项")
+            for key in env_update_result['new_keys'][:5]:  # 最多显示5个
+                upgrade_log.append(f"   + {key}")
+            if len(env_update_result['new_keys']) > 5:
+                upgrade_log.append(f"   ... 等 {len(env_update_result['new_keys']) - 5} 个")
+        else:
+            upgrade_log.append("✅ 环境配置已是最新")
+
+        # 步骤 5: 执行数据库迁移
         upgrade_log.append("🗄️  检查数据库迁移...")
 
         try:
@@ -818,7 +952,7 @@ async def upgrade_system(request: UpgradeRequest, background_tasks: BackgroundTa
                 detail=f"数据库迁移失败: {str(e)}"
             )
 
-        # 步骤 5: 重启服务
+        # 步骤 6: 重启服务
         upgrade_log.append("🔄 准备重启服务...")
 
         # 检查是否是 systemd 服务
