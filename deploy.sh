@@ -696,14 +696,15 @@ reset_admin_password() {
   if [[ -x "$PYTHON_BIN" ]]; then
     # 设置环境变量
     export EL_DB_PATH="$DB_PATH"
+    export EL_APP_DIR="$APP_DIR"
 
     "$PYTHON_BIN" - "$username" "$password1" <<'PYTHON_SCRIPT'
 import sys
 import os
 
-# 添加 backend 路径
-backend_path = os.path.join(os.path.dirname(os.environ.get('EL_DB_PATH', '')), '..', '..')
-sys.path.insert(0, os.path.abspath(backend_path))
+# 添加应用目录到 Python 路径
+app_dir = os.environ.get('EL_APP_DIR', '/opt/EnglishLearn')
+sys.path.insert(0, app_dir)
 
 try:
     from backend.app.auth import set_account_password
