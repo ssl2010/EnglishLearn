@@ -1,9 +1,23 @@
 #!/usr/bin/env bash
+#
+# EnglishLearn 部署管理脚本
+#
+# 此脚本可以从任意位置运行，默认管理 /opt/EnglishLearn 的安装
+# 如果应用安装在其他位置，请设置 APP_DIR 环境变量：
+#   APP_DIR=/path/to/EnglishLearn ./deploy.sh <command>
+#
+# 也可以创建配置文件 /etc/englishlearn-deploy.conf 或 ~/.englishlearn-deploy.conf
+#
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 加载配置文件（如果存在）
+if [[ -f /etc/englishlearn-deploy.conf ]]; then
+  source /etc/englishlearn-deploy.conf
+elif [[ -f ~/.englishlearn-deploy.conf ]]; then
+  source ~/.englishlearn-deploy.conf
+fi
 
-# --- Config (override via env) ---
+# --- Config (override via env or config file) ---
 APP_DIR="${APP_DIR:-/opt/EnglishLearn}"
 SERVICE_NAME="${SERVICE_NAME:-englishlearn}"
 DATA_DIR="${DATA_DIR:-$APP_DIR/data}"
@@ -67,15 +81,25 @@ Usage: $0 {command} [options]
 其他:
   help        显示此帮助信息
 
+配置方式 (优先级从高到低):
+  1. 环境变量:     APP_DIR=/path ./deploy.sh <command>
+  2. 配置文件:     /etc/englishlearn-deploy.conf 或 ~/.englishlearn-deploy.conf
+  3. 默认值:       /opt/EnglishLearn
+
 环境变量:
-  APP_DIR=/opt/EnglishLearn
-  SERVICE_NAME=englishlearn
-  BACKUP_DIR=/opt/EnglishLearn_Backups
+  APP_DIR              应用目录 (默认: /opt/EnglishLearn)
+  SERVICE_NAME         服务名称 (默认: englishlearn)
+  BACKUP_DIR           备份目录 (默认: /opt/EnglishLearn_Backups)
+  DB_PATH              数据库路径 (默认: \$APP_DIR/data/el.db)
   SKIP_PIP=1           跳过 pip install
   SKIP_MIGRATION=1     跳过数据库迁移
   SKIP_BACKUP=1        升级时跳过自动备份
   BACKUP_NO_STOP=1     备份时不停止服务
   FORCE=1              恢复时跳过确认
+
+配置文件示例 (/etc/englishlearn-deploy.conf):
+  APP_DIR=/opt/EnglishLearn
+  BACKUP_DIR=/data/backups
 
 示例:
   $0 upgrade                   # 完整升级流程
