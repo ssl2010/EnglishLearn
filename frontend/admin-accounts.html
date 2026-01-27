@@ -49,6 +49,14 @@
     .empty{padding:16px;border:1px dashed var(--line);border-radius:12px;color:var(--muted);font-size:13px;text-align:center}
     .notice{font-size:12px;color:var(--muted)}
     .hidden{display:none}
+    /* 模态框样式 */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:1000}
+    .modal{background:var(--card);border-radius:16px;box-shadow:0 20px 40px rgba(0,0,0,.2);padding:24px;width:90%;max-width:380px}
+    .modal h3{margin:0 0 16px;font-size:18px}
+    .modal .form-group{margin-bottom:14px}
+    .modal .form-group label{margin-bottom:6px}
+    .modal .btn-row{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+    .modal .error-hint{color:var(--danger);font-size:12px;margin-top:6px;min-height:16px}
     @media (max-width: 900px){
       .form-grid{grid-template-columns:1fr}
       .page-header{flex-direction:column;align-items:flex-start}
@@ -65,6 +73,26 @@
     </div>
 
     <div id="pageStatus" class="status"></div>
+
+    <!-- 重置密码模态框 -->
+    <div id="resetModal" class="modal-overlay hidden">
+      <div class="modal">
+        <h3 id="resetModalTitle">重置密码</h3>
+        <div class="form-group">
+          <label>新密码</label>
+          <input id="resetPwd1" type="password" placeholder="至少 8 位" autocomplete="new-password" />
+        </div>
+        <div class="form-group">
+          <label>确认密码</label>
+          <input id="resetPwd2" type="password" placeholder="再次输入密码" autocomplete="new-password" />
+        </div>
+        <div id="resetError" class="error-hint"></div>
+        <div class="btn-row">
+          <button id="resetCancelBtn" class="btn">取消</button>
+          <button id="resetConfirmBtn" class="btn primary">确认重置</button>
+        </div>
+      </div>
+    </div>
 
     <section id="noPermission" class="panel hidden">
       <div class="panel-header">
@@ -244,25 +272,84 @@
       renderAccounts();
     }
 
-    async function resetPassword(acc){
-      setStatus('');
-      const newPassword = window.prompt(`为 ${acc.username} 设置新密码（至少 8 位）`);
-      if(!newPassword){
+    // 重置密码模态框相关
+    const resetModal = document.getElementById('resetModal');
+    const resetModalTitle = document.getElementById('resetModalTitle');
+    const resetPwd1 = document.getElementById('resetPwd1');
+    const resetPwd2 = document.getElementById('resetPwd2');
+    const resetError = document.getElementById('resetError');
+    const resetCancelBtn = document.getElementById('resetCancelBtn');
+    const resetConfirmBtn = document.getElementById('resetConfirmBtn');
+    let resetTargetAccount = null;
+
+    function showResetModal(acc){
+      resetTargetAccount = acc;
+      resetModalTitle.textContent = `重置密码: ${acc.username}`;
+      resetPwd1.value = '';
+      resetPwd2.value = '';
+      resetError.textContent = '';
+      resetModal.classList.remove('hidden');
+      resetPwd1.focus();
+    }
+
+    function hideResetModal(){
+      resetModal.classList.add('hidden');
+      resetTargetAccount = null;
+    }
+
+    async function confirmResetPassword(){
+      const pwd1 = resetPwd1.value.trim();
+      const pwd2 = resetPwd2.value.trim();
+
+      // 验证
+      if(!pwd1){
+        resetError.textContent = '请输入新密码';
+        resetPwd1.focus();
         return;
       }
-      if(newPassword.trim().length < 8){
-        setStatus('密码至少 8 位。', 'error');
+      if(pwd1.length < 8){
+        resetError.textContent = '密码至少 8 位';
+        resetPwd1.focus();
         return;
       }
+      if(!pwd2){
+        resetError.textContent = '请再次输入密码确认';
+        resetPwd2.focus();
+        return;
+      }
+      if(pwd1 !== pwd2){
+        resetError.textContent = '两次输入的密码不一致';
+        resetPwd2.value = '';
+        resetPwd2.focus();
+        return;
+      }
+
+      // 提交
       try{
-        await apiJSON(`/api/admin/accounts/${acc.id}/reset-password`, {
+        await apiJSON(`/api/admin/accounts/${resetTargetAccount.id}/reset-password`, {
           method: 'POST',
-          body: JSON.stringify({new_password: newPassword.trim()})
+          body: JSON.stringify({new_password: pwd1})
         });
+        hideResetModal();
         setStatus('密码已重置。', 'success');
       }catch(e){
-        setStatus(e.message, 'error');
+        resetError.textContent = e.message;
       }
+    }
+
+    resetCancelBtn.addEventListener('click', hideResetModal);
+    resetConfirmBtn.addEventListener('click', confirmResetPassword);
+    resetModal.addEventListener('click', (e) => {
+      if(e.target === resetModal) hideResetModal();
+    });
+    // 支持回车确认
+    resetPwd2.addEventListener('keydown', (e) => {
+      if(e.key === 'Enter') confirmResetPassword();
+    });
+
+    function resetPassword(acc){
+      setStatus('');
+      showResetModal(acc);
     }
 
     async function toggleRole(acc){
