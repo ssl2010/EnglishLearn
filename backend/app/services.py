@@ -287,6 +287,150 @@ def _normalize_ocr_words(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
     return normalized
 
 
+def _detect_page_number(ocr_words: List[Dict[str, Any]]) -> Optional[int]:
+    """
+    从 OCR 识别结果中检测页码。
+
+    支持的格式:
+    - "第1页", "第2页", "第 1 页"
+    - "1/2", "2/2"
+    - "Page 1", "Page 2"
+    - "- 1 -", "- 2 -"
+
+    Returns:
+        检测到的页码 (1-based)，未检测到返回 None
+    """
+    import re
+
+    page_patterns = [
+        r'第\s*(\d+)\s*页',           # 第1页, 第 1 页
+        r'^(\d+)\s*/\s*\d+$',          # 1/2, 2/2
+        r'[Pp]age\s*(\d+)',            # Page 1, page 1
+        r'^-\s*(\d+)\s*-$',            # - 1 -
+        r'^(\d+)$',                     # 单独的数字 (通常在页面底部)
+    ]
+
+    candidates = []
+
+    for word_obj in ocr_words:
+        text = (word_obj.get("words") or "").strip()
+        if not text:
+            continue
+
+        # 获取位置信息，页码通常在页面底部
+        loc = word_obj.get("location") or {}
+        top = loc.get("top", 0)
+
+        for pattern in page_patterns:
+            match = re.search(pattern, text)
+            if match:
+                try:
+                    page_num = int(match.group(1))
+                    if 1 <= page_num <= 100:  # 合理的页码范围
+                        candidates.append({
+                            "page_num": page_num,
+                            "top": top,
+                            "text": text
+                        })
+                except (ValueError, IndexError):
+                    pass
+
+    if not candidates:
+        return None
+
+    # 优先选择位置最靠下的页码（通常是页脚）
+    candidates.sort(key=lambda x: -x["top"])
+    return candidates[0]["page_num"]
+
+
+def _reorder_by_page_numbers(
+    ocr_raw: Dict[str, Any],
+    img_bytes_list: List[bytes],
+    logger: Any = None
+) -> Tuple[Dict[str, Any], List[bytes], Dict[int, int]]:
+    """
+    根据 OCR 检测到的页码重新排序页面。
+
+    Args:
+        ocr_raw: OCR 识别结果 {"pages": [...]}
+        img_bytes_list: 原始图片字节列表
+        logger: 日志记录器
+
+    Returns:
+        Tuple of:
+        - 重排后的 ocr_raw
+        - 重排后的 img_bytes_list
+        - 页码映射 {原始索引: 新索引}
+    """
+    if logger is None:
+        logger = logging.getLogger("uvicorn.error")
+
+    ocr_pages = ocr_raw.get("pages") or []
+    if len(ocr_pages) <= 1:
+        # 单页无需重排
+        return ocr_raw, img_bytes_list, {0: 0} if ocr_pages else {}
+
+    # 检测每页的页码
+    page_info = []
+    for idx, page in enumerate(ocr_pages):
+        raw = page.get("raw") or {}
+        words = _normalize_ocr_words(raw)
+        detected_num = _detect_page_number(words)
+        page_info.append({
+            "original_index": idx,
+            "detected_page": detected_num,
+            "page_data": page
+        })
+        logger.info(f"[PAGE REORDER] Page index {idx}: detected page number = {detected_num}")
+
+    # 检查是否所有页面都检测到了页码
+    detected_pages = [p["detected_page"] for p in page_info if p["detected_page"] is not None]
+
+    if len(detected_pages) != len(page_info):
+        # 不是所有页面都检测到页码，保持原顺序
+        logger.warning(f"[PAGE REORDER] Not all pages have page numbers detected ({len(detected_pages)}/{len(page_info)}), keeping original order")
+        return ocr_raw, img_bytes_list, {i: i for i in range(len(ocr_pages))}
+
+    # 检查页码是否连续且唯一
+    if len(set(detected_pages)) != len(detected_pages):
+        logger.warning(f"[PAGE REORDER] Duplicate page numbers detected: {detected_pages}, keeping original order")
+        return ocr_raw, img_bytes_list, {i: i for i in range(len(ocr_pages))}
+
+    # 按检测到的页码排序
+    page_info.sort(key=lambda x: x["detected_page"])
+
+    # 检查是否需要重排
+    original_order = [p["original_index"] for p in page_info]
+    if original_order == list(range(len(page_info))):
+        logger.info("[PAGE REORDER] Pages are already in correct order")
+        return ocr_raw, img_bytes_list, {i: i for i in range(len(ocr_pages))}
+
+    # 执行重排
+    logger.info(f"[PAGE REORDER] Reordering pages: original indices {original_order} -> new indices {list(range(len(page_info)))}")
+
+    # 创建映射: 原始索引 -> 新索引
+    index_mapping = {}
+    for new_idx, info in enumerate(page_info):
+        index_mapping[info["original_index"]] = new_idx
+
+    # 重排 OCR 数据
+    new_ocr_pages = []
+    for new_idx, info in enumerate(page_info):
+        new_page = info["page_data"].copy()
+        new_page["page_index"] = new_idx
+        new_page["original_page_index"] = info["original_index"]
+        new_ocr_pages.append(new_page)
+
+    new_ocr_raw = {"pages": new_ocr_pages}
+
+    # 重排图片
+    new_img_bytes_list = [img_bytes_list[info["original_index"]] for info in page_info]
+
+    logger.info(f"[PAGE REORDER] Reorder complete. Mapping: {index_mapping}")
+
+    return new_ocr_raw, new_img_bytes_list, index_mapping
+
+
 def apply_white_balance(img_bytes: bytes) -> bytes:
     """
     Apply white balance to image to correct color cast and improve clarity.
@@ -1212,6 +1356,18 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
         wb_img_bytes_list.append(wb_bytes)
     logger.info(f"[AI GRADING DEBUG] White balance applied to {len(wb_img_bytes_list)} images")
 
+    # ========== 页码检测与重排 ==========
+    page_reorder_mapping: Dict[int, int] = {}
+    try:
+        ocr_raw, wb_img_bytes_list, page_reorder_mapping = _reorder_by_page_numbers(
+            ocr_raw, wb_img_bytes_list, logger
+        )
+        if page_reorder_mapping and any(k != v for k, v in page_reorder_mapping.items()):
+            img_bytes_list = [img_bytes_list[info] for info in sorted(page_reorder_mapping.keys(), key=lambda x: page_reorder_mapping[x])]
+    except Exception as e:
+        logger.warning(f"[PAGE REORDER] Error during page reordering: {e}, continuing with original order")
+        page_reorder_mapping = {i: i for i in range(len(ocr_raw.get("pages", [])))}
+
     # Parse LLM raw data (which is now in the original sections format)
     items_raw = []
     sections = llm_raw.get("sections")
@@ -1227,6 +1383,9 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
             for idx, it in enumerate(sec_items):
                 if not isinstance(it, dict):
                     continue
+                # 应用页码映射
+                llm_pg = it.get("pg") or 0
+                mapped_pg = page_reorder_mapping.get(llm_pg, llm_pg)
                 # Convert short field names to long names
                 items_raw.append({
                     "q": it.get("q"),
@@ -1236,12 +1395,23 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
                     "student_text": it.get("ans") or "",
                     "is_correct": it.get("ok"),
                     "confidence": it.get("conf"),
-                    "page_index": it.get("pg") or 0,
+                    "page_index": mapped_pg,
+                    "original_page_index": llm_pg,
                     "note": it.get("note") or "",
                 })
     else:
         # Fallback to old items format if sections not found
-        items_raw = llm_raw.get("items") or []
+        raw_items = llm_raw.get("items") or []
+        for it in raw_items:
+            if not isinstance(it, dict):
+                items_raw.append(it)
+                continue
+            llm_pg = it.get("page_index") or it.get("pg") or 0
+            mapped_pg = page_reorder_mapping.get(llm_pg, llm_pg)
+            new_it = dict(it)
+            new_it["page_index"] = mapped_pg
+            new_it["original_page_index"] = llm_pg
+            items_raw.append(new_it)
 
     logger.info(f"[AI GRADING DEBUG] Loaded {len(img_bytes_list)} images, LLM items: {len(items_raw)}")
 
@@ -1922,6 +2092,27 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
     finally:
         ex.shutdown(wait=False, cancel_futures=True)
 
+    # ========== 页码检测与重排 ==========
+    # 根据 OCR 检测到的页码（如"第1页"、"第2页"）自动重排页面顺序
+    # 这解决了用户上传照片顺序错误导致的匹配问题
+    page_reorder_mapping: Dict[int, int] = {}
+    try:
+        ocr_raw, wb_img_bytes_list, page_reorder_mapping = _reorder_by_page_numbers(
+            ocr_raw, wb_img_bytes_list, logger
+        )
+        # 同时重排原始图片列表（用于保存和调试）
+        if page_reorder_mapping and any(k != v for k, v in page_reorder_mapping.items()):
+            img_bytes_list = [img_bytes_list[info] for info in sorted(page_reorder_mapping.keys(), key=lambda x: page_reorder_mapping[x])]
+            # 重排保存路径
+            saved_paths = [saved_paths[info] for info in sorted(page_reorder_mapping.keys(), key=lambda x: page_reorder_mapping[x])]
+    except Exception as e:
+        logger.warning(f"[PAGE REORDER] Error during page reordering: {e}, continuing with original order")
+        page_reorder_mapping = {i: i for i in range(len(ocr_raw.get("pages", [])))}
+
+    # 创建反向映射：新索引 -> 原始索引（用于调整 LLM 的 pg 值）
+    # LLM 的 pg 值是基于上传顺序的，需要映射到重排后的索引
+    reverse_mapping = {v: k for k, v in page_reorder_mapping.items()}
+
     # Parse LLM raw data (handle both sections format and flat items format)
     items_raw = []
 
@@ -1943,6 +2134,11 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
             for idx, it in enumerate(sec_items):
                 if not isinstance(it, dict):
                     continue
+                # 获取 LLM 返回的原始页码
+                llm_pg = it.get("pg") or 0
+                # 将 LLM 的页码映射到重排后的索引
+                # LLM 的 pg 是基于上传顺序的，page_reorder_mapping 将上传顺序映射到正确顺序
+                mapped_pg = page_reorder_mapping.get(llm_pg, llm_pg)
                 # Convert short field names to long names
                 items_raw.append({
                     "q": it.get("q"),
@@ -1952,13 +2148,26 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
                     "student_text": it.get("ans") or "",
                     "is_correct": it.get("ok"),
                     "confidence": it.get("conf"),
-                    "page_index": it.get("pg") or 0,
+                    "page_index": mapped_pg,
+                    "original_page_index": llm_pg,  # 保留原始页码用于调试
                     "note": it.get("note") or "",
                 })
     else:
         logger.warning("[AI GRADING] No sections found in LLM response, using flat items format")
         # Fallback to pre-flattened items from analyze_freeform_sheet
-        items_raw = llm_raw.get("items") or []
+        raw_items = llm_raw.get("items") or []
+        # 应用页码映射
+        items_raw = []
+        for it in raw_items:
+            if not isinstance(it, dict):
+                items_raw.append(it)
+                continue
+            llm_pg = it.get("page_index") or it.get("pg") or 0
+            mapped_pg = page_reorder_mapping.get(llm_pg, llm_pg)
+            new_it = dict(it)
+            new_it["page_index"] = mapped_pg
+            new_it["original_page_index"] = llm_pg
+            items_raw.append(new_it)
 
     logger.info(f"[AI GRADING] LLM items_raw: {len(items_raw)}; OCR pages: {len(ocr_raw.get('pages', []))}")
 
