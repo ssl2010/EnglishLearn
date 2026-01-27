@@ -430,6 +430,10 @@ setup_venv() {
     sudo -u englishlearn "$APP_DIR/venv/bin/pip" install --upgrade pip
     sudo -u englishlearn "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/backend/requirements.txt"
 
+    # 清理 Python 缓存（避免旧 .pyc 文件导致路径问题）
+    info "清理 Python 缓存..."
+    find "$APP_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+
     success "Python 环境配置完成"
 }
 

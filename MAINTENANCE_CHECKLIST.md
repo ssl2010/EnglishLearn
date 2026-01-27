@@ -2,6 +2,15 @@
 
 每次修改代码后，请检查以下脚本是否需要同步更新。
 
+## 重要提醒
+
+**Python 缓存问题**: 升级后如遇到路径相关错误，可能是 `__pycache__` 中的 `.pyc` 文件缓存了旧路径。
+`elctl update/upgrade` 和 `install.sh` 已自动清理缓存，如需手动清理：
+```bash
+find /opt/EnglishLearn -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+sudo systemctl restart englishlearn
+```
+
 ## 需要检查的脚本
 
 ### 1. `install.sh` - 安装脚本
