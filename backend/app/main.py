@@ -21,6 +21,7 @@ from .auth import (
     create_account,
     create_session,
     deactivate_account,
+    delete_account_permanently,
     delete_session,
     delete_sessions_for_account,
     ensure_super_admin,
@@ -572,12 +573,18 @@ def api_admin_update_account(account_id: int, req: AdminUpdateAccountReq, reques
 
 
 @app.delete("/api/admin/accounts/{account_id}")
-def api_admin_delete_account(account_id: int, request: Request):
+def api_admin_delete_account(account_id: int, request: Request, permanent: bool = False):
+    """
+    删除账号
+
+    - 对于启用中的账号：执行停用操作
+    - 对于已停用的账号且 permanent=True：永久删除账号及其所有数据
+    """
     from .db import db, qone
     _require_super_admin(request)
     current = _account_from_request(request)
     if current and account_id == current.get("id"):
-        raise HTTPException(status_code=400, detail="不能停用自己")
+        raise HTTPException(status_code=400, detail="不能删除自己")
     with db() as conn:
         target = qone(
             conn,
@@ -586,11 +593,33 @@ def api_admin_delete_account(account_id: int, request: Request):
         )
         if not target:
             raise HTTPException(status_code=404, detail="账号不存在")
-        target_is_admin = bool(target["is_super_admin"]) and bool(target["is_active"])
+
+        is_active = bool(target["is_active"])
+        target_is_admin = bool(target["is_super_admin"]) and is_active
+
         if target_is_admin and count_active_admins(conn) <= 1:
             raise HTTPException(status_code=400, detail="至少保留一个启用管理员")
-    deactivate_account(account_id)
-    return {"ok": True}
+
+        # 如果账号已停用且请求永久删除
+        if not is_active and permanent:
+            stats = delete_account_permanently(account_id)
+            return {
+                "ok": True,
+                "action": "deleted",
+                "message": f"账号 {target['username']} 已永久删除",
+                "stats": stats
+            }
+
+        # 如果账号未停用，先停用
+        if is_active:
+            deactivate_account(account_id)
+            return {"ok": True, "action": "deactivated", "message": f"账号 {target['username']} 已停用"}
+
+        # 账号已停用但未请求永久删除
+        raise HTTPException(
+            status_code=400,
+            detail="账号已停用。如需永久删除，请使用 permanent=true 参数"
+        )
 
 
 # ============================================================

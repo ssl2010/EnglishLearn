@@ -208,3 +208,44 @@ def deactivate_account(account_id: int) -> None:
             (utcnow_iso(), account_id),
         )
         conn.execute("DELETE FROM auth_sessions WHERE account_id = ?", (account_id,))
+
+
+def delete_account_permanently(account_id: int) -> Dict[str, Any]:
+    """
+    永久删除账号及其所有关联数据
+
+    注意：此操作不可恢复！会删除：
+    - 账号本身
+    - 该账号下所有学生及其练习记录
+    - 该账号创建的私有资料库
+    - 所有会话
+
+    由于数据库外键设置了 ON DELETE CASCADE，关联数据会自动级联删除
+
+    Returns:
+        删除统计信息
+    """
+    stats = {
+        "students_deleted": 0,
+        "bases_deleted": 0,
+        "sessions_deleted": 0,
+    }
+
+    with db() as conn:
+        # 启用外键约束（确保级联删除生效）
+        conn.execute("PRAGMA foreign_keys = ON")
+
+        # 统计将被删除的数据
+        row = qone(conn, "SELECT COUNT(1) AS c FROM students WHERE account_id = ?", (account_id,))
+        stats["students_deleted"] = int(row["c"]) if row else 0
+
+        row = qone(conn, "SELECT COUNT(1) AS c FROM bases WHERE account_id = ? AND is_system = 0", (account_id,))
+        stats["bases_deleted"] = int(row["c"]) if row else 0
+
+        row = qone(conn, "SELECT COUNT(1) AS c FROM auth_sessions WHERE account_id = ?", (account_id,))
+        stats["sessions_deleted"] = int(row["c"]) if row else 0
+
+        # 删除账号（级联删除关联数据）
+        conn.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
+
+    return stats

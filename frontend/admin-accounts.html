@@ -57,6 +57,14 @@
     .modal .form-group label{margin-bottom:6px}
     .modal .btn-row{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
     .modal .error-hint{color:var(--danger);font-size:12px;margin-top:6px;min-height:16px}
+    /* 自定义复选框样式 */
+    .checkbox-wrap{display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 12px;background:#f8fafc;border-radius:8px;border:1px solid var(--line);font-size:13px;font-weight:500}
+    .checkbox-wrap:hover{background:#f1f5f9;border-color:#cbd5e1}
+    .checkbox-wrap input{position:absolute;opacity:0;width:0;height:0}
+    .checkbox-box{width:20px;height:20px;border:2px solid #cbd5e1;border-radius:5px;background:#fff;display:flex;align-items:center;justify-content:center;transition:all 0.15s}
+    .checkbox-wrap input:checked + .checkbox-box{background:var(--primary);border-color:var(--primary)}
+    .checkbox-wrap input:checked + .checkbox-box::after{content:'✓';color:#fff;font-size:14px;font-weight:bold}
+    .checkbox-wrap input:focus + .checkbox-box{box-shadow:0 0 0 3px rgba(15,23,42,0.15)}
     @media (max-width: 900px){
       .form-grid{grid-template-columns:1fr}
       .page-header{flex-direction:column;align-items:flex-start}
@@ -68,7 +76,7 @@
     <div class="page-header">
       <div>
         <h1>账号管理</h1>
-        <div class="subtext">删除=停用（账号会被强制退出）</div>
+        <div class="subtext">停用账号后可选择永久删除（将清除所有关联数据）</div>
       </div>
     </div>
 
@@ -119,10 +127,11 @@
             <input id="createPassword" type="password" placeholder="至少 8 位" />
           </div>
           <div>
-            <label>管理员</label>
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px">
-              <input id="createIsAdmin" type="checkbox" style="width:auto" />
-              设为管理员
+            <label>管理员权限</label>
+            <label class="checkbox-wrap">
+              <input id="createIsAdmin" type="checkbox" />
+              <span class="checkbox-box"></span>
+              <span>设为管理员</span>
             </label>
           </div>
         </div>
@@ -255,6 +264,16 @@
         actions.appendChild(resetBtn);
         actions.appendChild(roleBtn);
         actions.appendChild(activeBtn);
+
+        // 对已停用的账号显示永久删除按钮
+        if(!acc.is_active){
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'btn small danger';
+          deleteBtn.textContent = '永久删除';
+          deleteBtn.addEventListener('click', () => deleteAccountPermanently(acc));
+          actions.appendChild(deleteBtn);
+        }
+
         actionTd.appendChild(actions);
 
         tr.appendChild(nameTd);
@@ -368,12 +387,13 @@
     async function toggleActive(acc){
       setStatus('');
       if(acc.is_active){
-        const ok = window.confirm(`确定停用账号 ${acc.username} 吗？`);
+        const ok = window.confirm(`确定停用账号 ${acc.username} 吗？\n\n停用后账号将无法登录，但数据会保留。`);
         if(!ok){
           return;
         }
         try{
           await apiJSON(`/api/admin/accounts/${acc.id}`, {method: 'DELETE'});
+          setStatus(`账号 ${acc.username} 已停用`, 'success');
           await refreshAccounts();
         }catch(e){
           setStatus(e.message, 'error');
@@ -385,6 +405,41 @@
           method: 'PATCH',
           body: JSON.stringify({is_active: true})
         });
+        setStatus(`账号 ${acc.username} 已启用`, 'success');
+        await refreshAccounts();
+      }catch(e){
+        setStatus(e.message, 'error');
+      }
+    }
+
+    async function deleteAccountPermanently(acc){
+      setStatus('');
+      const confirmed = window.confirm(
+        `⚠️ 永久删除账号: ${acc.username}\n\n` +
+        `此操作将删除该账号及其所有数据：\n` +
+        `• 该账号下的所有学生\n` +
+        `• 所有练习记录和统计\n` +
+        `• 该账号创建的私有资料库\n\n` +
+        `此操作不可恢复！确定要继续吗？`
+      );
+      if(!confirmed){
+        return;
+      }
+      // 二次确认
+      const doubleConfirm = window.confirm(
+        `最后确认：真的要永久删除 ${acc.username} 吗？\n\n数据删除后无法恢复！`
+      );
+      if(!doubleConfirm){
+        return;
+      }
+      try{
+        const res = await apiJSON(`/api/admin/accounts/${acc.id}?permanent=true`, {method: 'DELETE'});
+        const stats = res.stats || {};
+        setStatus(
+          `账号 ${acc.username} 已永久删除` +
+          (stats.students_deleted ? `（含 ${stats.students_deleted} 个学生）` : ''),
+          'success'
+        );
         await refreshAccounts();
       }catch(e){
         setStatus(e.message, 'error');
