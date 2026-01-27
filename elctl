@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 #
-# EnglishLearn 部署管理脚本
+# elctl - EnglishLearn 管理工具
+#
+# 功能: 服务管理、升级更新、备份恢复、定时任务、账号管理
 #
 # 此脚本可以从任意位置运行，默认管理 /opt/EnglishLearn 的安装
 # 如果应用安装在其他位置，请设置 APP_DIR 环境变量：
-#   APP_DIR=/path/to/EnglishLearn ./deploy.sh <command>
+#   APP_DIR=/path/to/EnglishLearn elctl <command>
 #
-# 也可以创建配置文件 /etc/englishlearn-deploy.conf 或 ~/.englishlearn-deploy.conf
+# 也可以创建配置文件 /etc/elctl.conf 或 ~/.elctl.conf
 #
 set -euo pipefail
 
 # 加载配置文件（如果存在）
-if [[ -f /etc/englishlearn-deploy.conf ]]; then
-  source /etc/englishlearn-deploy.conf
-elif [[ -f ~/.englishlearn-deploy.conf ]]; then
-  source ~/.englishlearn-deploy.conf
+if [[ -f /etc/elctl.conf ]]; then
+  source /etc/elctl.conf
+elif [[ -f ~/.elctl.conf ]]; then
+  source ~/.elctl.conf
 fi
 
 # --- Config (override via env or config file) ---
@@ -82,8 +84,8 @@ Usage: $0 {command} [options]
   help        显示此帮助信息
 
 配置方式 (优先级从高到低):
-  1. 环境变量:     APP_DIR=/path ./deploy.sh <command>
-  2. 配置文件:     /etc/englishlearn-deploy.conf 或 ~/.englishlearn-deploy.conf
+  1. 环境变量:     APP_DIR=/path elctl <command>
+  2. 配置文件:     /etc/elctl.conf 或 ~/.elctl.conf
   3. 默认值:       /opt/EnglishLearn
 
 环境变量:
@@ -97,7 +99,7 @@ Usage: $0 {command} [options]
   BACKUP_NO_STOP=1     备份时不停止服务
   FORCE=1              恢复时跳过确认
 
-配置文件示例 (/etc/englishlearn-deploy.conf):
+配置文件示例 (/etc/elctl.conf):
   APP_DIR=/opt/EnglishLearn
   BACKUP_DIR=/data/backups
 
