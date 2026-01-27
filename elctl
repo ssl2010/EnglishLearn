@@ -292,6 +292,39 @@ PYTHON_SCRIPT
   else
     log_warn "Python 不可用，跳过配置合并"
   fi
+
+  # 确保关键路径配置正确（使用绝对路径）
+  ensure_path_config
+}
+
+# 确保关键路径配置使用绝对路径
+ensure_path_config() {
+  local user_env_file="$ENV_FILE"
+
+  if [[ ! -f "$user_env_file" ]]; then
+    return 0
+  fi
+
+  # 检查 EL_AI_CONFIG_PATH
+  local current_value
+  current_value=$(grep -E "^EL_AI_CONFIG_PATH=" "$user_env_file" 2>/dev/null | cut -d'=' -f2- || true)
+
+  # 如果未设置、为空、或使用相对路径，则修复
+  if [[ -z "$current_value" || "$current_value" == "./"* || "$current_value" == "../"* ]]; then
+    local correct_path="$APP_DIR/ai_config.json"
+
+    if grep -q "^EL_AI_CONFIG_PATH=" "$user_env_file"; then
+      # 已存在但值不对，替换
+      $SUDO sed -i "s|^EL_AI_CONFIG_PATH=.*|EL_AI_CONFIG_PATH=$correct_path|" "$user_env_file"
+      log_info "修正 EL_AI_CONFIG_PATH=$correct_path"
+    else
+      # 不存在，添加
+      echo "" | $SUDO tee -a "$user_env_file" > /dev/null
+      echo "# AI 配置文件路径" | $SUDO tee -a "$user_env_file" > /dev/null
+      echo "EL_AI_CONFIG_PATH=$correct_path" | $SUDO tee -a "$user_env_file" > /dev/null
+      log_info "添加 EL_AI_CONFIG_PATH=$correct_path"
+    fi
+  fi
 }
 
 # 快速更新

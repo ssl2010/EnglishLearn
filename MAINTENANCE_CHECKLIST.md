@@ -80,6 +80,14 @@ sudo systemctl restart englishlearn
 | `el.db` | `$DATA_DIR/` | SQLite 数据库 |
 | `media/` | `$DATA_DIR/` | 媒体文件目录 |
 
+## 关键环境变量
+
+| 变量 | 说明 | 注意事项 |
+|-----|------|---------|
+| `EL_AI_CONFIG_PATH` | AI 配置文件路径 | **必须使用绝对路径**，如 `/opt/EnglishLearn/ai_config.json` |
+| `EL_DB_PATH` | 数据库路径 | 默认 `$DATA_DIR/el.db` |
+| `EL_MEDIA_DIR` | 媒体文件目录 | 默认 `$DATA_DIR/media` |
+
 ## 快速验证命令
 
 安装后在服务器上运行：

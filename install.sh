@@ -684,6 +684,10 @@ BAIDU_OCR_SECRET_KEY=${existing_baidu_secret_key:-}
 # ============================================================
 # AI 参数配置（通常无需修改）
 # ============================================================
+
+# AI 配置文件路径（必须使用绝对路径）
+EL_AI_CONFIG_PATH=${APP_DIR}/ai_config.json
+
 EL_AI_MAX_TOKENS=6000
 EL_AI_MAX_TOKENS_RETRY=12000
 EL_AI_TIMEOUT_SECONDS=180
