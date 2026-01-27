@@ -729,6 +729,13 @@ async def get_git_status():
                 "message": "当前不是 Git 仓库，无法使用自动升级功能"
             }
 
+        # 配置 git safe.directory（避免 dubious ownership 错误）
+        subprocess.run(
+            ["git", "config", "--global", "--add", "safe.directory", APP_DIR],
+            capture_output=True,
+            timeout=10
+        )
+
         # 获取当前分支
         branch_result = subprocess.run(
             ["git", "-C", APP_DIR, "branch", "--show-current"],
@@ -819,6 +826,13 @@ async def upgrade_system(request: UpgradeRequest, background_tasks: BackgroundTa
                 detail="当前不是 Git 仓库，无法使用自动升级功能。请使用手动部署方式。"
             )
 
+        # 配置 git safe.directory（避免 dubious ownership 错误）
+        subprocess.run(
+            ["git", "config", "--global", "--add", "safe.directory", APP_DIR],
+            capture_output=True,
+            timeout=10
+        )
+
         # 获取当前分支
         branch_result = subprocess.run(
             ["git", "-C", APP_DIR, "branch", "--show-current"],
@@ -853,7 +867,27 @@ async def upgrade_system(request: UpgradeRequest, background_tasks: BackgroundTa
 
             ensure_backup_dir()
 
+            # 创建备份信息
+            backup_info = {
+                "backup_time": datetime.datetime.now().isoformat(),
+                "description": f"升级前自动备份 - {timestamp}",
+                "version": "1.0",
+                "db_included": True,
+                "media_included": os.path.exists(MEDIA_DIR),
+                "backup_type": "pre_upgrade",
+                "restore_note": "此备份在系统升级前自动创建"
+            }
+
             with tarfile.open(filepath, "w:gz") as tar:
+                # 添加备份信息
+                import io
+                info_json = json.dumps(backup_info, indent=2, ensure_ascii=False)
+                info_bytes = info_json.encode('utf-8')
+                info_tarinfo = tarfile.TarInfo(name='backup_info.json')
+                info_tarinfo.size = len(info_bytes)
+                info_tarinfo.mtime = datetime.datetime.now().timestamp()
+                tar.addfile(info_tarinfo, io.BytesIO(info_bytes))
+
                 if os.path.exists(DB_PATH):
                     tar.add(DB_PATH, arcname='el.db')
                 if os.path.exists(MEDIA_DIR):
