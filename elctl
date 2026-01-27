@@ -80,6 +80,11 @@ Usage: $0 {command} [options]
 账号管理:
   reset-password  重置管理员密码 (如: reset-password admin)
 
+超时与性能:
+  set-timeout     设置 AI 批改超时 (如: set-timeout 300)
+                  自动同步更新环境变量和 Nginx 配置
+  fix-nginx       检查并修复 Nginx 配置
+
 其他:
   help        显示此帮助信息
 
@@ -817,6 +822,151 @@ PYTHON_SCRIPT
   fi
 }
 
+# 设置超时时间
+set_timeout() {
+  local timeout_seconds="${1:-}"
+
+  if [[ -z "$timeout_seconds" ]]; then
+    # 显示当前配置
+    echo "当前超时配置:"
+    echo ""
+
+    local llm_timeout ocr_timeout http_timeout nginx_timeout
+    llm_timeout=$(grep -E "^EL_AI_TIMEOUT_SECONDS=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 || echo "180")
+    ocr_timeout=$(grep -E "^EL_OCR_TIMEOUT_SECONDS=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 || echo "30")
+    http_timeout=$(grep -E "^EL_AI_HTTP_TIMEOUT_SECONDS=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 || echo "270")
+
+    # 获取 nginx 超时
+    local nginx_conf="/etc/nginx/sites-enabled/englishlearn"
+    if [[ -f "$nginx_conf" ]]; then
+      nginx_timeout=$(grep -oP 'proxy_read_timeout\s+\K\d+' "$nginx_conf" 2>/dev/null | head -1 || echo "60")
+    else
+      nginx_timeout="(nginx 配置不存在)"
+    fi
+
+    echo "  EL_AI_TIMEOUT_SECONDS (LLM):     ${llm_timeout:-180} 秒"
+    echo "  EL_OCR_TIMEOUT_SECONDS (OCR):    ${ocr_timeout:-30} 秒"
+    echo "  EL_AI_HTTP_TIMEOUT_SECONDS:      ${http_timeout:-270} 秒"
+    echo "  Nginx proxy_read_timeout:        ${nginx_timeout} 秒"
+    echo ""
+    echo "用法: $0 set-timeout <秒数>"
+    echo "示例: $0 set-timeout 300"
+    return 0
+  fi
+
+  # 验证输入
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]] || [[ "$timeout_seconds" -lt 30 ]]; then
+    log_error "超时时间必须是大于等于 30 的整数"
+    return 1
+  fi
+
+  log_info "设置超时时间为 ${timeout_seconds} 秒..."
+
+  # 计算各超时值
+  local llm_timeout="$timeout_seconds"
+  local http_timeout=$((timeout_seconds + 90))  # HTTP 超时比 LLM 多 90 秒
+  local nginx_timeout=$((timeout_seconds + 120))  # Nginx 超时比 LLM 多 120 秒
+
+  # 更新环境文件
+  update_env_value "EL_AI_TIMEOUT_SECONDS" "$llm_timeout"
+  update_env_value "EL_AI_HTTP_TIMEOUT_SECONDS" "$http_timeout"
+
+  log_info "环境配置已更新: LLM=${llm_timeout}s, HTTP=${http_timeout}s"
+
+  # 更新 nginx 配置
+  update_nginx_timeout "$nginx_timeout"
+
+  # 重启服务
+  log_info "重启服务..."
+  restart_service
+
+  log_success "超时配置完成!"
+  echo ""
+  echo "  LLM 超时:    ${llm_timeout} 秒"
+  echo "  HTTP 超时:   ${http_timeout} 秒"
+  echo "  Nginx 超时:  ${nginx_timeout} 秒"
+}
+
+# 更新环境文件中的值
+update_env_value() {
+  local key="$1"
+  local value="$2"
+
+  if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+    $SUDO sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+  else
+    echo "${key}=${value}" | $SUDO tee -a "$ENV_FILE" > /dev/null
+  fi
+}
+
+# 更新 nginx 超时配置
+update_nginx_timeout() {
+  local timeout_seconds="$1"
+  local nginx_conf="/etc/nginx/sites-enabled/englishlearn"
+
+  if [[ ! -f "$nginx_conf" ]]; then
+    log_warn "Nginx 配置文件不存在: $nginx_conf"
+    return 0
+  fi
+
+  log_info "更新 Nginx 超时配置..."
+
+  # 检查是否已有超时配置
+  if grep -q "proxy_read_timeout" "$nginx_conf"; then
+    # 更新现有配置
+    $SUDO sed -i "s|proxy_read_timeout[[:space:]]*[0-9]*s*;|proxy_read_timeout ${timeout_seconds}s;|g" "$nginx_conf"
+    $SUDO sed -i "s|proxy_connect_timeout[[:space:]]*[0-9]*s*;|proxy_connect_timeout ${timeout_seconds}s;|g" "$nginx_conf"
+    $SUDO sed -i "s|proxy_send_timeout[[:space:]]*[0-9]*s*;|proxy_send_timeout ${timeout_seconds}s;|g" "$nginx_conf"
+  else
+    log_warn "Nginx 配置中没有超时设置，请手动添加"
+    return 0
+  fi
+
+  # 测试 nginx 配置
+  if $SUDO /usr/sbin/nginx -t 2>/dev/null; then
+    $SUDO systemctl reload nginx
+    log_success "Nginx 配置已更新并重载"
+  else
+    log_error "Nginx 配置测试失败，请检查配置文件"
+    return 1
+  fi
+}
+
+# 修复 nginx 配置
+fix_nginx() {
+  local nginx_conf="/etc/nginx/sites-enabled/englishlearn"
+
+  if [[ ! -f "$nginx_conf" ]]; then
+    log_error "Nginx 配置文件不存在: $nginx_conf"
+    return 1
+  fi
+
+  log_info "检查 Nginx 配置..."
+
+  # 检查是否有重复的 proxy_pass
+  local dup_count
+  dup_count=$(grep -c "proxy_pass" "$nginx_conf" 2>/dev/null || echo "0")
+
+  if [[ "$dup_count" -gt 2 ]]; then
+    log_warn "发现可能的重复 proxy_pass 配置"
+    echo "请手动检查: $nginx_conf"
+  fi
+
+  # 测试配置
+  if $SUDO /usr/sbin/nginx -t 2>/dev/null; then
+    log_success "Nginx 配置测试通过"
+  else
+    log_error "Nginx 配置测试失败"
+    echo ""
+    echo "常见问题:"
+    echo "  1. proxy_pass 重复定义"
+    echo "  2. 语法错误"
+    echo ""
+    echo "查看配置: cat $nginx_conf"
+    return 1
+  fi
+}
+
 case "${1:-}" in
   help|-h|--help) usage ;;
   start) start_service ;;
@@ -837,5 +987,7 @@ case "${1:-}" in
   timer-install) install_timer ;;
   timer-set) timer_set_time "${2:-}" ;;
   reset-password) reset_admin_password "${2:-}" ;;
+  set-timeout) set_timeout "${2:-}" ;;
+  fix-nginx) fix_nginx ;;
   *) usage; exit 1 ;;
 esac
