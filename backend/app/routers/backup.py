@@ -762,6 +762,12 @@ async def get_git_status():
             timeout=30
         )
 
+        # 检查 fetch 是否成功
+        fetch_failed = fetch_result.returncode != 0
+        fetch_error = ""
+        if fetch_failed:
+            fetch_error = fetch_result.stderr.strip() or "未知错误"
+
         # 检查是否有新版本
         status_result = subprocess.run(
             ["git", "-C", APP_DIR, "rev-list", "--count", f"HEAD..origin/{current_branch}"],
@@ -780,6 +786,14 @@ async def get_git_status():
         )
         remote_commit = remote_commit_result.stdout.strip()
 
+        # 构建消息
+        if fetch_failed:
+            message = f"⚠️ 无法连接远程仓库: {fetch_error}（显示的可能不是最新状态）"
+        elif commits_behind > 0:
+            message = f"发现 {commits_behind} 个新版本"
+        else:
+            message = "已是最新版本"
+
         return {
             "is_git_repo": True,
             "current_branch": current_branch,
@@ -787,7 +801,9 @@ async def get_git_status():
             "remote_commit": remote_commit,
             "commits_behind": commits_behind,
             "update_available": commits_behind > 0,
-            "message": f"发现 {commits_behind} 个新版本" if commits_behind > 0 else "已是最新版本"
+            "fetch_failed": fetch_failed,
+            "fetch_error": fetch_error if fetch_failed else None,
+            "message": message
         }
 
     except subprocess.TimeoutExpired:

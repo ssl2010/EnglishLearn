@@ -689,15 +689,23 @@ OnCalendar=*-*-* 03:30:00</pre>
         document.getElementById('remoteCommit').textContent = status.remote_commit;
         document.getElementById('updateMessage').textContent = status.message;
 
+        // 如果 fetch 失败，显示警告
+        if (status.fetch_failed) {
+          alert(`⚠️ 无法获取远程仓库最新状态\n\n错误: ${status.fetch_error || '网络连接失败'}\n\n显示的版本信息可能不是最新的。\n请检查服务器网络连接，或在服务器上手动执行:\nsudo git -C /opt/EnglishLearn fetch origin main`);
+        }
+
         if (status.update_available) {
           // 有新版本
           document.getElementById('updateAvailable').style.display = 'block';
           document.getElementById('noUpdateAvailable').style.display = 'none';
           document.getElementById('upgradeOptions').style.display = 'block';
         } else {
-          // 已是最新
+          // 已是最新（但如果 fetch 失败，可能不准确）
           document.getElementById('updateAvailable').style.display = 'none';
           document.getElementById('noUpdateAvailable').style.display = 'block';
+          document.getElementById('noUpdateAvailable').innerHTML = status.fetch_failed
+            ? '<strong>⚠️ 无法确认版本状态</strong><p style="margin:8px 0 0 0">无法连接远程仓库，请检查网络后重试。</p>'
+            : '<strong>✅ 已是最新版本</strong><p style="margin:8px 0 0 0">当前系统已是最新版本，无需升级。</p>';
           document.getElementById('upgradeOptions').style.display = 'none';
         }
 
