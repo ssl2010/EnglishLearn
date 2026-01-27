@@ -277,6 +277,10 @@ EOF
 
     info "克隆代码仓库..."
 
+    # 添加 safe.directory 配置，避免 "dubious ownership" 错误
+    # 这是因为 root 运行脚本但目录可能属于其他用户
+    git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
+
     # 如果目录存在且是 git 仓库，拉取最新代码
     if [[ -d "$APP_DIR/.git" ]]; then
         warn "代码目录已存在，拉取最新代码..."
