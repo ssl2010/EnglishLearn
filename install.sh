@@ -645,17 +645,19 @@ EL_ADMIN_USER=${FINAL_ADMIN_USER}
 EL_ADMIN_PASS=${FINAL_ADMIN_PASSWORD}
 
 # ============================================================
-# LLM/AI 批改配置 (必须配置其中一个才能使用 AI 批改功能)
+# AI 批改配置（两者都需要配置才能正常使用批改功能）
+# - LLM: 负责智能批改（识别对错、评分）
+# - 百度 OCR: 负责精确定位（识别手写文字位置）
 # ============================================================
 
 # 批改服务提供商: auto | openai | baidu
-# - auto: 自动选择（优先 OpenAI/ARK，否则 Baidu OCR）
-# - openai: 使用 OpenAI 兼容 API（包括火山引擎豆包等）
-# - baidu: 使用百度 OCR
+# - auto: 自动选择最优组合
+# - openai: 强制使用 OpenAI 兼容 API
+# - baidu: 强制使用百度 OCR
 EL_MARK_GRADING_PROVIDER=${existing_mark_provider:-auto}
 
-# --- 方式1: OpenAI 兼容 API（推荐，支持豆包/通义千问等） ---
-# API 密钥（二选一）
+# --- LLM 配置（用于智能批改）---
+# API 密钥（OPENAI_API_KEY 或 ARK_API_KEY 二选一）
 OPENAI_API_KEY=${existing_openai_key:-}
 ARK_API_KEY=${existing_ark_key:-}
 
@@ -667,11 +669,11 @@ EL_OPENAI_BASE_URL=${existing_openai_base_url:-}
 
 # 模型名称
 # - OpenAI: gpt-4o-mini, gpt-4o
-# - 豆包: doubao-seed-1-6-251015
+# - 豆包: doubao-seed-1-6-vision-250815
 # - 通义: qwen-vl-max
 EL_OPENAI_VISION_MODEL=${existing_openai_model:-gpt-4o-mini}
 
-# --- 方式2: 百度 OCR ---
+# --- 百度 OCR 配置（用于精确定位手写文字）---
 BAIDU_OCR_API_KEY=${existing_baidu_api_key:-}
 BAIDU_OCR_SECRET_KEY=${existing_baidu_secret_key:-}
 
@@ -1236,15 +1238,15 @@ show_info() {
     echo "  Nginx 配置: ${NGINX_CONF}"
     echo "  systemd 服务: ${SERVICE_FILE}"
     echo ""
-    warn "【重要】配置 AI 批改功能:"
-    echo "  编辑 ${ENV_FILE} 设置以下配置之一："
+    warn "【重要】配置 AI 批改功能（两者都需要配置）:"
+    echo "  编辑 ${ENV_FILE} 设置以下配置："
     echo ""
-    echo "  方式1 - OpenAI/豆包/通义（推荐）:"
-    echo "    OPENAI_API_KEY=sk-xxx 或 ARK_API_KEY=xxx"
+    echo "  1. LLM 配置（用于智能批改）:"
+    echo "    ARK_API_KEY=xxx（或 OPENAI_API_KEY=sk-xxx）"
     echo "    EL_OPENAI_BASE_URL=https://ark.cn-beijing.volces.com/api/v3"
-    echo "    EL_OPENAI_VISION_MODEL=doubao-seed-1-6-251015"
+    echo "    EL_OPENAI_VISION_MODEL=doubao-seed-1-6-vision-250815"
     echo ""
-    echo "  方式2 - 百度 OCR:"
+    echo "  2. 百度 OCR 配置（用于精确定位）:"
     echo "    BAIDU_OCR_API_KEY=xxx"
     echo "    BAIDU_OCR_SECRET_KEY=xxx"
     echo ""

@@ -48,20 +48,24 @@ sudo bash install.sh
 
 ### 1. 配置 AI 批改功能（必须）
 
+AI 批改功能需要配置**两个服务**：
+- **LLM（大语言模型）**：负责智能批改（识别对错、评分）
+- **百度 OCR**：负责精确定位（识别手写文字位置）
+
 编辑环境配置文件：
 ```bash
 sudo nano /etc/englishlearn.env
 ```
 
-#### 方式A: OpenAI 兼容 API（推荐）
+#### 配置1: LLM 服务（用于智能批改）
 
-支持 OpenAI、火山引擎豆包、阿里通义千问等。
+支持 OpenAI、火山引擎豆包、阿里通义千问等 OpenAI 兼容 API。
 
 **火山引擎豆包（推荐国内使用）：**
 ```bash
 ARK_API_KEY=你的火山引擎API密钥
 EL_OPENAI_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
-EL_OPENAI_VISION_MODEL=doubao-seed-1-6-251015
+EL_OPENAI_VISION_MODEL=doubao-seed-1-6-vision-250815
 ```
 
 **OpenAI 官方：**
@@ -78,12 +82,16 @@ EL_OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 EL_OPENAI_VISION_MODEL=qwen-vl-max
 ```
 
-#### 方式B: 百度 OCR
+#### 配置2: 百度 OCR（用于精确定位）
+
+在 [百度智能云](https://cloud.baidu.com/product/ocr) 创建 OCR 应用获取密钥。
 
 ```bash
 BAIDU_OCR_API_KEY=你的百度OCR API Key
 BAIDU_OCR_SECRET_KEY=你的百度OCR Secret Key
 ```
+
+> **注意**：LLM 和百度 OCR 都需要配置，缺一不可。LLM 负责批改逻辑，百度 OCR 负责定位手写内容。
 
 ### 2. 重启服务使配置生效
 
@@ -114,16 +122,28 @@ journalctl -u englishlearn -f
 | `ALLOW_GIT_PULL_FAILURE` | `false` | 拉取失败不终止安装 |
 | `ALLOW_DIRTY_PULL` | `false` | 工作区有改动也尝试拉取 |
 
-### AI/LLM 配置
+### AI 批改配置（两者都需要配置）
+
+**LLM 配置（用于智能批改）：**
 
 | 变量 | 说明 |
 |------|------|
-| `OPENAI_API_KEY` | OpenAI API 密钥 |
-| `ARK_API_KEY` | 火山引擎 API 密钥 |
-| `EL_OPENAI_BASE_URL` | API 地址 |
-| `EL_OPENAI_VISION_MODEL` | 模型名称 |
+| `OPENAI_API_KEY` | OpenAI API 密钥（与 ARK_API_KEY 二选一） |
+| `ARK_API_KEY` | 火山引擎 API 密钥（与 OPENAI_API_KEY 二选一） |
+| `EL_OPENAI_BASE_URL` | API 地址（根据服务商设置） |
+| `EL_OPENAI_VISION_MODEL` | 视觉模型名称 |
+
+**百度 OCR 配置（用于精确定位）：**
+
+| 变量 | 说明 |
+|------|------|
 | `BAIDU_OCR_API_KEY` | 百度 OCR API Key |
 | `BAIDU_OCR_SECRET_KEY` | 百度 OCR Secret Key |
+
+**其他：**
+
+| 变量 | 说明 |
+|------|------|
 | `EL_MARK_GRADING_PROVIDER` | 批改服务: `auto`/`openai`/`baidu` |
 
 ### 系统配置
