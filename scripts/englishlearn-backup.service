@@ -1,0 +1,15 @@
+[Unit]
+Description=EnglishLearn Auto Backup
+After=network.target
+
+[Service]
+Type=oneshot
+User=englishlearn
+Group=englishlearn
+ExecStart=/opt/EnglishLearn/scripts/auto_backup.sh
+EnvironmentFile=-/etc/englishlearn.env
+
+# 日志
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=englishlearn-backup

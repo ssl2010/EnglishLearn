@@ -841,6 +841,77 @@ EOF
     success "systemd 服务配置完成"
 }
 
+# 配置自动备份定时器
+setup_backup_timer() {
+    info "配置自动备份定时器..."
+
+    # 复制备份脚本
+    mkdir -p "$APP_DIR/scripts"
+    if [[ -f "$APP_DIR/scripts/auto_backup.sh" ]]; then
+        chmod +x "$APP_DIR/scripts/auto_backup.sh"
+        chown englishlearn:englishlearn "$APP_DIR/scripts/auto_backup.sh"
+    else
+        warn "备份脚本不存在: $APP_DIR/scripts/auto_backup.sh"
+        return
+    fi
+
+    # 安装 systemd service
+    if [[ -f "$APP_DIR/scripts/englishlearn-backup.service" ]]; then
+        cp "$APP_DIR/scripts/englishlearn-backup.service" /etc/systemd/system/
+    else
+        # 内联创建 service 文件
+        cat > /etc/systemd/system/englishlearn-backup.service <<EOF
+[Unit]
+Description=EnglishLearn Auto Backup
+After=network.target
+
+[Service]
+Type=oneshot
+User=englishlearn
+Group=englishlearn
+ExecStart=$APP_DIR/scripts/auto_backup.sh
+EnvironmentFile=-$ENV_FILE
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=englishlearn-backup
+EOF
+    fi
+
+    # 安装 systemd timer
+    if [[ -f "$APP_DIR/scripts/englishlearn-backup.timer" ]]; then
+        cp "$APP_DIR/scripts/englishlearn-backup.timer" /etc/systemd/system/
+    else
+        # 内联创建 timer 文件
+        cat > /etc/systemd/system/englishlearn-backup.timer <<EOF
+[Unit]
+Description=EnglishLearn Daily Backup Timer
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target
+EOF
+    fi
+
+    # 重新加载并启用定时器
+    systemctl daemon-reload
+    systemctl enable englishlearn-backup.timer
+    systemctl start englishlearn-backup.timer
+
+    # 显示定时器状态
+    local next_run=""
+    next_run=$(systemctl list-timers englishlearn-backup.timer --no-pager 2>/dev/null | grep englishlearn || true)
+    if [[ -n "$next_run" ]]; then
+        info "下次自动备份时间: $(echo "$next_run" | awk '{print $1, $2}')"
+    fi
+
+    success "自动备份定时器配置完成"
+}
+
 # 配置 nginx
 setup_nginx() {
     info "配置 Nginx 反向代理..."
@@ -1238,6 +1309,7 @@ main() {
     setup_env
     ensure_admin_account
     setup_systemd
+    setup_backup_timer
     setup_nginx
     setup_firewall
     start_services

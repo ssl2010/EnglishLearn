@@ -1,0 +1,13 @@
+[Unit]
+Description=EnglishLearn Daily Backup Timer
+
+[Timer]
+# 每天凌晨 2:00 执行备份（北京时间）
+OnCalendar=*-*-* 02:00:00
+# 如果错过了执行时间（如服务器关机），启动后立即执行一次
+Persistent=true
+# 随机延迟 0-30 分钟，避免所有服务器同时备份
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target
