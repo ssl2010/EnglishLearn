@@ -59,6 +59,10 @@ Usage: $0 {command} [options]
   timer-enable  启用自动备份定时器
   timer-disable 禁用自动备份定时器
   timer-install 安装/更新 systemd timer 文件
+  timer-set     设置备份时间 (如: timer-set 03:30)
+
+账号管理:
+  reset-password  重置管理员密码 (如: reset-password admin)
 
 其他:
   help        显示此帮助信息
@@ -78,9 +82,12 @@ Usage: $0 {command} [options]
   $0 check                     # 检查新版本
   $0 backup                    # 手动创建备份
   $0 restore latest            # 恢复最新备份
+  $0 timer-set 03:30           # 设置备份时间为凌晨 3:30
+  $0 reset-password admin      # 重置 admin 账号密码
   SKIP_BACKUP=1 $0 upgrade     # 升级但跳过备份
 EOF
 }
+
 
 ensure_backup_dir() {
   mkdir -p "$BACKUP_DIR"
@@ -581,6 +588,168 @@ install_timer() {
   timer_status
 }
 
+# 设置备份时间
+timer_set_time() {
+  local new_time="${1:-}"
+
+  if [[ -z "$new_time" ]]; then
+    log_error "请指定备份时间，格式: HH:MM"
+    echo "用法: $0 timer-set 03:30"
+    return 1
+  fi
+
+  # 验证时间格式
+  if ! [[ "$new_time" =~ ^([01]?[0-9]|2[0-3]):[0-5][0-9]$ ]]; then
+    log_error "无效的时间格式: $new_time"
+    echo "请使用 24 小时制，如: 02:00, 14:30"
+    return 1
+  fi
+
+  # 检查定时器是否已安装
+  if [[ ! -f "/etc/systemd/system/englishlearn-backup.timer" ]]; then
+    log_error "定时器未安装，请先运行: $0 timer-install"
+    return 1
+  fi
+
+  log_info "设置备份时间为 $new_time..."
+
+  # 创建 override 目录
+  local override_dir="/etc/systemd/system/englishlearn-backup.timer.d"
+  $SUDO mkdir -p "$override_dir"
+
+  # 写入 override 配置
+  $SUDO tee "$override_dir/override.conf" > /dev/null <<EOF
+[Timer]
+# 覆盖默认备份时间
+OnCalendar=
+OnCalendar=*-*-* ${new_time}:00
+EOF
+
+  # 重载配置
+  $SUDO systemctl daemon-reload
+  $SUDO systemctl restart englishlearn-backup.timer
+
+  log_success "备份时间已设置为每天 $new_time"
+  echo ""
+  echo "下次执行时间:"
+  $SUDO systemctl list-timers englishlearn-backup.timer --no-pager 2>/dev/null | grep -v "^$" | head -3
+}
+
+# 重置管理员密码
+reset_admin_password() {
+  local username="${1:-}"
+
+  if [[ -z "$username" ]]; then
+    echo "用法: $0 reset-password <用户名>"
+    echo ""
+    echo "现有账号列表:"
+    # 查询数据库中的账号
+    if [[ -f "$DB_PATH" ]]; then
+      sqlite3 "$DB_PATH" "SELECT id, username, CASE WHEN is_super_admin=1 THEN '管理员' ELSE '普通用户' END as role, CASE WHEN is_active=1 THEN '启用' ELSE '停用' END as status FROM accounts;" 2>/dev/null | \
+        awk -F'|' 'BEGIN{printf "%-4s %-20s %-10s %-6s\n", "ID", "用户名", "角色", "状态"; print "----------------------------------------"} {printf "%-4s %-20s %-10s %-6s\n", $1, $2, $3, $4}'
+    else
+      log_warn "数据库文件不存在: $DB_PATH"
+    fi
+    return 1
+  fi
+
+  # 检查账号是否存在
+  if [[ -f "$DB_PATH" ]]; then
+    local account_exists
+    account_exists=$(sqlite3 "$DB_PATH" "SELECT COUNT(1) FROM accounts WHERE username='$username';" 2>/dev/null || echo "0")
+    if [[ "$account_exists" -eq 0 ]]; then
+      log_error "账号不存在: $username"
+      return 1
+    fi
+  fi
+
+  echo ""
+  log_info "重置账号密码: $username"
+  echo ""
+
+  # 读取新密码
+  local password1 password2
+
+  while true; do
+    read -r -s -p "请输入新密码 (至少 8 位): " password1
+    echo ""
+
+    if [[ ${#password1} -lt 8 ]]; then
+      log_error "密码太短，至少需要 8 位"
+      continue
+    fi
+
+    read -r -s -p "请再次输入密码确认: " password2
+    echo ""
+
+    if [[ "$password1" != "$password2" ]]; then
+      log_error "两次输入的密码不一致，请重试"
+      continue
+    fi
+
+    break
+  done
+
+  # 使用 Python 重置密码
+  log_info "正在重置密码..."
+
+  if [[ -x "$PYTHON_BIN" ]]; then
+    # 设置环境变量
+    export EL_DB_PATH="$DB_PATH"
+
+    "$PYTHON_BIN" - "$username" "$password1" <<'PYTHON_SCRIPT'
+import sys
+import os
+
+# 添加 backend 路径
+backend_path = os.path.join(os.path.dirname(os.environ.get('EL_DB_PATH', '')), '..', '..')
+sys.path.insert(0, os.path.abspath(backend_path))
+
+try:
+    from backend.app.auth import set_account_password
+    from backend.app.db import db, qone
+
+    username = sys.argv[1]
+    new_password = sys.argv[2]
+
+    # 获取账号 ID
+    with db() as conn:
+        row = qone(conn, "SELECT id FROM accounts WHERE username = ?", (username,))
+        if not row:
+            print(f"ERROR: 账号不存在: {username}")
+            sys.exit(1)
+        account_id = row['id']
+
+    # 重置密码
+    set_account_password(account_id, new_password)
+    print(f"OK: 密码已重置")
+except Exception as e:
+    print(f"ERROR: {e}")
+    sys.exit(1)
+PYTHON_SCRIPT
+
+    local result=$?
+    if [[ $result -eq 0 ]]; then
+      log_success "密码重置成功!"
+      echo ""
+      echo "用户 $username 现在可以使用新密码登录"
+
+      # 提示重启服务使会话失效
+      echo ""
+      read -r -p "是否重启服务以强制该用户重新登录? [y/N] " ans
+      if [[ "${ans}" == "y" || "${ans}" == "Y" ]]; then
+        restart_service
+      fi
+    else
+      log_error "密码重置失败"
+      return 1
+    fi
+  else
+    log_error "Python 不可用: $PYTHON_BIN"
+    return 1
+  fi
+}
+
 case "${1:-}" in
   help|-h|--help) usage ;;
   start) start_service ;;
@@ -599,5 +768,7 @@ case "${1:-}" in
   timer-enable) timer_enable ;;
   timer-disable) timer_disable ;;
   timer-install) install_timer ;;
+  timer-set) timer_set_time "${2:-}" ;;
+  reset-password) reset_admin_password "${2:-}" ;;
   *) usage; exit 1 ;;
 esac
