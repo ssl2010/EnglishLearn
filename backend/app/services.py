@@ -8,7 +8,7 @@ import time
 import logging
 import random
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .db import db, utcnow_iso
 from .normalize import normalize_answer
@@ -521,6 +521,119 @@ def _extract_question_number(text: str) -> Optional[int]:
     return None
 
 
+def _detect_section_key(text: str) -> Optional[str]:
+    text = text or ""
+    if "单词默写" in text:
+        return "WORD"
+    if "短语默写" in text:
+        return "PHRASE"
+    if "句子默写" in text:
+        return "SENTENCE"
+    return None
+
+
+def _llm_pages_zero_based(objects: List[Dict[str, Any]]) -> bool:
+    """Heuristic: if any pg == 0, treat LLM page indices as 0-based."""
+    for obj in objects or []:
+        if not isinstance(obj, dict):
+            continue
+        if isinstance(obj.get("items"), list):
+            for it in obj.get("items") or []:
+                try:
+                    pg = int(it.get("pg") if "pg" in it else it.get("page_index"))
+                except Exception:
+                    continue
+                if pg == 0:
+                    return True
+        else:
+            try:
+                pg = int(obj.get("pg") if "pg" in obj else obj.get("page_index"))
+            except Exception:
+                continue
+            if pg == 0:
+                return True
+    return False
+
+
+def _llm_pg_to_zero_based(pg_raw: Any, zero_based: bool) -> int:
+    try:
+        pg = int(pg_raw)
+    except Exception:
+        return 0
+    if zero_based:
+        return max(0, pg)
+    return max(0, pg - 1)
+
+
+def _ocr_section_keys_by_page(ocr_raw: Dict[str, Any]) -> Dict[int, Set[str]]:
+    keys_by_page: Dict[int, Set[str]] = {}
+    for page in ocr_raw.get("pages") or []:
+        idx0 = int(page.get("page_index") or 0)
+        raw = page.get("raw") or {}
+        words = _normalize_ocr_words(raw)
+        keys: Set[str] = set()
+        for w in words:
+            if w.get("words_type") == "handwriting":
+                continue
+            sec = _detect_section_key(str(w.get("words") or ""))
+            if sec:
+                keys.add(sec)
+        keys_by_page[idx0 + 1] = keys
+    return keys_by_page
+
+
+def _llm_section_keys_by_page(
+    sections: List[Dict[str, Any]],
+    zero_based: bool,
+    page_reorder_mapping: Dict[int, int],
+) -> Dict[int, Set[str]]:
+    keys_by_page: Dict[int, Set[str]] = {}
+    for sec in sections or []:
+        if not isinstance(sec, dict):
+            continue
+        sec_type = sec.get("type") or ""
+        for it in sec.get("items") or []:
+            pg_raw = it.get("pg") if "pg" in it else it.get("page_index")
+            pg0 = _llm_pg_to_zero_based(pg_raw, zero_based)
+            pg0 = page_reorder_mapping.get(pg0, pg0)
+            pg1 = pg0 + 1
+            keys_by_page.setdefault(pg1, set()).add(sec_type)
+    return keys_by_page
+
+
+def _build_page_mapping_by_sections(
+    llm_keys_by_page: Dict[int, Set[str]],
+    ocr_keys_by_page: Dict[int, Set[str]],
+    total_pages: int,
+    logger: Any,
+) -> Dict[int, int]:
+    pages = list(range(1, total_pages + 1))
+    if not pages:
+        return {}
+    if any(not ocr_keys_by_page.get(p) for p in pages):
+        return {p: p for p in pages}
+    if any(not llm_keys_by_page.get(p) for p in pages):
+        return {p: p for p in pages}
+
+    llm_key = {p: "+".join(sorted(llm_keys_by_page.get(p) or [])) for p in pages}
+    ocr_key = {p: "+".join(sorted(ocr_keys_by_page.get(p) or [])) for p in pages}
+    if all(llm_key[p] == ocr_key[p] for p in pages):
+        return {p: p for p in pages}
+
+    mapping: Dict[int, int] = {}
+    used: Set[int] = set()
+    for p in pages:
+        candidates = [op for op in pages if ocr_key[op] == llm_key[p]]
+        if len(candidates) != 1 or candidates[0] in used:
+            return {p: p for p in pages}
+        mapping[p] = candidates[0]
+        used.add(candidates[0])
+
+    if any(mapping[p] != p for p in pages):
+        logger.info(f"[PAGE REORDER] Remap LLM pages by section headers: {mapping}")
+    return mapping
+
+
 def _extract_question_positions(words: List[Dict]) -> List[Dict]:
     """Extract question numbers and positions from print text in OCR results."""
     questions = []
@@ -541,6 +654,100 @@ def _extract_question_positions(words: List[Dict]) -> List[Dict]:
             })
 
     return sorted(questions, key=lambda x: x["top"])
+
+
+def _build_question_anchors(words: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Set[str]]:
+    """Build question anchors from OCR print text with inferred section keys."""
+    anchors: List[Dict[str, Any]] = []
+    section_headers: List[Dict[str, Any]] = []
+    for w in words:
+        if w.get("words_type") == "handwriting":
+            continue
+        text = str(w.get("words") or "")
+        loc = w.get("location") or {}
+        top = float(loc.get("top", 0))
+        left = float(loc.get("left", 0))
+        width = float(loc.get("width", 0))
+        height = float(loc.get("height", 0))
+        sec = _detect_section_key(text)
+        if sec:
+            section_headers.append({"section": sec, "top": top})
+        q_num = _extract_question_number(text)
+        if q_num is not None:
+            anchors.append({
+                "q_num": q_num,
+                "section": "",
+                "top": top,
+                "left": left,
+                "bottom": top + height,
+                "right": left + width,
+            })
+
+    section_headers.sort(key=lambda x: x["top"])
+
+    def _section_for(y: float) -> str:
+        best = ""
+        for h in section_headers:
+            if h["top"] <= y + 8:
+                best = h["section"]
+            else:
+                break
+        return best
+
+    for a in anchors:
+        a["section"] = _section_for(a["top"])
+
+    # Deduplicate by (section, q_num), keep earliest (top-most) anchor
+    dedup: Dict[Tuple[str, int], Dict[str, Any]] = {}
+    for a in anchors:
+        key = (a["section"], a["q_num"])
+        if key not in dedup or a["top"] < dedup[key]["top"]:
+            dedup[key] = a
+
+    anchors = list(dedup.values())
+    anchors.sort(key=lambda x: (x["top"], x["left"]))
+    section_keys = {h["section"] for h in section_headers}
+    return anchors, section_keys
+
+
+def _group_handwriting_by_question_geo(
+    words: List[Dict[str, Any]]
+) -> Tuple[Dict[Tuple[str, int], List[Dict[str, Any]]], Set[str], Set[int]]:
+    """Group handwriting words by nearest question anchor above them (geometry-based)."""
+    anchors, section_keys = _build_question_anchors(words)
+    question_numbers = {a["q_num"] for a in anchors}
+    groups: Dict[Tuple[str, int], List[Dict[str, Any]]] = {}
+
+    if not anchors:
+        return groups, section_keys, question_numbers
+
+    for w in words:
+        if w.get("words_type") != "handwriting":
+            continue
+        loc = w.get("location") or {}
+        top = float(loc.get("top", 0))
+        # Pick nearest anchor by vertical distance (handles handwriting slightly above/below print line).
+        idx = None
+        for i, a in enumerate(anchors):
+            if a["top"] > top:
+                idx = i
+                break
+        if idx is None:
+            best = anchors[-1]
+        elif idx == 0:
+            best = anchors[0]
+        else:
+            prev = anchors[idx - 1]
+            nxt = anchors[idx]
+            if abs(top - prev["top"]) <= abs(nxt["top"] - top):
+                best = prev
+            else:
+                best = nxt
+
+        key = (best["section"], best["q_num"])
+        groups.setdefault(key, []).append(w)
+
+    return groups, section_keys, question_numbers
 
 
 def _merge_words_to_lines(words: List[Dict], merge_threshold: float = 0.4) -> List[Dict[str, Any]]:
@@ -1004,7 +1211,7 @@ def ensure_media_dir() -> None:
     os.makedirs(MEDIA_DIR, exist_ok=True)
 
 
-def _save_crop_images(image_bytes_list: List[bytes], items: List[Dict]) -> None:
+def _save_crop_images(image_bytes_list: List[bytes], items: List[Dict], force_save: bool = False) -> None:
     """Attach crop_url to items if bbox/page_index provided.
 
     By default, crop images are NOT saved to disk to prevent filesystem bloat.
@@ -1017,7 +1224,7 @@ def _save_crop_images(image_bytes_list: List[bytes], items: List[Dict]) -> None:
     import logging
     logger = logging.getLogger("uvicorn.error")
     debug_bbox = os.environ.get("EL_DEBUG_BBOX_PROCESSING", "0") == "1"
-    save_crops = os.environ.get("SAVE_CROP_IMAGES", "0") == "1"
+    save_crops = force_save or (os.environ.get("SAVE_CROP_IMAGES", "0") == "1")
 
     if save_crops:
         ensure_media_dir()
@@ -1039,12 +1246,13 @@ def _save_crop_images(image_bytes_list: List[bytes], items: List[Dict]) -> None:
         if not (isinstance(bbox, list) and len(bbox) == 4):
             continue
         try:
-            page_index = int(it.get("page_index") or 0)
+            page_index = int(it.get("page_index") or 1)
         except Exception:
-            page_index = 0
-        if page_index < 0 or page_index >= len(images) or images[page_index] is None:
+            page_index = 1
+        page_idx0 = max(0, page_index - 1)
+        if page_idx0 < 0 or page_idx0 >= len(images) or images[page_idx0] is None:
             continue
-        img = images[page_index]
+        img = images[page_idx0]
         w, h = img.size
         x1 = float(bbox[0])
         y1 = float(bbox[1])
@@ -1209,10 +1417,10 @@ def _save_debug_overlay(image_bytes_list: List[bytes], items: List[Dict]) -> Lis
         w, h = img.size
         for it in items:
             try:
-                pidx = int(it.get("page_index") or 0)
+                pidx = int(it.get("page_index") or 1)
             except Exception:
-                pidx = 0
-            if pidx != page_index:
+                pidx = 1
+            if (pidx - 1) != page_index:
                 continue
             keys = []
             if mode == "all":
@@ -1358,12 +1566,16 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
 
     # ========== 页码检测与重排 ==========
     page_reorder_mapping: Dict[int, int] = {}
+    page_order = list(range(len(img_bytes_list)))
     try:
         ocr_raw, wb_img_bytes_list, page_reorder_mapping = _reorder_by_page_numbers(
             ocr_raw, wb_img_bytes_list, logger
         )
         if page_reorder_mapping and any(k != v for k, v in page_reorder_mapping.items()):
-            img_bytes_list = [img_bytes_list[info] for info in sorted(page_reorder_mapping.keys(), key=lambda x: page_reorder_mapping[x])]
+            order = sorted(page_reorder_mapping.keys(), key=lambda x: page_reorder_mapping[x])
+            img_bytes_list = [img_bytes_list[info] for info in order]
+            image_urls = [image_urls[info] for info in order]
+            page_order = order
     except Exception as e:
         logger.warning(f"[PAGE REORDER] Error during page reordering: {e}, continuing with original order")
         page_reorder_mapping = {i: i for i in range(len(ocr_raw.get("pages", [])))}
@@ -1371,6 +1583,20 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
     # Parse LLM raw data (which is now in the original sections format)
     items_raw = []
     sections = llm_raw.get("sections")
+    if isinstance(sections, list):
+        llm_zero_based = _llm_pages_zero_based(sections)
+    else:
+        llm_zero_based = _llm_pages_zero_based(llm_raw.get("items") or [])
+    total_pages = len(ocr_raw.get("pages") or []) or len(img_bytes_list)
+    ocr_section_keys = _ocr_section_keys_by_page(ocr_raw)
+    llm_section_keys = _llm_section_keys_by_page(
+        sections if isinstance(sections, list) else [],
+        llm_zero_based,
+        page_reorder_mapping,
+    )
+    page_map_by_section = _build_page_mapping_by_sections(
+        llm_section_keys, ocr_section_keys, total_pages, logger
+    )
     if isinstance(sections, list):
         # Flatten sections into items (preserve section order and titles)
         for sec in sections:
@@ -1383,9 +1609,12 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
             for idx, it in enumerate(sec_items):
                 if not isinstance(it, dict):
                     continue
-                # 应用页码映射
-                llm_pg = it.get("pg") or 0
-                mapped_pg = page_reorder_mapping.get(llm_pg, llm_pg)
+                # 应用页码映射（1-based）
+                llm_pg_raw = it.get("pg") if "pg" in it else it.get("page_index")
+                llm_pg0 = _llm_pg_to_zero_based(llm_pg_raw, llm_zero_based)
+                mapped_pg0 = page_reorder_mapping.get(llm_pg0, llm_pg0)
+                mapped_pg1 = mapped_pg0 + 1
+                mapped_pg1 = page_map_by_section.get(mapped_pg1, mapped_pg1)
                 # Convert short field names to long names
                 items_raw.append({
                     "q": it.get("q"),
@@ -1395,8 +1624,8 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
                     "student_text": it.get("ans") or "",
                     "is_correct": it.get("ok"),
                     "confidence": it.get("conf"),
-                    "page_index": mapped_pg,
-                    "original_page_index": llm_pg,
+                    "page_index": mapped_pg1,
+                    "original_page_index": llm_pg0 + 1,
                     "note": it.get("note") or "",
                 })
     else:
@@ -1406,11 +1635,14 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
             if not isinstance(it, dict):
                 items_raw.append(it)
                 continue
-            llm_pg = it.get("page_index") or it.get("pg") or 0
-            mapped_pg = page_reorder_mapping.get(llm_pg, llm_pg)
+            llm_pg_raw = it.get("page_index") if "page_index" in it else it.get("pg")
+            llm_pg0 = _llm_pg_to_zero_based(llm_pg_raw, llm_zero_based)
+            mapped_pg0 = page_reorder_mapping.get(llm_pg0, llm_pg0)
+            mapped_pg1 = mapped_pg0 + 1
+            mapped_pg1 = page_map_by_section.get(mapped_pg1, mapped_pg1)
             new_it = dict(it)
-            new_it["page_index"] = mapped_pg
-            new_it["original_page_index"] = llm_pg
+            new_it["page_index"] = mapped_pg1
+            new_it["original_page_index"] = llm_pg0 + 1
             items_raw.append(new_it)
 
     logger.info(f"[AI GRADING DEBUG] Loaded {len(img_bytes_list)} images, LLM items: {len(items_raw)}")
@@ -1439,7 +1671,7 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
                 "llm_text": it.get("student_text") or "",
                 "is_correct": it.get("is_correct") if "is_correct" in it else None,
                 "confidence": float(conf_val) if conf_val is not None else None,
-                "page_index": int(it.get("page_index") or 0),
+                "page_index": int(it.get("page_index") or 1),
                 "handwriting_bbox": it.get("handwriting_bbox"),
                 "line_bbox": it.get("line_bbox"),
                 "note": it.get("note") or "",
@@ -1512,80 +1744,23 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
 
     ocr_match_thr = float(os.environ.get("EL_OCR_MATCH_THRESHOLD", "0.6"))
 
-    def _detect_section_key(text: str) -> Optional[str]:
-        if "单词默写" in text:
-            return "WORD"
-        if "短语默写" in text:
-            return "PHRASE"
-        if "句子默写" in text:
-            return "SENTENCE"
-        return None
+    # LLM section keys per page (used to avoid cross-section fallback)
+    llm_section_keys_by_page: Dict[int, set] = {}
+    for it in items:
+        sec = str(it.get("section_type") or "")
+        if not sec:
+            continue
+        page_idx0 = max(0, int(it.get("page_index") or 1) - 1)
+        llm_section_keys_by_page.setdefault(page_idx0, set()).add(sec)
 
-    def _group_handwriting_by_question(words: List[Dict[str, Any]]) -> Dict[Tuple[str, int], List[Dict[str, Any]]]:
-        groups: Dict[Tuple[str, int], List[Dict[str, Any]]] = {}
-        current_q: Optional[int] = None
-        current_section: Optional[str] = None
-        for w in words:
-            wt = w.get("words_type")
-            text = str(w.get("words") or "")
-            if wt != "handwriting":
-                section_key = _detect_section_key(text)
-                if section_key:
-                    current_section = section_key
-                    current_q = None
-                q_num = _extract_question_number(text)
-                if q_num is not None:
-                    current_q = q_num
-                continue
-            if current_q is None:
-                continue
-            key = ((current_section or ""), current_q)
-            groups.setdefault(key, []).append(w)
-        return groups
-
-    handwriting_groups_by_page: Dict[int, Dict[Tuple[str, int], List[Dict[str, Any]]]] = {
-        page_idx: _group_handwriting_by_question(words)
-        for page_idx, words in ocr_by_page.items()
-    }
+    # Geometry-based OCR grouping (robust to OCR order)
+    handwriting_groups_by_page: Dict[int, Dict[Tuple[str, int], List[Dict[str, Any]]]] = {}
     section_keys_by_page: Dict[int, set] = {}
-    for page_idx, words in ocr_by_page.items():
-        keys = set()
-        for w in words:
-            if w.get("words_type") == "handwriting":
-                continue
-            sec = _detect_section_key(str(w.get("words") or ""))
-            if sec:
-                keys.add(sec)
-        section_keys_by_page[page_idx] = keys
-    section_keys_by_page: Dict[int, set] = {}
-    for page_idx, words in ocr_by_page.items():
-        keys = set()
-        for w in words:
-            if w.get("words_type") == "handwriting":
-                continue
-            sec = _detect_section_key(str(w.get("words") or ""))
-            if sec:
-                keys.add(sec)
-        section_keys_by_page[page_idx] = keys
     question_numbers_by_page: Dict[int, set] = {}
     for page_idx, words in ocr_by_page.items():
-        q_nums = set()
-        for w in words:
-            if w.get("words_type") == "handwriting":
-                continue
-            q_num = _extract_question_number(str(w.get("words") or ""))
-            if q_num is not None:
-                q_nums.add(q_num)
-        question_numbers_by_page[page_idx] = q_nums
-    question_numbers_by_page: Dict[int, set] = {}
-    for page_idx, words in ocr_by_page.items():
-        q_nums = set()
-        for w in words:
-            if w.get("words_type") == "handwriting":
-                continue
-            q_num = _extract_question_number(str(w.get("words") or ""))
-            if q_num is not None:
-                q_nums.add(q_num)
+        groups, sec_keys, q_nums = _group_handwriting_by_question_geo(words)
+        handwriting_groups_by_page[page_idx] = groups
+        section_keys_by_page[page_idx] = sec_keys
         question_numbers_by_page[page_idx] = q_nums
 
     ocr_lines_by_page: Dict[int, List[Dict[str, Any]]] = {}
@@ -1598,29 +1773,34 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
     ocr_used: Dict[int, set] = {page_idx: set() for page_idx in ocr_lines_by_page.keys()}
 
     for it in items:
-        page_idx = int(it.get("page_index") or 0)
-        lines = ocr_lines_by_page.get(page_idx) or []
+        page_idx = max(0, int(it.get("page_index") or 1) - 1)
         q_num = int(it.get("q") or 0)
         it["ocr_text"] = ""
         it["match_method"] = "no_match"
-
-        if not lines:
-            continue
 
         section_key = str(it.get("section_type") or "")
         group_key = (section_key, q_num)
         groups_for_page = handwriting_groups_by_page.get(page_idx, {}) or {}
         group = groups_for_page.get(group_key) if q_num else None
+
+        lines = ocr_lines_by_page.get(page_idx) or []
+
         if not group and q_num:
             same_q_keys = [key for key in groups_for_page.keys() if key[1] == q_num]
-            if len(same_q_keys) == 1 and len(section_keys_by_page.get(page_idx, set())) <= 1:
+            llm_sections = llm_section_keys_by_page.get(page_idx, set())
+            if len(same_q_keys) == 1 and len(llm_sections) <= 1:
                 group = groups_for_page[same_q_keys[0]]
             elif same_q_keys:
                 continue
         if not group and q_num and q_num in question_numbers_by_page.get(page_idx, set()):
             continue
+        if not group and not lines:
+            continue
         if group:
-            candidate_texts = [str(w.get("words") or "").strip() for w in group if str(w.get("words") or "").strip()]
+            merged_lines = _build_ocr_lines(group, items=items)
+            candidate_texts = [ln.get("text") for ln in merged_lines if ln.get("text")]
+            if not candidate_texts:
+                candidate_texts = [str(w.get("words") or "").strip() for w in group if str(w.get("words") or "").strip()]
             llm_text_norm = normalize_answer(str(it.get("llm_text") or ""))
             best_text = candidate_texts[0] if candidate_texts else ""
             best_ratio_group = 0.0
@@ -1633,38 +1813,39 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
                     if ratio > best_ratio_group:
                         best_ratio_group = ratio
                         best_text = cand
-            it["ocr_text"] = best_text
-            it["ocr_text_candidates"] = candidate_texts
-            it["ocr_match_ratio"] = best_ratio_group
-            it["match_method"] = "question_group"
+            if not llm_text_norm or best_ratio_group >= ocr_match_thr:
+                it["ocr_text"] = best_text
+                it["ocr_text_candidates"] = candidate_texts
+                it["ocr_match_ratio"] = best_ratio_group
+                it["match_method"] = "question_group"
 
-            lefts: List[float] = []
-            tops: List[float] = []
-            rights: List[float] = []
-            bottoms: List[float] = []
-            for w in group:
-                loc = w.get("location") or {}
-                left = float(loc.get("left", 0))
-                top = float(loc.get("top", 0))
-                width = float(loc.get("width", 0))
-                height = float(loc.get("height", 0))
-                lefts.append(left)
-                tops.append(top)
-                rights.append(left + width)
-                bottoms.append(top + height)
-            if lefts and tops:
-                best_bbox = [min(lefts), min(tops), max(rights), max(bottoms)]
-                try:
-                    img = Image.open(io.BytesIO(img_bytes_list[page_idx]))
-                    img = ImageOps.exif_transpose(img)
-                    w, h = img.size
-                except Exception:
-                    w, h = 1, 1
-                norm_bbox = _abs_to_norm_bbox(best_bbox, w, h)
-                if norm_bbox:
-                    it["handwriting_bbox"] = norm_bbox
-                    it["line_bbox"] = norm_bbox
-            continue
+                lefts: List[float] = []
+                tops: List[float] = []
+                rights: List[float] = []
+                bottoms: List[float] = []
+                for w in group:
+                    loc = w.get("location") or {}
+                    left = float(loc.get("left", 0))
+                    top = float(loc.get("top", 0))
+                    width = float(loc.get("width", 0))
+                    height = float(loc.get("height", 0))
+                    lefts.append(left)
+                    tops.append(top)
+                    rights.append(left + width)
+                    bottoms.append(top + height)
+                if lefts and tops:
+                    best_bbox = [min(lefts), min(tops), max(rights), max(bottoms)]
+                    try:
+                        img = Image.open(io.BytesIO(img_bytes_list[page_idx]))
+                        img = ImageOps.exif_transpose(img)
+                        w, h = img.size
+                    except Exception:
+                        w, h = 1, 1
+                    norm_bbox = _abs_to_norm_bbox(best_bbox, w, h)
+                    if norm_bbox:
+                        it["handwriting_bbox"] = norm_bbox
+                        it["line_bbox"] = norm_bbox
+                continue
 
         llm_text_norm = normalize_answer(str(it.get("llm_text") or ""))
 
@@ -1756,8 +1937,7 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
         if llm_text_norm and best_ratio_group >= ocr_match_thr:
             match_method = f"text_sim_{best_ratio_group:.2f}"
         it["match_method"] = match_method
-        if best_ratio_group < ocr_match_thr and not match_method.startswith("position"):
-            it["note"] = (it.get("note") or "") + " ocr_match_low"
+        # Low OCR match is tracked in fields, but not appended to note.
 
         if group_bboxes:
             left = min(b[0] for b in group_bboxes)
@@ -1905,7 +2085,7 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
             draw = ImageDraw.Draw(img)
             w, h = img.size
             for it in items:
-                if int(it.get("page_index") or 0) != page_idx:
+                if int(it.get("page_index") or 1) != (page_idx + 1):
                     continue
                 bbox = it.get("handwriting_bbox") or it.get("line_bbox")
                 if not (isinstance(bbox, list) and len(bbox) == 4):
@@ -1934,7 +2114,7 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
     debug_overlay_urls = _save_debug_overlay(img_bytes_list, items)
 
     # Save crop images
-    _save_crop_images(wb_img_bytes_list, items)
+    _save_crop_images(wb_img_bytes_list, items, force_save=True)
 
     # Match session
     matched_session = None
@@ -1960,6 +2140,7 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
         "graded_image_urls": graded_image_urls,
         "debug_overlay_urls": debug_overlay_urls,
         "image_count": len(img_bytes_list),
+        "page_order": page_order,
         "matched_session": matched_session,
         "extracted_date": extracted_date,
         "worksheet_uuid": uuid_info.get("uuid"),
@@ -2096,22 +2277,21 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
     # 根据 OCR 检测到的页码（如"第1页"、"第2页"）自动重排页面顺序
     # 这解决了用户上传照片顺序错误导致的匹配问题
     page_reorder_mapping: Dict[int, int] = {}
+    page_order = list(range(len(img_bytes_list)))
     try:
         ocr_raw, wb_img_bytes_list, page_reorder_mapping = _reorder_by_page_numbers(
             ocr_raw, wb_img_bytes_list, logger
         )
         # 同时重排原始图片列表（用于保存和调试）
         if page_reorder_mapping and any(k != v for k, v in page_reorder_mapping.items()):
-            img_bytes_list = [img_bytes_list[info] for info in sorted(page_reorder_mapping.keys(), key=lambda x: page_reorder_mapping[x])]
+            order = sorted(page_reorder_mapping.keys(), key=lambda x: page_reorder_mapping[x])
+            img_bytes_list = [img_bytes_list[info] for info in order]
             # 重排保存路径
-            saved_paths = [saved_paths[info] for info in sorted(page_reorder_mapping.keys(), key=lambda x: page_reorder_mapping[x])]
+            saved_paths = [saved_paths[info] for info in order]
+            page_order = order
     except Exception as e:
         logger.warning(f"[PAGE REORDER] Error during page reordering: {e}, continuing with original order")
         page_reorder_mapping = {i: i for i in range(len(ocr_raw.get("pages", [])))}
-
-    # 创建反向映射：新索引 -> 原始索引（用于调整 LLM 的 pg 值）
-    # LLM 的 pg 值是基于上传顺序的，需要映射到重排后的索引
-    reverse_mapping = {v: k for k, v in page_reorder_mapping.items()}
 
     # Parse LLM raw data (handle both sections format and flat items format)
     items_raw = []
@@ -2119,6 +2299,20 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
     # Get the actual LLM response (may be wrapped in raw_llm)
     llm_data = llm_raw.get("raw_llm") if "raw_llm" in llm_raw else llm_raw
     sections = llm_data.get("sections") if isinstance(llm_data, dict) else None
+    if isinstance(sections, list):
+        llm_zero_based = _llm_pages_zero_based(sections)
+    else:
+        llm_zero_based = _llm_pages_zero_based(llm_raw.get("items") or [])
+    total_pages = len(ocr_raw.get("pages") or []) or len(img_bytes_list)
+    ocr_section_keys = _ocr_section_keys_by_page(ocr_raw)
+    llm_section_keys = _llm_section_keys_by_page(
+        sections if isinstance(sections, list) else [],
+        llm_zero_based,
+        page_reorder_mapping,
+    )
+    page_map_by_section = _build_page_mapping_by_sections(
+        llm_section_keys, ocr_section_keys, total_pages, logger
+    )
 
     if isinstance(sections, list):
         logger.info(f"[AI GRADING] Found {len(sections)} sections in LLM response")
@@ -2134,11 +2328,12 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
             for idx, it in enumerate(sec_items):
                 if not isinstance(it, dict):
                     continue
-                # 获取 LLM 返回的原始页码
-                llm_pg = it.get("pg") or 0
-                # 将 LLM 的页码映射到重排后的索引
-                # LLM 的 pg 是基于上传顺序的，page_reorder_mapping 将上传顺序映射到正确顺序
-                mapped_pg = page_reorder_mapping.get(llm_pg, llm_pg)
+                # 获取 LLM 返回的原始页码并映射（1-based）
+                llm_pg_raw = it.get("pg") if "pg" in it else it.get("page_index")
+                llm_pg0 = _llm_pg_to_zero_based(llm_pg_raw, llm_zero_based)
+                mapped_pg0 = page_reorder_mapping.get(llm_pg0, llm_pg0)
+                mapped_pg1 = mapped_pg0 + 1
+                mapped_pg1 = page_map_by_section.get(mapped_pg1, mapped_pg1)
                 # Convert short field names to long names
                 items_raw.append({
                     "q": it.get("q"),
@@ -2148,8 +2343,8 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
                     "student_text": it.get("ans") or "",
                     "is_correct": it.get("ok"),
                     "confidence": it.get("conf"),
-                    "page_index": mapped_pg,
-                    "original_page_index": llm_pg,  # 保留原始页码用于调试
+                    "page_index": mapped_pg1,
+                    "original_page_index": llm_pg0 + 1,  # 保留原始页码用于调试（1-based）
                     "note": it.get("note") or "",
                 })
     else:
@@ -2162,11 +2357,14 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
             if not isinstance(it, dict):
                 items_raw.append(it)
                 continue
-            llm_pg = it.get("page_index") or it.get("pg") or 0
-            mapped_pg = page_reorder_mapping.get(llm_pg, llm_pg)
+            llm_pg_raw = it.get("page_index") if "page_index" in it else it.get("pg")
+            llm_pg0 = _llm_pg_to_zero_based(llm_pg_raw, llm_zero_based)
+            mapped_pg0 = page_reorder_mapping.get(llm_pg0, llm_pg0)
+            mapped_pg1 = mapped_pg0 + 1
+            mapped_pg1 = page_map_by_section.get(mapped_pg1, mapped_pg1)
             new_it = dict(it)
-            new_it["page_index"] = mapped_pg
-            new_it["original_page_index"] = llm_pg
+            new_it["page_index"] = mapped_pg1
+            new_it["original_page_index"] = llm_pg0 + 1
             items_raw.append(new_it)
 
     logger.info(f"[AI GRADING] LLM items_raw: {len(items_raw)}; OCR pages: {len(ocr_raw.get('pages', []))}")
@@ -2193,7 +2391,7 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
                 "llm_text": it.get("student_text") or "",
                 "is_correct": it.get("is_correct") if "is_correct" in it else None,
                 "confidence": float(conf_val) if conf_val is not None else None,
-                "page_index": int(it.get("page_index") or 0),
+                "page_index": int(it.get("page_index") or 1),
                 "handwriting_bbox": it.get("handwriting_bbox"),
                 "line_bbox": it.get("line_bbox"),
                 "note": it.get("note") or "",
@@ -2287,58 +2485,24 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
 
     ocr_match_thr = float(os.environ.get("EL_OCR_MATCH_THRESHOLD", "0.6"))
 
-    def _detect_section_key(text: str) -> Optional[str]:
-        if "单词默写" in text:
-            return "WORD"
-        if "短语默写" in text:
-            return "PHRASE"
-        if "句子默写" in text:
-            return "SENTENCE"
-        return None
+    # LLM section keys per page (used to avoid cross-section fallback)
+    llm_section_keys_by_page: Dict[int, set] = {}
+    for it in items:
+        sec = str(it.get("section_type") or "")
+        if not sec:
+            continue
+        page_idx0 = max(0, int(it.get("page_index") or 1) - 1)
+        llm_section_keys_by_page.setdefault(page_idx0, set()).add(sec)
 
-    def _group_handwriting_by_question(words: List[Dict[str, Any]]) -> Dict[Tuple[str, int], List[Dict[str, Any]]]:
-        groups: Dict[Tuple[str, int], List[Dict[str, Any]]] = {}
-        current_q: Optional[int] = None
-        current_section: Optional[str] = None
-        for w in words:
-            wt = w.get("words_type")
-            text = str(w.get("words") or "")
-            if wt != "handwriting":
-                section_key = _detect_section_key(text)
-                if section_key:
-                    current_section = section_key
-                    current_q = None
-                q_num = _extract_question_number(text)
-                if q_num is not None:
-                    current_q = q_num
-                continue
-            if current_q is None:
-                continue
-            key = ((current_section or ""), current_q)
-            groups.setdefault(key, []).append(w)
-        return groups
-
-    handwriting_groups_by_page: Dict[int, Dict[Tuple[str, int], List[Dict[str, Any]]]] = {
-        page_idx: _group_handwriting_by_question(words)
-        for page_idx, words in ocr_by_page.items()
-    }
+    # Geometry-based OCR grouping (robust to OCR order)
+    handwriting_groups_by_page: Dict[int, Dict[Tuple[str, int], List[Dict[str, Any]]]] = {}
     question_numbers_by_page: Dict[int, set] = {}
     section_keys_by_page: Dict[int, set] = {}
     for page_idx, words in ocr_by_page.items():
-        q_nums = set()
-        section_keys = set()
-        for w in words:
-            if w.get("words_type") == "handwriting":
-                continue
-            text = str(w.get("words") or "")
-            sec = _detect_section_key(text)
-            if sec:
-                section_keys.add(sec)
-            q_num = _extract_question_number(text)
-            if q_num is not None:
-                q_nums.add(q_num)
+        groups, sec_keys, q_nums = _group_handwriting_by_question_geo(words)
+        handwriting_groups_by_page[page_idx] = groups
         question_numbers_by_page[page_idx] = q_nums
-        section_keys_by_page[page_idx] = section_keys
+        section_keys_by_page[page_idx] = sec_keys
 
     # Precompute OCR lines by page and track usage to avoid duplicates.
     ocr_lines_by_page: Dict[int, List[Dict[str, Any]]] = {}
@@ -2352,29 +2516,34 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
     ocr_used: Dict[int, set] = {page_idx: set() for page_idx in ocr_lines_by_page.keys()}
 
     for it in items:
-        page_idx = int(it.get("page_index") or 0)
-        lines = ocr_lines_by_page.get(page_idx) or []
+        page_idx = max(0, int(it.get("page_index") or 1) - 1)
         q_num = int(it.get("q") or 0)
         it["ocr_text"] = ""
         it["match_method"] = "no_match"
-
-        if not lines:
-            continue
 
         section_key = str(it.get("section_type") or "")
         group_key = (section_key, q_num)
         groups_for_page = handwriting_groups_by_page.get(page_idx, {}) or {}
         group = groups_for_page.get(group_key) if q_num else None
+
+        lines = ocr_lines_by_page.get(page_idx) or []
+
         if not group and q_num:
             same_q_keys = [key for key in groups_for_page.keys() if key[1] == q_num]
-            if len(same_q_keys) == 1 and len(section_keys_by_page.get(page_idx, set())) <= 1:
+            llm_sections = llm_section_keys_by_page.get(page_idx, set())
+            if len(same_q_keys) == 1 and len(llm_sections) <= 1:
                 group = groups_for_page[same_q_keys[0]]
             elif same_q_keys:
                 continue
         if not group and q_num and q_num in question_numbers_by_page.get(page_idx, set()):
             continue
+        if not group and not lines:
+            continue
         if group:
-            candidate_texts = [str(w.get("words") or "").strip() for w in group if str(w.get("words") or "").strip()]
+            merged_lines = _build_ocr_lines(group, items=items)
+            candidate_texts = [ln.get("text") for ln in merged_lines if ln.get("text")]
+            if not candidate_texts:
+                candidate_texts = [str(w.get("words") or "").strip() for w in group if str(w.get("words") or "").strip()]
             llm_text_norm = normalize_answer(str(it.get("llm_text") or ""))
             best_text = candidate_texts[0] if candidate_texts else ""
             best_ratio_group = 0.0
@@ -2387,38 +2556,39 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
                     if ratio > best_ratio_group:
                         best_ratio_group = ratio
                         best_text = cand
-            it["ocr_text"] = best_text
-            it["ocr_text_candidates"] = candidate_texts
-            it["ocr_match_ratio"] = best_ratio_group
-            it["match_method"] = "question_group"
+            if not llm_text_norm or best_ratio_group >= ocr_match_thr:
+                it["ocr_text"] = best_text
+                it["ocr_text_candidates"] = candidate_texts
+                it["ocr_match_ratio"] = best_ratio_group
+                it["match_method"] = "question_group"
 
-            lefts: List[float] = []
-            tops: List[float] = []
-            rights: List[float] = []
-            bottoms: List[float] = []
-            for w in group:
-                loc = w.get("location") or {}
-                left = float(loc.get("left", 0))
-                top = float(loc.get("top", 0))
-                width = float(loc.get("width", 0))
-                height = float(loc.get("height", 0))
-                lefts.append(left)
-                tops.append(top)
-                rights.append(left + width)
-                bottoms.append(top + height)
-            if lefts and tops:
-                best_bbox = [min(lefts), min(tops), max(rights), max(bottoms)]
-                try:
-                    img = Image.open(io.BytesIO(img_bytes_list[page_idx]))
-                    img = ImageOps.exif_transpose(img)
-                    w, h = img.size
-                except Exception:
-                    w, h = 1, 1
-                norm_bbox = _abs_to_norm_bbox(best_bbox, w, h)
-                if norm_bbox:
-                    it["handwriting_bbox"] = norm_bbox
-                    it["line_bbox"] = norm_bbox
-            continue
+                lefts: List[float] = []
+                tops: List[float] = []
+                rights: List[float] = []
+                bottoms: List[float] = []
+                for w in group:
+                    loc = w.get("location") or {}
+                    left = float(loc.get("left", 0))
+                    top = float(loc.get("top", 0))
+                    width = float(loc.get("width", 0))
+                    height = float(loc.get("height", 0))
+                    lefts.append(left)
+                    tops.append(top)
+                    rights.append(left + width)
+                    bottoms.append(top + height)
+                if lefts and tops:
+                    best_bbox = [min(lefts), min(tops), max(rights), max(bottoms)]
+                    try:
+                        img = Image.open(io.BytesIO(img_bytes_list[page_idx]))
+                        img = ImageOps.exif_transpose(img)
+                        w, h = img.size
+                    except Exception:
+                        w, h = 1, 1
+                    norm_bbox = _abs_to_norm_bbox(best_bbox, w, h)
+                    if norm_bbox:
+                        it["handwriting_bbox"] = norm_bbox
+                        it["line_bbox"] = norm_bbox
+                continue
 
         llm_text_norm = normalize_answer(str(it.get("llm_text") or ""))
 
@@ -2512,8 +2682,7 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
         if llm_text_norm and best_ratio_group >= ocr_match_thr:
             match_method = f"text_sim_{best_ratio_group:.2f}"
         it["match_method"] = match_method
-        if best_ratio_group < ocr_match_thr and not match_method.startswith("position"):
-            it["note"] = (it.get("note") or "") + " ocr_match_low"
+        # Low OCR match is tracked in fields, but not appended to note.
 
         if group_bboxes:
             left = min(b[0] for b in group_bboxes)
@@ -2774,7 +2943,7 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
             draw = ImageDraw.Draw(img)
             w, h = img.size
             for it in items:
-                if int(it.get("page_index") or 0) != page_idx:
+                if int(it.get("page_index") or 1) != (page_idx + 1):
                     continue
                 bbox = it.get("handwriting_bbox") or it.get("line_bbox")
                 if not (isinstance(bbox, list) and len(bbox) == 4):
@@ -2801,6 +2970,9 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
             logger.error(f"[AI GRADING] Failed to generate graded image: {e}")
             graded_image_urls.append("")
 
+    # Save crop images (only when SAVE_CROP_IMAGES=1)
+    _save_crop_images(wb_img_bytes_list, items)
+
     # Extract UUID from OCR results
     uuid_info = _extract_uuid_from_ocr(ocr_raw)
     if uuid_info.get("uuid"):
@@ -2817,7 +2989,12 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
                 resolved_student_name = resolved.get("student_name")
                 resolved_base_name = resolved.get("base_name")
         if resolved_student_id is None or resolved_base_id is None:
-            raise ValueError("未能匹配练习单编号对应的学生，请确认练习单编号清晰且已生成。")
+            if uuid_info.get("uuid"):
+                msg = f"试卷编号 {uuid_info['uuid']} 未匹配到学生，请在页面选择学生/资料库或确认该编号已入库。"
+            else:
+                msg = "未识别到试卷编号，无法匹配学生。请在页面选择学生/资料库或确保试卷编号清晰可识别。"
+            logger.warning(f"[AI GRADING] {msg}")
+            raise ValueError(msg)
 
     # Match to existing session
     matched_session = None
@@ -2842,6 +3019,7 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
         "image_urls": image_urls,
         "graded_image_urls": graded_image_urls,
         "image_count": len(saved_paths),
+        "page_order": page_order,
         "matched_session": matched_session,
         "extracted_date": extracted_date,
         "worksheet_uuid": uuid_info.get("uuid"),

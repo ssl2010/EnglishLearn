@@ -1822,7 +1822,11 @@ def api_ai_grade_photos(
             _assert_student_owned(conn, account_id, student_id)
         if base_id is not None:
             _assert_base_access(conn, account_id, base_id)
-    return analyze_ai_photos(account_id, student_id, base_id, files)
+    try:
+        return analyze_ai_photos(account_id, student_id, base_id, files)
+    except ValueError as exc:
+        logging.getLogger("uvicorn.error").warning(f"[AI GRADING] {exc}")
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/ai/grade-photos-debug")

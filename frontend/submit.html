@@ -204,6 +204,7 @@ Promise.all([loadAccount(), ensureValidBaseId()]).then(() => {
 });
 
 let selectedFiles = [];
+let dragThumbIndex = null;
 
 function renderThumbs(){
   const thumbs = document.getElementById('thumbs');
@@ -213,7 +214,9 @@ function renderThumbs(){
     wrap.style.position = 'relative';
     wrap.style.width = '120px';
     wrap.style.height = '120px';
+    wrap.style.cursor = 'grab';
     wrap.dataset.index = idx;  // Store index for later update
+    wrap.draggable = true;
     const img = document.createElement('img');
     img.style.width = '120px';
     img.style.height = '120px';
@@ -237,6 +240,40 @@ function renderThumbs(){
     del.style.cursor = 'pointer';
     del.addEventListener('click', ()=>{
       selectedFiles.splice(idx, 1);
+      renderThumbs();
+    });
+    wrap.addEventListener('dragstart', (e)=>{
+      dragThumbIndex = idx;
+      wrap.style.opacity = '0.6';
+      wrap.style.cursor = 'grabbing';
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(idx));
+      }
+    });
+    wrap.addEventListener('dragend', ()=>{
+      dragThumbIndex = null;
+      wrap.style.opacity = '1';
+      wrap.style.cursor = 'grab';
+      wrap.style.outline = '';
+    });
+    wrap.addEventListener('dragover', (e)=>{
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      wrap.style.outline = '2px dashed #3b82f6';
+    });
+    wrap.addEventListener('dragleave', ()=>{
+      wrap.style.outline = '';
+    });
+    wrap.addEventListener('drop', (e)=>{
+      e.preventDefault();
+      wrap.style.outline = '';
+      const from = dragThumbIndex;
+      const to = idx;
+      if (from === null || from === to) return;
+      const moved = selectedFiles.splice(from, 1)[0];
+      const insertAt = from < to ? to - 1 : to;
+      selectedFiles.splice(insertAt, 0, moved);
       renderThumbs();
     });
     wrap.appendChild(img);
@@ -289,14 +326,29 @@ async function uploadPhoto(){
     clearTimeout(timeoutId);
 
     if(!res.ok){
-      const errorText = await res.text();
-      msg.textContent='失败：' + errorText;
+      let errorText = await res.text();
+      let detail = errorText || '请求失败';
+      try{
+        const errJson = JSON.parse(errorText);
+        if(errJson && errJson.detail){
+          detail = errJson.detail;
+        }
+      }catch(e){}
+      msg.textContent='失败：' + detail;
       return;
     }
     const data = await res.json();
 
   window._extracted = data.items || [];
   window._gradedImageUrls = data.graded_image_urls || [];
+  window._imageUrls = data.image_urls || [];
+  window._pageOrder = Array.isArray(data.page_order) ? data.page_order : null;
+  if (window._pageOrder && Array.isArray(window._uploadedImages) && window._uploadedImages.length) {
+    const reordered = window._pageOrder.map(idx => window._uploadedImages[idx]).filter(Boolean);
+    if (reordered.length === window._uploadedImages.length) {
+      window._uploadedImages = reordered;
+    }
+  }
   window._extractedDate = data.extracted_date || null;  // Save extracted date for duplicate checking
   window._worksheetUuid = data.worksheet_uuid || null;  // Save worksheet UUID for duplicate checking
   window._uuidInfo = data.uuid_info || null;  // Save UUID info for display
@@ -433,7 +485,7 @@ async function uploadPhoto(){
     } else if (it.handwriting_bbox || it.line_bbox) {
       // Fallback: generate on client side from uploaded images (for immediate preview)
       const bbox = it.handwriting_bbox || it.line_bbox;
-      const pageIdx = it.page_index || 0;
+      const pageIdx = it.page_index || 1;
       cropThumb = `<img class="crop-thumb" data-pos="${it.position}" data-page="${pageIdx}" data-bbox="${bbox.join(',')}"
                        src="" alt="crop" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
     }
@@ -441,11 +493,12 @@ async function uploadPhoto(){
     // Add page link only if no crop available (unanswered items)
     let imageCell = cropThumb;
     if (!cropThumb) {
-      const pageIdx = it.page_index || 0;
-      if (window._gradedImageUrls && window._gradedImageUrls[pageIdx]) {
-        imageCell = `<a href="#" class="page-link" data-page-url="${window._gradedImageUrls[pageIdx]}"
+      const pageIdx = it.page_index || 1;
+      const pageIdx0 = Math.max(0, pageIdx - 1);
+      if (window._gradedImageUrls && window._gradedImageUrls[pageIdx0]) {
+        imageCell = `<a href="#" class="page-link" data-page-url="${window._gradedImageUrls[pageIdx0]}"
                         style="color:#0b5fff;text-decoration:none;font-size:13px"
-                        title="第${pageIdx + 1}页完整图">查看练习单</a>`;
+                        title="第${pageIdx}页完整图">查看练习单</a>`;
       }
     }
 
@@ -507,22 +560,24 @@ async function uploadPhoto(){
 }
 
 function generateCropThumbnails(){
-  // Generate crop thumbnails from uploaded images
-  if (!window._uploadedImages) return;
+  // Generate crop thumbnails from uploaded images (fallback to server image URLs)
+  if (!window._uploadedImages && !window._imageUrls) return;
 
   document.querySelectorAll('.crop-thumb').forEach(async (thumb) => {
-    const pageIdx = parseInt(thumb.getAttribute('data-page') || '0');
+    const pageIdx = parseInt(thumb.getAttribute('data-page') || '1');
+    const pageIdx0 = Math.max(0, pageIdx - 1);
     const bboxStr = thumb.getAttribute('data-bbox');
     if (!bboxStr) return;
 
     const bbox = bboxStr.split(',').map(parseFloat);
     if (bbox.length !== 4) return;
 
-    const imgFile = window._uploadedImages[pageIdx];
-    if (!imgFile) return;
+    const imgFile = (window._uploadedImages || [])[pageIdx0];
+    const imgUrl = (window._imageUrls || [])[pageIdx0];
+    if (!imgFile && !imgUrl) return;
 
     try {
-      const img = await loadImage(imgFile);
+      const img = await loadImage(imgFile || imgUrl);
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
@@ -550,12 +605,17 @@ function generateCropThumbnails(){
   });
 }
 
-function loadImage(file) {
+function loadImage(source) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = reject;
-    img.src = URL.createObjectURL(file);
+    if (typeof source === 'string') {
+      img.crossOrigin = 'anonymous';
+      img.src = source;
+    } else {
+      img.src = URL.createObjectURL(source);
+    }
   });
 }
 
@@ -724,11 +784,19 @@ document.getElementById('debugBtn').addEventListener('click', async ()=>{
     window._extracted = data.items || [];
     const gradedUrls = (data.graded_image_urls || []).filter(Boolean);
     const imageUrls = (data.image_urls || []).filter(Boolean);
+    window._imageUrls = imageUrls;
+    window._pageOrder = Array.isArray(data.page_order) ? data.page_order : null;
     window._gradedImageUrls = gradedUrls.length ? gradedUrls : imageUrls;
     window._extractedDate = data.extracted_date || null;  // Save extracted date for duplicate checking
     window._worksheetUuid = data.worksheet_uuid || null;  // Save worksheet UUID for duplicate checking
     window._uuidInfo = data.uuid_info || null;  // Save UUID info for display
     window._analysisBundleId = data.bundle_id || null;
+    if (window._pageOrder && Array.isArray(window._uploadedImages) && window._uploadedImages.length) {
+      const reordered = window._pageOrder.map(idx => window._uploadedImages[idx]).filter(Boolean);
+      if (reordered.length === window._uploadedImages.length) {
+        window._uploadedImages = reordered;
+      }
+    }
 
     const imgCount = data.image_count ? `；图片 ${data.image_count} 张` : '';
     let dateInfo = '';
@@ -851,7 +919,7 @@ document.getElementById('debugBtn').addEventListener('click', async ()=>{
       } else if (it.handwriting_bbox || it.line_bbox) {
         // Fallback: generate on client side from uploaded images (for immediate preview)
         const bbox = it.handwriting_bbox || it.line_bbox;
-        const pageIdx = it.page_index || 0;
+        const pageIdx = it.page_index || 1;
         cropThumb = `<img class="crop-thumb" data-pos="${it.position}" data-page="${pageIdx}" data-bbox="${bbox.join(',')}"
                          src="" alt="crop" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
       }
@@ -859,11 +927,12 @@ document.getElementById('debugBtn').addEventListener('click', async ()=>{
       // Add page link only if no crop available (unanswered items)
       let imageCell = cropThumb;
       if (!cropThumb) {
-        const pageIdx = it.page_index || 0;
-        if (window._gradedImageUrls && window._gradedImageUrls[pageIdx]) {
-          imageCell = `<a href="#" class="page-link" data-page-url="${window._gradedImageUrls[pageIdx]}"
+        const pageIdx = it.page_index || 1;
+        const pageIdx0 = Math.max(0, pageIdx - 1);
+        if (window._gradedImageUrls && window._gradedImageUrls[pageIdx0]) {
+          imageCell = `<a href="#" class="page-link" data-page-url="${window._gradedImageUrls[pageIdx0]}"
                           style="color:#0b5fff;text-decoration:none;font-size:13px"
-                          title="第${pageIdx + 1}页完整图">查看练习单</a>`;
+                          title="第${pageIdx}页完整图">查看练习单</a>`;
         }
       }
 
