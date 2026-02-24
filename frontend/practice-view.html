@@ -254,10 +254,13 @@ function renderResults(items, resultsByItem, rawItems, bundleMeta, bundleId){
       isCorrect
     );
     let imageCell = '';
+    const hasRawBbox = !!(raw && (raw.handwriting_bbox || raw.line_bbox));
     if(raw && raw.crop_url){
       imageCell = `<img src="${raw.crop_url}" alt="crop" class="img-thumb zoomable" />`;
-    }else if(raw && bundleId && (raw.position || raw.position === 0)){
-      imageCell = `<img src="/media/crops/on-demand/${encodeURIComponent(bundleId)}/${encodeURIComponent(raw.position)}.jpg" alt="crop" class="img-thumb zoomable" />`;
+    }else if(raw && hasRawBbox){
+      const bbox = raw.handwriting_bbox || raw.line_bbox;
+      const pageIdx = raw.page_index || 1;
+      imageCell = `<img class="img-thumb zoomable pv-crop-thumb" data-page="${pageIdx}" data-bbox="${bbox.join(',')}" src="" alt="crop" />`;
     }else if(gradedUrls.length){
       const pageIdx = raw?.page_index || 1;
       const pageIdx0 = Math.max(0, pageIdx - 1);
@@ -279,6 +282,53 @@ function renderResults(items, resultsByItem, rawItems, bundleMeta, bundleId){
       <td>${imageCell}</td>
     `;
     itemsBody.appendChild(tr);
+  });
+  generatePracticeViewCropThumbs(bundleMeta);
+}
+
+function loadPracticeViewImage(src){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>resolve(img);
+    img.onerror = reject;
+    img.crossOrigin = 'anonymous';
+    img.src = src;
+  });
+}
+
+function generatePracticeViewCropThumbs(bundleMeta){
+  const imageUrls = (bundleMeta && Array.isArray(bundleMeta.image_urls)) ? bundleMeta.image_urls : [];
+  if(!imageUrls.length) return;
+  document.querySelectorAll('#itemsTable .pv-crop-thumb').forEach(async (thumb)=>{
+    const pageIdx = parseInt(thumb.getAttribute('data-page') || '1', 10);
+    const pageIdx0 = Math.max(0, pageIdx - 1);
+    const bboxStr = thumb.getAttribute('data-bbox') || '';
+    const imgUrl = imageUrls[pageIdx0];
+    if(!imgUrl || !bboxStr) return;
+    const bbox = bboxStr.split(',').map(v=>parseFloat(v));
+    if(bbox.length !== 4 || bbox.some(v=>Number.isNaN(v))) return;
+    try{
+      const img = await loadPracticeViewImage(imgUrl);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if(!ctx) return;
+      const x = bbox[0] * img.width;
+      const y = bbox[1] * img.height;
+      const w = (bbox[2] - bbox[0]) * img.width;
+      const h = (bbox[3] - bbox[1]) * img.height;
+      const padding = 10;
+      const cropX = Math.max(0, x - padding);
+      const cropY = Math.max(0, y - padding);
+      const cropW = Math.min(img.width - cropX, w + padding * 2);
+      const cropH = Math.min(img.height - cropY, h + padding * 2);
+      if(cropW <= 0 || cropH <= 0) return;
+      canvas.width = cropW;
+      canvas.height = cropH;
+      ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+      thumb.src = canvas.toDataURL('image/jpeg', 0.8);
+    }catch(err){
+      console.warn('practice-view crop thumbnail generation failed', err);
+    }
   });
 }
 
@@ -378,7 +428,7 @@ function applySubmissionView(data, submission){
 function findPreferredSubmission(submissionsHistory){
   if(!Array.isArray(submissionsHistory) || !submissionsHistory.length) return null;
   const withCrop = submissionsHistory.find(sub =>
-    Array.isArray(sub.raw_items) && sub.raw_items.some(it => it && it.crop_url)
+    Array.isArray(sub.raw_items) && sub.raw_items.some(it => it && (it.crop_url || it.handwriting_bbox || it.line_bbox))
   );
   return withCrop || submissionsHistory[0];
 }
