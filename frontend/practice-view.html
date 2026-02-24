@@ -96,6 +96,7 @@
     <div id="submissionHistoryBar" style="display:none;margin-top:10px;align-items:center;gap:10px;flex-wrap:wrap">
       <span class="muted">提交记录</span>
       <select id="submissionSelect" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font-size:13px"></select>
+      <button id="submittedToggleBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px">显示提交图片</button>
       <span class="muted" id="submissionMeta"></span>
     </div>
 
@@ -305,9 +306,11 @@ function renderGradedImages(bundleMeta){
 function renderSubmittedImages(submission){
   const submittedSection = document.getElementById('submittedSection');
   const submittedGrid = document.getElementById('submittedGrid');
+  const toggleBtn = document.getElementById('submittedToggleBtn');
   submittedGrid.innerHTML = '';
   if(!submission){
     submittedSection.style.display = 'none';
+    toggleBtn.style.display = 'none';
     return;
   }
 
@@ -323,9 +326,10 @@ function renderSubmittedImages(submission){
   const uniq = Array.from(new Set(imageUrls));
   if(!uniq.length){
     submittedSection.style.display = 'none';
+    toggleBtn.style.display = 'none';
     return;
   }
-  submittedSection.style.display = 'block';
+  toggleBtn.style.display = 'inline-block';
   uniq.forEach(url=>{
     const img = document.createElement('img');
     img.src = url;
@@ -333,6 +337,9 @@ function renderSubmittedImages(submission){
     img.alt = '提交图片';
     submittedGrid.appendChild(img);
   });
+  const expanded = toggleBtn.dataset.expanded === '1';
+  submittedSection.style.display = expanded ? 'block' : 'none';
+  toggleBtn.textContent = expanded ? '收起提交图片' : '显示提交图片';
 }
 
 function formatSubmissionLabel(sub, index, total){
@@ -363,6 +370,14 @@ function applySubmissionView(data, submission){
   }else{
     metaEl.textContent = session.corrected_at ? `最近入库时间：${formatDate(session.corrected_at)}` : '';
   }
+}
+
+function findPreferredSubmission(submissionsHistory){
+  if(!Array.isArray(submissionsHistory) || !submissionsHistory.length) return null;
+  const withCrop = submissionsHistory.find(sub =>
+    Array.isArray(sub.raw_items) && sub.raw_items.some(it => it && it.crop_url)
+  );
+  return withCrop || submissionsHistory[0];
 }
 
 async function loadDetail(){
@@ -469,21 +484,47 @@ async function loadDetail(){
     const submissionsHistory = Array.isArray(data.submissions_history) ? data.submissions_history : [];
     const historyBar = document.getElementById('submissionHistoryBar');
     const submissionSelect = document.getElementById('submissionSelect');
-    if(submissionsHistory.length){
+    const submittedToggleBtn = document.getElementById('submittedToggleBtn');
+    submittedToggleBtn.dataset.expanded = '0';
+    submittedToggleBtn.onclick = ()=>{
+      const expanded = submittedToggleBtn.dataset.expanded === '1';
+      submittedToggleBtn.dataset.expanded = expanded ? '0' : '1';
+      const currentId = Number(submissionSelect.value || 0);
+      const selected = submissionsHistory.find(s => Number(s.id) === currentId) || findPreferredSubmission(submissionsHistory);
+      renderSubmittedImages(selected || null);
+    };
+    if(submissionsHistory.length > 1){
       historyBar.style.display = 'flex';
       submissionSelect.innerHTML = submissionsHistory.map((sub, idx)=>
         `<option value="${sub.id}">${formatSubmissionLabel(sub, idx, submissionsHistory.length).replace(/</g,'&lt;')}</option>`
       ).join('');
+      const preferred = findPreferredSubmission(submissionsHistory);
+      if(preferred){
+        submissionSelect.value = String(preferred.id);
+      }
       const applySelected = ()=>{
         const currentId = Number(submissionSelect.value);
         const selected = submissionsHistory.find(s => Number(s.id) === currentId) || submissionsHistory[0];
+        submittedToggleBtn.dataset.expanded = '0';
         applySubmissionView(data, selected);
       };
       submissionSelect.onchange = applySelected;
       applySelected();
+    }else if(submissionsHistory.length === 1){
+      historyBar.style.display = 'flex';
+      submissionSelect.innerHTML = '';
+      submissionSelect.style.display = 'none';
+      const selected = submissionsHistory[0];
+      submittedToggleBtn.dataset.expanded = '0';
+      applySubmissionView(data, selected);
     }else{
       historyBar.style.display = 'none';
+      submissionSelect.style.display = '';
+      submittedToggleBtn.style.display = 'none';
       applySubmissionView(data, null);
+    }
+    if(submissionsHistory.length > 1){
+      submissionSelect.style.display = '';
     }
   }else{
     gradingSection.style.display = 'none';
