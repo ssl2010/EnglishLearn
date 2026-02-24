@@ -32,7 +32,7 @@ from .auth import (
     verify_password,
     _validate_username,
 )
-from .db import init_db, qone, row_to_dict
+from .db import db, init_db, qone, row_to_dict
 from .services import (
     bootstrap_single_child,
     create_base,
@@ -59,6 +59,7 @@ from .services import (
     confirm_ai_extracted,
     MEDIA_DIR,
     ensure_media_dir,
+    _bbox_to_abs,
 )
 
 # Import backup router
@@ -1841,7 +1842,11 @@ def api_ai_grade_photos_debug(
     with db() as conn:
         _assert_student_owned(conn, account_id, student_id)
         _assert_base_access(conn, account_id, base_id)
-    return analyze_ai_photos_from_debug(account_id, student_id, base_id)
+    try:
+        return analyze_ai_photos_from_debug(account_id, student_id, base_id)
+    except ValueError as exc:
+        logging.getLogger("uvicorn.error").warning(f"[AI GRADING DEBUG] {exc}")
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/ai/confirm-extracted")
@@ -2043,33 +2048,178 @@ async def serve_on_demand_crop(bundle_id: str, item_position: int, request: Requ
     preventing filesystem bloat while maintaining functionality.
     """
     from fastapi.responses import Response
-    from PIL import Image
+    from PIL import Image, ImageOps
     import io
     import json
 
     # Require authentication
     account_id = _require_account_id(request)
 
-    # Load bundle metadata to get original image and bbox
+    def _media_url_to_path(url: str) -> Optional[str]:
+        if not isinstance(url, str) or not url.startswith("/media/"):
+            return None
+        rel = url[len("/media/"):]
+        path = os.path.abspath(os.path.join(MEDIA_DIR, rel))
+        media_root = os.path.abspath(MEDIA_DIR)
+        try:
+            if os.path.commonpath([path, media_root]) != media_root:
+                return None
+        except Exception:
+            return None
+        return path
+
     bundle_dir = os.path.join(MEDIA_DIR, "uploads", "ai_bundles", bundle_id)
     meta_path = os.path.join(bundle_dir, "meta.json")
 
-    if not os.path.exists(meta_path):
-        raise HTTPException(status_code=404, detail="Bundle not found")
-
     try:
-        with open(meta_path, "r") as f:
-            meta = json.load(f)
+        meta: Dict[str, object] = {}
+        if os.path.exists(meta_path):
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
 
-        # Find the item with matching position
-        # Note: This requires bbox info to be saved in bundle metadata
-        # For now, return 404 as we need to update the bundle save logic
-        raise HTTPException(
-            status_code=501,
-            detail="On-demand crop generation requires bbox information in bundle metadata. "
-                   "This feature is planned but not yet implemented. "
-                   "Enable SAVE_CROP_IMAGES=1 to save crops to disk."
-        )
+        image_urls = list(meta.get("image_urls") or []) if isinstance(meta, dict) else []
+        crop_item = None
+
+        # Preferred path: read precomputed crop bbox stored in bundle metadata.
+        if isinstance(meta, dict):
+            crop_items = meta.get("crop_items") or []
+            if isinstance(crop_items, list):
+                for it in crop_items:
+                    if not isinstance(it, dict):
+                        continue
+                    try:
+                        if int(it.get("position")) == int(item_position):
+                            crop_item = it
+                            break
+                    except Exception:
+                        continue
+
+        # Backward-compatible fallback: scan submissions.text_raw for this bundle_id and item bbox.
+        if crop_item is None:
+            # Broad prefilter to avoid JSON formatting assumptions (spaces/separators may differ).
+            like_pattern = f'%\"bundle_id\"%{bundle_id}%'
+            with db() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT sub.text_raw, ps.student_id
+                    FROM submissions sub
+                    JOIN practice_sessions ps ON ps.id = sub.session_id
+                    JOIN students s ON s.id = ps.student_id
+                    WHERE s.account_id = ?
+                      AND sub.text_raw LIKE ?
+                    ORDER BY sub.submitted_at DESC, sub.id DESC
+                    """,
+                    (account_id, like_pattern),
+                ).fetchall()
+
+            payload = None
+            for row in rows:
+                raw = row["text_raw"]
+                if not raw:
+                    continue
+                try:
+                    candidate = json.loads(raw)
+                except Exception:
+                    continue
+                if not isinstance(candidate, dict):
+                    continue
+                if candidate.get("bundle_id") != bundle_id:
+                    continue
+                payload = candidate
+                break
+
+            if isinstance(payload, dict):
+                if not image_urls:
+                    bm = payload.get("bundle_meta")
+                    if isinstance(bm, dict):
+                        image_urls = list(bm.get("image_urls") or [])
+                raw_items = payload.get("items") or []
+                target = None
+                for it in raw_items:
+                    if not isinstance(it, dict):
+                        continue
+                    try:
+                        if int(it.get("position")) == int(item_position):
+                            target = it
+                            break
+                    except Exception:
+                        continue
+                if target:
+                    bbox = target.get("crop_bbox")
+                    if isinstance(bbox, dict):
+                        try:
+                            crop_item = {
+                                "position": item_position,
+                                "page_index": int(bbox.get("page_index") or target.get("page_index") or 1),
+                                "left": int(bbox.get("left")),
+                                "top": int(bbox.get("top")),
+                                "right": int(bbox.get("right")),
+                                "bottom": int(bbox.get("bottom")),
+                            }
+                        except Exception:
+                            crop_item = None
+                    if crop_item is None:
+                        # Compute bbox on the fly from stored normalized bbox fields.
+                        src_bbox = target.get("handwriting_bbox") or target.get("line_bbox") or target.get("bbox")
+                        if isinstance(src_bbox, list) and len(src_bbox) == 4 and image_urls:
+                            try:
+                                page_index = int(target.get("page_index") or 1)
+                            except Exception:
+                                page_index = 1
+                            page_idx0 = max(0, page_index - 1)
+                            if page_idx0 < len(image_urls):
+                                img_path = _media_url_to_path(image_urls[page_idx0])
+                                if img_path and os.path.exists(img_path):
+                                    with open(img_path, "rb") as f:
+                                        img = Image.open(io.BytesIO(f.read()))
+                                        img = ImageOps.exif_transpose(img).convert("RGB")
+                                        abs_bbox = _bbox_to_abs(src_bbox, img.size[0], img.size[1])
+                                        if abs_bbox:
+                                            left, top, right, bottom = abs_bbox
+                                            crop_item = {
+                                                "position": item_position,
+                                                "page_index": page_index,
+                                                "left": left,
+                                                "top": top,
+                                                "right": right,
+                                                "bottom": bottom,
+                                            }
+
+        if crop_item is None:
+            raise HTTPException(status_code=404, detail="Crop bbox not found")
+        if not image_urls:
+            raise HTTPException(status_code=404, detail="Source images not found")
+
+        page_index = int(crop_item.get("page_index") or 1)
+        page_idx0 = max(0, page_index - 1)
+        if page_idx0 >= len(image_urls):
+            raise HTTPException(status_code=404, detail="Source page index out of range")
+        img_path = _media_url_to_path(image_urls[page_idx0])
+        if not img_path or not os.path.exists(img_path):
+            raise HTTPException(status_code=404, detail="Source image file not found")
+
+        with open(img_path, "rb") as f:
+            img = Image.open(io.BytesIO(f.read()))
+            img = ImageOps.exif_transpose(img).convert("RGB")
+
+        left = int(crop_item.get("left"))
+        top = int(crop_item.get("top"))
+        right = int(crop_item.get("right"))
+        bottom = int(crop_item.get("bottom"))
+        w, h = img.size
+        left = max(0, min(w, left))
+        top = max(0, min(h, top))
+        right = max(0, min(w, right))
+        bottom = max(0, min(h, bottom))
+        if right <= left or bottom <= top:
+            raise HTTPException(status_code=400, detail="Invalid crop bbox")
+
+        crop = img.crop((left, top, right, bottom))
+        out = io.BytesIO()
+        crop.save(out, format="JPEG", quality=88)
+        return Response(content=out.getvalue(), media_type="image/jpeg")
+    except HTTPException:
+        raise
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Invalid bundle metadata")
     except Exception as e:

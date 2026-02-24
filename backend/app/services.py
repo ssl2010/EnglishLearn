@@ -1089,6 +1089,7 @@ def _save_ai_bundle(
     ocr_result: Dict[str, Any],
     image_urls: List[str],
     graded_image_urls: List[str],
+    items: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     base_dir = os.path.join(MEDIA_DIR, "uploads", "ai_bundles", bundle_id)
     os.makedirs(base_dir, exist_ok=True)
@@ -1097,11 +1098,32 @@ def _save_ai_bundle(
     with open(os.path.join(base_dir, "ocr_raw.json"), "w", encoding="utf-8") as f:
         json.dump(_extract_ocr_raw(ocr_result), f, ensure_ascii=False, indent=2)
     with open(os.path.join(base_dir, "meta.json"), "w", encoding="utf-8") as f:
+        crop_items: List[Dict[str, Any]] = []
+        for it in (items or []):
+            if not isinstance(it, dict):
+                continue
+            crop_bbox = it.get("crop_bbox")
+            if not isinstance(crop_bbox, dict):
+                continue
+            try:
+                crop_items.append(
+                    {
+                        "position": int(it.get("position")),
+                        "page_index": int(crop_bbox.get("page_index") or it.get("page_index") or 1),
+                        "left": int(crop_bbox.get("left")),
+                        "top": int(crop_bbox.get("top")),
+                        "right": int(crop_bbox.get("right")),
+                        "bottom": int(crop_bbox.get("bottom")),
+                    }
+                )
+            except Exception:
+                continue
         json.dump(
             {
                 "saved_at": utcnow_iso(),
                 "image_urls": image_urls or [],
                 "graded_image_urls": graded_image_urls or [],
+                "crop_items": crop_items,
             },
             f,
             ensure_ascii=False,
@@ -1542,19 +1564,35 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
         llm_raw = json.load(f)
     with open(ocr_path, "r", encoding="utf-8") as f:
         ocr_raw = json.load(f)
-    with open(meta_path, "r", encoding="utf-8") as f:
-        meta = json.load(f)
+    meta = {}
+    if os.path.exists(meta_path):
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+    else:
+        logger.warning("[AI GRADING DEBUG] meta.json not found, falling back to input_*.jpg scan")
 
     # Load images
     img_bytes_list: List[bytes] = []
     image_urls: List[str] = []
-    image_count = meta.get("image_count", 0)
-    for i in range(1, image_count + 1):
-        img_path = os.path.join(debug_dir, f"input_{i}.jpg")
-        if os.path.exists(img_path):
+    image_count = int(meta.get("image_count", 0) or 0)
+    if image_count > 0:
+        for i in range(1, image_count + 1):
+            img_path = os.path.join(debug_dir, f"input_{i}.jpg")
+            if os.path.exists(img_path):
+                with open(img_path, "rb") as f:
+                    img_bytes_list.append(f.read())
+                image_urls.append(f"/media/uploads/debug_last/input_{i}.jpg")
+    else:
+        for name in sorted(os.listdir(debug_dir)):
+            if not (name.startswith("input_") and name.endswith(".jpg")):
+                continue
+            img_path = os.path.join(debug_dir, name)
             with open(img_path, "rb") as f:
                 img_bytes_list.append(f.read())
-            image_urls.append(f"/media/uploads/debug_last/input_{i}.jpg")
+            image_urls.append(f"/media/uploads/debug_last/{name}")
+
+    if not img_bytes_list:
+        raise ValueError("调试目录中未找到 input_*.jpg 图片，请先运行一次正常识别")
 
     # Apply white balance for grading/cropping (same as normal mode)
     logger.info("[AI GRADING DEBUG] Applying white balance...")
@@ -2133,7 +2171,7 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
 
     bundle_id = f"debug_{uuid.uuid4().hex}"
     if os.environ.get("EL_AI_BUNDLE_SAVE", "1") == "1":
-        _save_ai_bundle(bundle_id, llm_raw or {}, ocr_raw or {}, [], graded_image_urls)
+        _save_ai_bundle(bundle_id, llm_raw or {}, ocr_raw or {}, [], graded_image_urls, items)
     return {
         "items": items,
         "image_urls": image_urls,
@@ -3013,7 +3051,7 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
     image_urls = [f"/media/uploads/{os.path.basename(p)}" for p in saved_paths]
     bundle_id = f"ai_{uuid.uuid4().hex}"
     if os.environ.get("EL_AI_BUNDLE_SAVE", "1") == "1":
-        _save_ai_bundle(bundle_id, llm_raw or {}, ocr_raw or {}, image_urls, graded_image_urls)
+        _save_ai_bundle(bundle_id, llm_raw or {}, ocr_raw or {}, image_urls, graded_image_urls, items)
     return {
         "items": items,
         "image_urls": image_urls,

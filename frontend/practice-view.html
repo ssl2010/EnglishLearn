@@ -221,7 +221,7 @@ function buildPreview(items){
   previewSection.classList.add('show');
 }
 
-function renderResults(items, resultsByItem, rawItems, bundleMeta){
+function renderResults(items, resultsByItem, rawItems, bundleMeta, bundleId){
   const itemsBody = document.querySelector('#itemsTable tbody');
   itemsBody.innerHTML = '';
   const rawByPos = {};
@@ -256,6 +256,8 @@ function renderResults(items, resultsByItem, rawItems, bundleMeta){
     let imageCell = '';
     if(raw && raw.crop_url){
       imageCell = `<img src="${raw.crop_url}" alt="crop" class="img-thumb zoomable" />`;
+    }else if(raw && bundleId && (raw.position || raw.position === 0)){
+      imageCell = `<img src="/media/crops/on-demand/${encodeURIComponent(bundleId)}/${encodeURIComponent(raw.position)}.jpg" alt="crop" class="img-thumb zoomable" />`;
     }else if(gradedUrls.length){
       const pageIdx = raw?.page_index || 1;
       const pageIdx0 = Math.max(0, pageIdx - 1);
@@ -359,7 +361,8 @@ function applySubmissionView(data, submission){
     ? `本次提交：共 ${summary.total || 0} 题，正确 ${summary.correct || 0} 题`
     : `共 ${summary.total || 0} 题，正确 ${summary.correct || 0} 题`;
   document.getElementById('gradingSummary').textContent = summaryText;
-  renderResults(data.items || [], resultsByItem, rawItems, bundleMeta);
+  const bundleId = (submission && submission.bundle_id) || data.bundle_id || null;
+  renderResults(data.items || [], resultsByItem, rawItems, bundleMeta, bundleId);
   renderSubmittedImages(submission || null);
   renderGradedImages(bundleMeta);
 
