@@ -488,7 +488,7 @@ async function uploadPhoto(){
       const pageIdx = it.page_index || 1;
       cropThumb = `<img class="crop-thumb" data-pos="${it.position}" data-page="${pageIdx}" data-bbox="${bbox.join(',')}"
                        src="" alt="crop" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
-    } else if (window._analysisBundleId && (it.position || it.position === 0)) {
+    } else if (window._analysisBundleId && (it.position || it.position === 0) && (it.handwriting_bbox || it.line_bbox)) {
       // Fallback: ask server to generate crop dynamically from stored bbox.
       cropThumb = `<img src="/media/crops/on-demand/${encodeURIComponent(window._analysisBundleId)}/${encodeURIComponent(it.position)}.jpg" alt="crop" class="zoomable" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
     }
@@ -926,7 +926,7 @@ document.getElementById('debugBtn').addEventListener('click', async ()=>{
         const pageIdx = it.page_index || 1;
         cropThumb = `<img class="crop-thumb" data-pos="${it.position}" data-page="${pageIdx}" data-bbox="${bbox.join(',')}"
                          src="" alt="crop" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
-      } else if (window._analysisBundleId && (it.position || it.position === 0)) {
+      } else if (window._analysisBundleId && (it.position || it.position === 0) && (it.handwriting_bbox || it.line_bbox)) {
         // Fallback: ask server to generate crop dynamically from stored bbox.
         cropThumb = `<img src="/media/crops/on-demand/${encodeURIComponent(window._analysisBundleId)}/${encodeURIComponent(it.position)}.jpg" alt="crop" class="zoomable" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
       }

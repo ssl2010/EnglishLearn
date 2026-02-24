@@ -843,6 +843,17 @@ def _attach_kb_matches(conn, base_ids: List[int], items: List[Dict]) -> List[Dic
     Returns:
         Items with matched_en_text, matched_item_id, etc. populated
     """
+    if not base_ids:
+        out: List[Dict] = []
+        for it in items:
+            item = dict(it)
+            item["kb_hit"] = False
+            item["matched_item_id"] = None
+            item["matched_en_text"] = ""
+            item["matched_type"] = ""
+            out.append(item)
+        return out
+
     out: List[Dict] = []
     for it in items:
         student_text = str(it.get("student_text") or "").strip()
@@ -2219,6 +2230,7 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
     resolved_student_name = None
     resolved_base_name = None
     resolved_session_id = None
+    resolved_session_by_uuid: Optional[Dict[str, Any]] = None
 
     img_bytes_list: List[bytes] = []
     saved_paths: List[str] = []
@@ -3021,6 +3033,7 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
             with db() as conn:
                 resolved = _resolve_session_by_uuid(conn, uuid_info["uuid"], account_id)
             if resolved:
+                resolved_session_by_uuid = resolved
                 resolved_session_id = int(resolved.get("id"))
                 resolved_student_id = int(resolved.get("student_id"))
                 resolved_base_id = int(resolved.get("base_id"))
@@ -3034,11 +3047,32 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
             logger.warning(f"[AI GRADING] {msg}")
             raise ValueError(msg)
 
+    # If student/base are resolved after the initial parse, re-attach KB matches using the resolved student.
+    # This restores reference answers and session matching for old worksheet re-submissions without manual selection.
+    need_kb_rematch = bool(resolved_student_id) and (
+        student_id != resolved_student_id or not any(it.get("matched_item_id") for it in items)
+    )
+    if need_kb_rematch:
+        with db() as conn:
+            active_base_ids = _get_active_base_ids(conn, int(resolved_student_id))
+            if resolved_base_id and int(resolved_base_id) not in active_base_ids:
+                active_base_ids = [*active_base_ids, int(resolved_base_id)]
+            items = _attach_kb_matches(conn, active_base_ids, items)
+
     # Match to existing session
     matched_session = None
     if resolved_student_id is not None and resolved_base_id is not None:
         with db() as conn:
             matched_session = _match_session_by_items(conn, resolved_student_id, resolved_base_id, items)
+    if not matched_session and resolved_session_id:
+        matched_session = {
+            "session_id": int(resolved_session_id),
+            "status": resolved_session_by_uuid.get("status") if isinstance(resolved_session_by_uuid, dict) else None,
+            "created_at": resolved_session_by_uuid.get("created_at") if isinstance(resolved_session_by_uuid, dict) else None,
+            "hit_count": 0,
+            "total_count": 0,
+            "match_ratio": 1.0,
+        }
 
     # Extract date from OCR results
     extracted_date = _extract_date_from_ocr(ocr_raw)
