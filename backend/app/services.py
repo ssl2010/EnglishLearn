@@ -3060,40 +3060,73 @@ def confirm_ai_extracted(
     if not use_items:
         raise ValueError("没有可入库的题目")
 
+    # Find canonical session for this worksheet UUID first.
+    # Prefer the originally generated worksheet record (non-AI_EXTRACT) when present.
+    uuid_session_row = None
+    if worksheet_uuid:
+        with db() as conn:
+            uuid_session_row = conn.execute(
+                """
+                SELECT
+                    ps.id,
+                    ps.status,
+                    ps.created_at,
+                    ps.params_json,
+                    (SELECT id FROM submissions s WHERE s.session_id = ps.id ORDER BY s.submitted_at DESC, s.id DESC LIMIT 1) AS latest_submission_id
+                FROM practice_sessions ps
+                WHERE ps.student_id = ?
+                  AND ps.base_id = ?
+                  AND ps.practice_uuid = ?
+                ORDER BY
+                  CASE WHEN COALESCE(ps.params_json, '') LIKE '%AI_EXTRACT%' THEN 1 ELSE 0 END ASC,
+                  ps.id ASC
+                LIMIT 1
+                """,
+                (student_id, base_id, worksheet_uuid),
+            ).fetchone()
+
     # Check for duplicate submission (unless force_duplicate is True)
     # Priority: UUID > Date
     if not force_duplicate:
         with db() as conn:
             # Try UUID-based duplicate check first (more reliable)
             if worksheet_uuid:
-                existing = conn.execute(
-                    """
-                    SELECT ps.id, ps.created_at, ps.practice_uuid, COUNT(pr.id) as total_items,
-                           SUM(CASE WHEN pr.is_correct = 1 THEN 1 ELSE 0 END) as correct_items
-                    FROM practice_sessions ps
-                    LEFT JOIN practice_results pr ON pr.session_id = ps.id
-                    WHERE ps.student_id = ?
-                      AND ps.practice_uuid = ?
-                      AND ps.params_json LIKE '%AI_EXTRACT%'
-                    GROUP BY ps.id
-                    ORDER BY ps.created_at DESC
-                    LIMIT 1
-                    """,
-                    (student_id, worksheet_uuid)
-                ).fetchone()
+                existing = None
+                if uuid_session_row and uuid_session_row["latest_submission_id"] is not None:
+                    latest_submission_id = int(uuid_session_row["latest_submission_id"])
+                    existing = conn.execute(
+                        """
+                        SELECT
+                          ps.id,
+                          ps.created_at,
+                          ps.practice_uuid,
+                          COUNT(pr.id) as total_items,
+                          SUM(CASE WHEN pr.is_correct = 1 THEN 1 ELSE 0 END) as correct_items
+                        FROM practice_sessions ps
+                        LEFT JOIN practice_results pr ON pr.submission_id = ?
+                        WHERE ps.id = ?
+                        GROUP BY ps.id
+                        """,
+                        (latest_submission_id, int(uuid_session_row["id"])),
+                    ).fetchone()
 
                 if existing:
-                    # Found duplicate submission by UUID
-                    accuracy = (existing["correct_items"] / existing["total_items"] * 100) if existing["total_items"] > 0 else 0
+                    # Found duplicate submission by UUID (only warn when a graded result already exists)
+                    total_items = int(existing["total_items"] or 0)
+                    correct_items = int(existing["correct_items"] or 0)
+                    if total_items <= 0:
+                        existing = None
+                if existing:
+                    accuracy = (correct_items / total_items * 100) if total_items > 0 else 0
                     return {
                         "duplicate_warning": True,
                         "existing_session_id": existing["id"],
                         "existing_uuid": worksheet_uuid,
                         "existing_created_at": existing["created_at"],
-                        "existing_total": existing["total_items"],
-                        "existing_correct": existing["correct_items"],
+                        "existing_total": total_items,
+                        "existing_correct": correct_items,
                         "existing_accuracy": accuracy,
-                        "message": f"检测到重复提交：试卷编号 {worksheet_uuid} 已经提交过（共{existing['total_items']}题，正确{existing['correct_items']}题，正确率{accuracy:.1f}%）。如果这是学生重做的试卷，请确认是否再次提交。"
+                        "message": f"检测到重复提交：试卷编号 {worksheet_uuid} 已经提交过（共{total_items}题，正确{correct_items}题，正确率{accuracy:.1f}%）。请确认是否继续提交本次照片。"
                     }
 
             # Fallback: Date-based check (for worksheets without UUID or old records)
@@ -3132,6 +3165,12 @@ def confirm_ai_extracted(
     with db() as conn:
         matched_session = _match_session_by_items(conn, student_id, base_id, use_items)
 
+    # Reuse the canonical worksheet session for this UUID, so repeated submissions
+    # stay under the same practice session record.
+    reuse_session_id: Optional[int] = None
+    if uuid_session_row:
+        reuse_session_id = int(uuid_session_row["id"])
+
     params_json = json.dumps(
         {
             "mode": "EXTERNAL_AI",
@@ -3146,27 +3185,30 @@ def confirm_ai_extracted(
     submitted_at = utcnow_iso()
 
     with db() as conn:
-        cur = conn.execute(
-            """
-            INSERT INTO practice_sessions(
-                student_id, base_id, status, params_json,
-                created_at, completed_at, corrected_at, created_date, practice_uuid
+        if reuse_session_id is None:
+            cur = conn.execute(
+                """
+                INSERT INTO practice_sessions(
+                    student_id, base_id, status, params_json,
+                    created_at, completed_at, corrected_at, created_date, practice_uuid
+                )
+                VALUES(?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    student_id,
+                    base_id,
+                    "CORRECTED",
+                    params_json,
+                    submitted_at,
+                    submitted_at,
+                    submitted_at,
+                    extracted_date,
+                    worksheet_uuid,
+                ),
             )
-            VALUES(?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                student_id,
-                base_id,
-                "CORRECTED",
-                params_json,
-                submitted_at,
-                submitted_at,
-                submitted_at,
-                extracted_date,
-                worksheet_uuid,
-            ),
-        )
-        session_id = int(cur.lastrowid)
+            session_id = int(cur.lastrowid)
+        else:
+            session_id = reuse_session_id
 
         submission_cur = conn.execute(
             """
@@ -3196,10 +3238,24 @@ def confirm_ai_extracted(
         except Exception:
             pass
 
+        existing_ex_by_pos: Dict[int, Any] = {}
+        if reuse_session_id is not None:
+            ex_rows = conn.execute(
+                """
+                SELECT id, item_id, position
+                FROM exercise_items
+                WHERE session_id = ?
+                ORDER BY position ASC
+                """,
+                (session_id,),
+            ).fetchall()
+            existing_ex_by_pos = {int(r["position"]): r for r in ex_rows}
+
         results = []
         for idx, it in enumerate(use_items, start=1):
-            # Always use enumeration index for position in the new session
-            position = idx
+            # For reused sessions keep original positions, otherwise reindex compactly.
+            raw_pos = it.get("position")
+            position = int(raw_pos) if (reuse_session_id is not None and raw_pos is not None) else idx
             matched_item_id = it.get("matched_item_id")
             item_row = None
             if matched_item_id:
@@ -3221,22 +3277,27 @@ def confirm_ai_extracted(
                 en_text = str(it.get("student_text") or "")
                 normalized = normalize_answer(en_text)
 
-            cur = conn.execute(
-                """
-                INSERT INTO exercise_items(session_id, item_id, position, type, en_text, zh_hint, normalized_answer)
-                VALUES(?,?,?,?,?,?,?)
-                """,
-                (
-                    session_id,
-                    int(item_row["id"]) if item_row else None,
-                    position,
-                    typ,
-                    en_text,
-                    zh_hint,
-                    normalized,
-                ),
-            )
-            exercise_item_id = int(cur.lastrowid)
+            exercise_item_id: int
+            existing_ex = existing_ex_by_pos.get(position) if reuse_session_id is not None else None
+            if existing_ex is not None:
+                exercise_item_id = int(existing_ex["id"])
+            else:
+                cur = conn.execute(
+                    """
+                    INSERT INTO exercise_items(session_id, item_id, position, type, en_text, zh_hint, normalized_answer)
+                    VALUES(?,?,?,?,?,?,?)
+                    """,
+                    (
+                        session_id,
+                        int(item_row["id"]) if item_row else None,
+                        position,
+                        typ,
+                        en_text,
+                        zh_hint,
+                        normalized,
+                    ),
+                )
+                exercise_item_id = int(cur.lastrowid)
 
             is_correct = 1 if bool(it.get("is_correct", True)) else 0
             conn.execute(
@@ -3257,15 +3318,27 @@ def confirm_ai_extracted(
                 ),
             )
 
-            _update_stats(
-                conn,
-                student_id,
-                int(item_row["id"]) if item_row else None,
-                is_correct,
-                submitted_at,
-            )
+            stats_item_id = None
+            if existing_ex is not None and existing_ex["item_id"] is not None:
+                stats_item_id = int(existing_ex["item_id"])
+            elif item_row is not None:
+                stats_item_id = int(item_row["id"])
+
+            _update_stats(conn, student_id, stats_item_id, is_correct, submitted_at)
 
             results.append({"position": position, "is_correct": bool(is_correct)})
+
+        if reuse_session_id is not None:
+            conn.execute(
+                """
+                UPDATE practice_sessions
+                SET status='CORRECTED',
+                    completed_at = COALESCE(completed_at, ?),
+                    corrected_at = ?
+                WHERE id = ?
+                """,
+                (submitted_at, submitted_at, session_id),
+            )
 
     correct = sum(1 for r in results if r["is_correct"])
     total = len(results)
@@ -4217,9 +4290,24 @@ def search_practice_sessions(
             ps.params_json,
             b.name AS base_name,
             (SELECT COUNT(1) FROM exercise_items ei WHERE ei.session_id = ps.id) AS item_count,
-            (SELECT COUNT(1) FROM practice_results pr WHERE pr.session_id = ps.id) AS result_count,
+            (SELECT COUNT(1)
+             FROM practice_results pr
+             WHERE pr.submission_id = (
+                SELECT s2.id
+                FROM submissions s2
+                WHERE s2.session_id = ps.id
+                ORDER BY s2.submitted_at DESC, s2.id DESC
+                LIMIT 1
+             )) AS result_count,
             (SELECT SUM(CASE WHEN pr.is_correct = 1 THEN 1 ELSE 0 END)
-             FROM practice_results pr WHERE pr.session_id = ps.id) AS correct_count,
+             FROM practice_results pr
+             WHERE pr.submission_id = (
+                SELECT s2.id
+                FROM submissions s2
+                WHERE s2.session_id = ps.id
+                ORDER BY s2.submitted_at DESC, s2.id DESC
+                LIMIT 1
+             )) AS correct_count,
             (SELECT GROUP_CONCAT(DISTINCT it.difficulty_tag)
              FROM exercise_items ei
              LEFT JOIN items it ON ei.item_id = it.id
@@ -4458,30 +4546,36 @@ def get_practice_session_detail(session_id: int) -> Dict:
 
         results = conn.execute(
             """
-            SELECT exercise_item_id, answer_raw, is_correct, error_type, created_at
+            SELECT submission_id, exercise_item_id, answer_raw, is_correct, error_type, created_at
             FROM practice_results
             WHERE session_id = ?
-            ORDER BY exercise_item_id ASC, created_at DESC
+            ORDER BY submission_id DESC, exercise_item_id ASC, created_at DESC
             """,
             (session_id,),
         ).fetchall()
         latest_results: Dict[int, Dict[str, Any]] = {}
+        results_by_submission: Dict[int, Dict[int, Dict[str, Any]]] = {}
         for r in results:
-            ex_id = int(r["exercise_item_id"])
+            row = dict(r)
+            sub_id = int(row["submission_id"])
+            ex_id = int(row["exercise_item_id"])
             if ex_id not in latest_results:
-                latest_results[ex_id] = dict(r)
+                latest_results[ex_id] = row
+            sub_map = results_by_submission.setdefault(sub_id, {})
+            if ex_id not in sub_map:
+                sub_map[ex_id] = row
 
-        submission = conn.execute(
+        submissions_rows = conn.execute(
             """
             SELECT id, text_raw, image_path, submitted_at, source
             FROM submissions
             WHERE session_id = ?
             ORDER BY submitted_at DESC, id DESC
-            LIMIT 1
             """,
             (session_id,),
-        ).fetchone()
-        submission_dict = dict(submission) if submission else None
+        ).fetchall()
+        submissions_history = [dict(s) for s in submissions_rows]
+        submission_dict = submissions_history[0] if submissions_history else None
 
     pdf_path = session_dict.get("pdf_path")
     ans_path = session_dict.get("answer_pdf_path")
@@ -4491,6 +4585,31 @@ def get_practice_session_detail(session_id: int) -> Dict:
     raw_items: List[Dict[str, Any]] = []
     bundle_id = None
     bundle_meta = None
+    submissions_payloads: List[Dict[str, Any]] = []
+    for sub in submissions_history:
+        sub_copy = dict(sub)
+        image_path = sub_copy.get("image_path")
+        sub_copy["image_url"] = f"/media/{os.path.basename(image_path)}" if image_path else None
+        sub_copy["raw_items"] = []
+        sub_copy["bundle_id"] = None
+        sub_copy["bundle_meta"] = None
+        if sub_copy.get("text_raw"):
+            try:
+                raw_payload = json.loads(sub_copy["text_raw"])
+                sub_copy["raw_items"] = raw_payload.get("items") or []
+                sub_copy["bundle_id"] = raw_payload.get("bundle_id")
+                sub_copy["bundle_meta"] = raw_payload.get("bundle_meta") or None
+            except Exception:
+                pass
+        if sub_copy.get("bundle_id") and not sub_copy.get("bundle_meta"):
+            sub_copy["bundle_meta"] = _load_ai_bundle_meta(sub_copy["bundle_id"])
+        sub_results = results_by_submission.get(int(sub_copy["id"]), {})
+        sub_copy["results_by_item"] = sub_results
+        sub_total = sum(1 for _ in sub_results.values())
+        sub_correct = sum(1 for v in sub_results.values() if v.get("is_correct"))
+        sub_copy["summary"] = {"total": sub_total, "correct": sub_correct}
+        submissions_payloads.append(sub_copy)
+
     if submission_dict and submission_dict.get("text_raw"):
         try:
             raw_payload = json.loads(submission_dict["text_raw"])
@@ -4504,18 +4623,26 @@ def get_practice_session_detail(session_id: int) -> Dict:
     if bundle_id and not bundle_meta:
         bundle_meta = _load_ai_bundle_meta(bundle_id)
 
-    total_results = sum(1 for _ in latest_results.values())
-    correct_results = sum(1 for v in latest_results.values() if v.get("is_correct"))
+    latest_submission_results = {}
+    if submissions_payloads:
+        latest_submission_results = submissions_payloads[0].get("results_by_item") or {}
+    total_results = sum(1 for _ in latest_submission_results.values()) if latest_submission_results else sum(1 for _ in latest_results.values())
+    correct_results = (
+        sum(1 for v in latest_submission_results.values() if v.get("is_correct"))
+        if latest_submission_results
+        else sum(1 for v in latest_results.values() if v.get("is_correct"))
+    )
 
     return {
         "session": session_dict,
         "items": items_list,
-        "results_by_item": latest_results,
+        "results_by_item": latest_submission_results or latest_results,
         "summary": {"total": total_results, "correct": correct_results},
         "submission": submission_dict,
         "raw_items": raw_items,
         "bundle_id": bundle_id,
         "bundle_meta": bundle_meta,
+        "submissions_history": submissions_payloads,
     }
 
 

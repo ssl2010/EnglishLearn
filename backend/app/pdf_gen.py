@@ -80,6 +80,50 @@ def render_dictation_pdf(
     practice_uuid = practice_uuid or _generate_uuid(session_id)
 
     font_cn = "STSong-Light"
+    font_en = "Helvetica"
+
+    def _is_cjk(ch: str) -> bool:
+        code = ord(ch)
+        return (
+            0x4E00 <= code <= 0x9FFF
+            or 0x3400 <= code <= 0x4DBF
+            or 0x20000 <= code <= 0x2A6DF
+            or 0x2A700 <= code <= 0x2B73F
+            or 0x2B740 <= code <= 0x2B81F
+            or 0x2B820 <= code <= 0x2CEAF
+            or 0xF900 <= code <= 0xFAFF
+        )
+
+    def _text_runs(text: str):
+        if not text:
+            return []
+        runs = []
+        current_font = font_cn if _is_cjk(text[0]) else font_en
+        buf = []
+        for ch in text:
+            font = font_cn if _is_cjk(ch) else font_en
+            if font != current_font and buf:
+                runs.append((current_font, "".join(buf)))
+                buf = []
+            current_font = font
+            buf.append(ch)
+        if buf:
+            runs.append((current_font, "".join(buf)))
+        return runs
+
+    def string_width(text: str, font_size: int) -> float:
+        return sum(pdfmetrics.stringWidth(seg, font, font_size) for font, seg in _text_runs(text))
+
+    def draw_text(x: float, y: float, text: str, font_size: int) -> None:
+        dx = x
+        for font, seg in _text_runs(text):
+            c.setFont(font, font_size)
+            c.drawString(dx, y, seg)
+            dx += pdfmetrics.stringWidth(seg, font, font_size)
+
+    def draw_text_centered(cx: float, y: float, text: str, font_size: int) -> None:
+        w = string_width(text, font_size)
+        draw_text(cx - w / 2, y, text, font_size)
 
     # 页码计数器
     page_number = 1
@@ -93,9 +137,8 @@ def render_dictation_pdf(
         y = height - margin_y
 
         # 左上角：日期（与右上角条码对称）
-        c.setFont(font_cn, 11)
         date_display = f"日期：{date_str}"
-        c.drawString(margin_x, height - 8 * mm, date_display)
+        draw_text(margin_x, height - 8 * mm, date_display, 11)
 
         # 右上角绘制条码和编号（忽略页边距，紧贴页面角落）
         barcode_width = 60 * mm
@@ -108,14 +151,12 @@ def render_dictation_pdf(
         barcode_obj.drawOn(c, barcode_x, barcode_y)
 
         # 条码下方显示编号文字
-        c.setFont(font_cn, 9)
-        c.drawCentredString(barcode_x + barcode_width/2, barcode_y - 4*mm, practice_uuid)
+        draw_text_centered(barcode_x + barcode_width/2, barcode_y - 4*mm, practice_uuid, 9)
 
         if is_first_page:
             # 第一页：显示标题（居中，在日期和条码下方）
             y -= 6 * mm  # 为顶部日期/条码预留空间（减少以压缩）
-            c.setFont(font_cn, 18 if show_answers else 22)
-            c.drawCentredString(width / 2, y, title)
+            draw_text_centered(width / 2, y, title, 18 if show_answers else 22)
             y -= (8 if show_answers else 10) * mm  # 标题后间距
         else:
             # 非首页：为顶部日期/条码预留空间后直接开始内容
@@ -125,8 +166,7 @@ def render_dictation_pdf(
     def draw_footer():
         nonlocal page_number
         # 中间：页码
-        c.setFont(font_cn, 10)
-        c.drawCentredString(width / 2, 12 * mm, f"第 {page_number} 页")
+        draw_text_centered(width / 2, 12 * mm, f"第 {page_number} 页", 10)
         page_number += 1
 
     # 初始化第一页
@@ -157,10 +197,10 @@ def render_dictation_pdf(
         c.line(x0, y0 - 2.5 * mm, x1, y0 - 2.5 * mm)
 
     def truncate_text(text: str, max_width: float, font_size: int) -> str:
-        if c.stringWidth(text, font_cn, font_size) <= max_width:
+        if string_width(text, font_size) <= max_width:
             return text
         trimmed = text
-        while trimmed and c.stringWidth(trimmed + "...", font_cn, font_size) > max_width:
+        while trimmed and string_width(trimmed + "...", font_size) > max_width:
             trimmed = trimmed[:-1]
         return trimmed + "..." if trimmed else ""
 
@@ -170,7 +210,7 @@ def render_dictation_pdf(
         lines: List[str] = []
         buf = ""
         for ch in text:
-            if c.stringWidth(buf + ch, font_cn, font_size) <= max_width:
+            if string_width(buf + ch, font_size) <= max_width:
                 buf += ch
             else:
                 if buf:
@@ -190,8 +230,7 @@ def render_dictation_pdf(
         def draw_section_title(label: str, count: int):
             nonlocal y
             ensure_space(12)
-            c.setFont(font_cn, section_title_size)
-            c.drawString(margin_x, y, f"{label}（{count}题）")
+            draw_text(margin_x, y, f"{label}（{count}题）", section_title_size)
             y -= 6 * mm
 
         def draw_grid(rows: List[ExerciseRow], columns: int, cell_height_mm: float):
@@ -210,15 +249,13 @@ def render_dictation_pdf(
                     row = rows[idx]
                     x = margin_x + col * col_width
                     num_text = f"{idx + 1}."
-                    c.setFont(font_cn, item_size)
-                    c.drawString(x, row_y, num_text)
-                    prefix_w = c.stringWidth(num_text + " ", font_cn, item_size)
+                    draw_text(x, row_y, num_text, item_size)
+                    prefix_w = string_width(num_text + " ", item_size)
                     max_text_width = col_width - prefix_w - 2 * mm
                     answer = truncate_text(row.answer_en, max_text_width, item_size)
-                    c.drawString(x + prefix_w, row_y, answer)
+                    draw_text(x + prefix_w, row_y, answer, item_size)
                     hint = row.zh_hint or "(无提示)"
-                    c.setFont(font_cn, hint_size)
-                    c.drawString(x + prefix_w, row_y - 4.2 * mm, truncate_text(hint, max_text_width, hint_size))
+                    draw_text(x + prefix_w, row_y - 4.2 * mm, truncate_text(hint, max_text_width, hint_size), hint_size)
                 y -= cell_height_mm * mm
 
         def draw_sentence_answers(rows: List[ExerciseRow]):
@@ -228,21 +265,19 @@ def render_dictation_pdf(
             item_gap_mm = 2.5
             for idx, row in enumerate(rows, start=1):
                 prefix = f"{idx}. "
-                c.setFont(font_cn, item_size)
-                prefix_w = c.stringWidth(prefix, font_cn, item_size)
+                prefix_w = string_width(prefix, item_size)
                 max_width = width - 2 * margin_x - prefix_w
                 lines = wrap_text(row.answer_en, max_width, item_size)
                 hint = row.zh_hint or "(无提示)"
                 needed_mm = len(lines) * answer_line_mm + hint_line_mm + item_gap_mm
                 ensure_space(needed_mm)
-                c.drawString(margin_x, y, prefix + lines[0])
+                draw_text(margin_x, y, prefix + lines[0], item_size)
                 y -= answer_line_mm * mm
                 for extra in lines[1:]:
                     ensure_space(answer_line_mm)
-                    c.drawString(margin_x + prefix_w, y, extra)
+                    draw_text(margin_x + prefix_w, y, extra, item_size)
                     y -= answer_line_mm * mm
-                c.setFont(font_cn, hint_size)
-                c.drawString(margin_x + prefix_w, y, hint)
+                draw_text(margin_x + prefix_w, y, hint, hint_size)
                 y -= (hint_line_mm + item_gap_mm) * mm
 
         for key, label in section_order:
@@ -268,24 +303,19 @@ def render_dictation_pdf(
                 continue
 
             ensure_space(20)
-            c.setFont(font_cn, 16)
-            c.drawString(margin_x, y, f"{label}（共 {len(rows)} 题）")
+            draw_text(margin_x, y, f"{label}（共 {len(rows)} 题）", 16)
             y -= 8 * mm  # 章节标题后的间距（减少以压缩）
 
             if key == "WORD":
                 # 单词部分：单列排版（测试两页是否够用）
-                c.setFont(font_cn, 14)
-
                 for idx, row in enumerate(rows, start=1):
                     ensure_space(16)
-                    # 换页后重新设置字体
-                    c.setFont(font_cn, 14)
 
                     prefix = f"{idx}. {row.zh_hint}："
-                    c.drawString(margin_x, y, prefix)
+                    draw_text(margin_x, y, prefix, 14)
 
                     # 答题区域或答案 - 横线到页面中间位置
-                    prefix_width = c.stringWidth(prefix, font_cn, 14)
+                    prefix_width = string_width(prefix, 14)
                     x_ans = margin_x + prefix_width + 2 * mm
                     draw_fill_line(x_ans, y, word_line_end_x)  # 使用单词专用的横线长度
 
@@ -293,29 +323,25 @@ def render_dictation_pdf(
 
             elif key == "PHRASE":
                 # 短语部分：单栏，更大字体和间距
-                c.setFont(font_cn, 14)  # 确保字体设置正确
                 for idx, row in enumerate(rows, start=1):
                     ensure_space(16)  # 减少所需空间
-                    # 换页后重新设置字体（修复换页后字号变小的问题）
-                    c.setFont(font_cn, 14)
 
                     prefix = f"{idx}. {row.zh_hint}："
-                    c.drawString(margin_x, y, prefix)
+                    draw_text(margin_x, y, prefix, 14)
 
                     # 答题区域或答案 - 横线紧挨冒号，结束点统一
-                    prefix_width = c.stringWidth(prefix, font_cn, 14)
+                    prefix_width = string_width(prefix, 14)
                     x_ans = margin_x + prefix_width + 2 * mm
                     draw_fill_line(x_ans, y, line_end_x)
                     y -= 14 * mm  # 短语行间距（略微增加以改善视觉间隔）
 
             else:
                 # 句子部分：只一行横线，横线从题目标号下方开始
-                c.setFont(font_cn, 14)
                 for idx, row in enumerate(rows, start=1):
                     ensure_space(22)  # 减少所需空间
 
                     # 中文提示行
-                    c.drawString(margin_x, y, f"{idx}. {row.zh_hint}")
+                    draw_text(margin_x, y, f"{idx}. {row.zh_hint}", 14)
                     y -= 8 * mm  # 减少横线和中文提示之间的间隔（从10mm减到8mm）
 
                     # 只绘制一条横线，从题目标号下方开始

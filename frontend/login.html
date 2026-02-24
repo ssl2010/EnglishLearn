@@ -40,11 +40,36 @@
   <script>
     const REMEMBER_KEY = 'el_remember_credentials';
 
+    function encodePassword(password){
+      try{
+        const bytes = new TextEncoder().encode(password);
+        let binary = '';
+        bytes.forEach(b => { binary += String.fromCharCode(b); });
+        return btoa(binary);
+      }catch(e){
+        return btoa(password);
+      }
+    }
+
+    function decodePassword(encoded){
+      try{
+        const binary = atob(encoded);
+        const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+        return new TextDecoder().decode(bytes);
+      }catch(e){
+        return atob(encoded);
+      }
+    }
+
     function saveCredentials(username, password){
-      localStorage.setItem(REMEMBER_KEY, JSON.stringify({
-        username,
-        password: btoa(password) // Simple encoding, not secure encryption
-      }));
+      try{
+        localStorage.setItem(REMEMBER_KEY, JSON.stringify({
+          username,
+          password: encodePassword(password) // UTF-8 safe encoding
+        }));
+      }catch(e){
+        // ignore storage failures (e.g. private mode or quota)
+      }
     }
 
     function loadCredentials(){
@@ -54,7 +79,7 @@
           const creds = JSON.parse(data);
           return {
             username: creds.username,
-            password: atob(creds.password)
+            password: decodePassword(creds.password)
           };
         }
       }catch(e){

@@ -93,6 +93,17 @@
   <div class="card" id="gradingSection" style="margin-top:12px;display:none">
     <div class="card-title">批改详情</div>
     <div class="muted" id="gradingSummary"></div>
+    <div id="submissionHistoryBar" style="display:none;margin-top:10px;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="muted">提交记录</span>
+      <select id="submissionSelect" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font-size:13px"></select>
+      <span class="muted" id="submissionMeta"></span>
+    </div>
+
+    <div id="submittedSection" style="margin-top:12px;display:none">
+      <div class="card-title" style="font-size:14px">提交图片</div>
+      <div class="muted" style="margin-bottom:6px">点击缩略图可放大查看</div>
+      <div id="submittedGrid" class="grid"></div>
+    </div>
 
     <div id="gradedSection" style="margin-top:12px;display:none">
       <div class="card-title" style="font-size:14px">批改后图片</div>
@@ -291,6 +302,69 @@ function renderGradedImages(bundleMeta){
   });
 }
 
+function renderSubmittedImages(submission){
+  const submittedSection = document.getElementById('submittedSection');
+  const submittedGrid = document.getElementById('submittedGrid');
+  submittedGrid.innerHTML = '';
+  if(!submission){
+    submittedSection.style.display = 'none';
+    return;
+  }
+
+  const imageUrls = [];
+  const bundleMeta = submission.bundle_meta || null;
+  (bundleMeta && bundleMeta.image_urls ? bundleMeta.image_urls : []).forEach(url=>{
+    if(url) imageUrls.push(url);
+  });
+  if(submission.image_url){
+    imageUrls.push(submission.image_url);
+  }
+
+  const uniq = Array.from(new Set(imageUrls));
+  if(!uniq.length){
+    submittedSection.style.display = 'none';
+    return;
+  }
+  submittedSection.style.display = 'block';
+  uniq.forEach(url=>{
+    const img = document.createElement('img');
+    img.src = url;
+    img.className = 'thumb zoomable';
+    img.alt = '提交图片';
+    submittedGrid.appendChild(img);
+  });
+}
+
+function formatSubmissionLabel(sub, index, total){
+  const t = formatDate(sub.submitted_at);
+  const src = sub.source || 'UNKNOWN';
+  return `第 ${total - index} 次提交 · ${t} · ${src}`;
+}
+
+function applySubmissionView(data, submission){
+  const session = data.session || {};
+  const summary = (submission && submission.summary) || data.summary || {total:0, correct:0};
+  const resultsByItem = (submission && submission.results_by_item) || data.results_by_item || {};
+  const rawItems = (submission && submission.raw_items) || data.raw_items || [];
+  const bundleMeta = (submission && submission.bundle_meta) || data.bundle_meta || null;
+
+  const summaryText = submission
+    ? `本次提交：共 ${summary.total || 0} 题，正确 ${summary.correct || 0} 题`
+    : `共 ${summary.total || 0} 题，正确 ${summary.correct || 0} 题`;
+  document.getElementById('gradingSummary').textContent = summaryText;
+  renderResults(data.items || [], resultsByItem, rawItems, bundleMeta);
+  renderSubmittedImages(submission || null);
+  renderGradedImages(bundleMeta);
+
+  const metaEl = document.getElementById('submissionMeta');
+  if(submission){
+    const submittedAt = submission.submitted_at ? formatDate(submission.submitted_at) : '-';
+    metaEl.textContent = `提交时间：${submittedAt}`;
+  }else{
+    metaEl.textContent = session.corrected_at ? `最近入库时间：${formatDate(session.corrected_at)}` : '';
+  }
+}
+
 async function loadDetail(){
   const params = new URLSearchParams(location.search);
   const sessionId = params.get('session_id');
@@ -392,9 +466,25 @@ async function loadDetail(){
   const gradingSection = document.getElementById('gradingSection');
   if(isCorrected){
     gradingSection.style.display = 'block';
-    document.getElementById('gradingSummary').textContent = `共 ${summary.total || 0} 题，正确 ${summary.correct || 0} 题`;
-    renderResults(data.items || [], data.results_by_item || {}, data.raw_items || [], data.bundle_meta || null);
-    renderGradedImages(data.bundle_meta || null);
+    const submissionsHistory = Array.isArray(data.submissions_history) ? data.submissions_history : [];
+    const historyBar = document.getElementById('submissionHistoryBar');
+    const submissionSelect = document.getElementById('submissionSelect');
+    if(submissionsHistory.length){
+      historyBar.style.display = 'flex';
+      submissionSelect.innerHTML = submissionsHistory.map((sub, idx)=>
+        `<option value="${sub.id}">${formatSubmissionLabel(sub, idx, submissionsHistory.length).replace(/</g,'&lt;')}</option>`
+      ).join('');
+      const applySelected = ()=>{
+        const currentId = Number(submissionSelect.value);
+        const selected = submissionsHistory.find(s => Number(s.id) === currentId) || submissionsHistory[0];
+        applySubmissionView(data, selected);
+      };
+      submissionSelect.onchange = applySelected;
+      applySelected();
+    }else{
+      historyBar.style.display = 'none';
+      applySubmissionView(data, null);
+    }
   }else{
     gradingSection.style.display = 'none';
   }

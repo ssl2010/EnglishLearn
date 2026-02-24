@@ -30,6 +30,8 @@
     .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
     .pager{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px}
     .danger{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca}
+    th.action-col, td.action-col{text-align:center;white-space:nowrap}
+    .action-buttons{display:flex;flex-direction:column;gap:6px;align-items:center}
   </style>
 </head>
 <body>
@@ -76,7 +78,7 @@
             <th>编号</th>
             <th>生成时间</th>
             <th>入库时间</th>
-            <th>操作</th>
+            <th class="action-col">操作</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -227,9 +229,11 @@ function renderSessionList(sessions){
       <td>${s.practice_uuid || '-'}</td>
       <td>${createdTime}</td>
       <td>${s.corrected_at ? formatDateOnly(s.corrected_at) : '-'}</td>
-      <td>
-        <a class="ghost" style="padding:6px 10px;border-radius:8px;border:1px solid #d1d5db;display:inline-block" href="practice-view.html?session_id=${s.id}">查看</a>
-        <button class="ghost danger delete-btn" data-id="${s.id}" style="padding:6px 10px;border-radius:8px;margin-left:6px">删除</button>
+      <td class="action-col">
+        <div class="action-buttons">
+          <a class="ghost" style="padding:6px 10px;border-radius:8px;border:1px solid #d1d5db;display:inline-block" href="practice-view.html?session_id=${s.id}">查看</a>
+          <button class="ghost danger delete-btn" data-id="${s.id}" style="padding:6px 10px;border-radius:8px">删除</button>
+        </div>
       </td>
     `;
     tbody.appendChild(tr);

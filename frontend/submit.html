@@ -734,8 +734,9 @@ async function confirmMarks(forceDuplicate = false, ignoreWarnings = false){
       msg.innerHTML = `
         ⚠️ <strong>检测到重复提交</strong><br>
         ${identifierLabel} ${identifier} 的试卷已经提交过：共 ${r.existing_total} 题，正确 ${r.existing_correct} 题，正确率 ${existingAccuracy}%<br>
+        若继续提交，将作为同一练习单下的新增提交记录保存（便于查看多次练习结果）。<br>
         <div style="margin-top:10px;display:flex;gap:10px">
-          <button onclick="confirmMarks(true, ${ignoreWarnings ? 'true' : 'false'})" style="background:#10b981;padding:8px 16px;border-radius:6px">确认重新提交（学生重做）</button>
+          <button onclick="confirmMarks(true, ${ignoreWarnings ? 'true' : 'false'})" style="background:#10b981;padding:8px 16px;border-radius:6px">继续提交（新增记录）</button>
           <button onclick="document.getElementById('confirmMsg').classList.remove('show')" style="background:#6b7280;padding:8px 16px;border-radius:6px">取消</button>
         </div>
       `;
