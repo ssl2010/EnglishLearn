@@ -1988,13 +1988,19 @@ ensure_media_dir()
 
 # Custom PDF endpoint with proper filename headers
 @app.get("/media/{filepath:path}")
-async def serve_media_file(filepath: str):
+async def serve_media_file(filepath: str, request: Request):
     """Serve media files with proper Content-Disposition headers for PDFs."""
     from fastapi.responses import FileResponse
     from urllib.parse import quote
     import os
     import re
     from .db import db, utcnow_iso
+
+    # NOTE: This catch-all route is declared before the on-demand crop route,
+    # so delegate explicitly to avoid swallowing `/media/crops/on-demand/...`.
+    m_crop = re.match(r"^crops/on-demand/([^/]+)/(\d+)\.jpg$", filepath or "")
+    if m_crop:
+        return await serve_on_demand_crop(m_crop.group(1), int(m_crop.group(2)), request)
 
     file_path = os.path.join(MEDIA_DIR, filepath)
 
