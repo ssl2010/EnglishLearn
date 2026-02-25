@@ -480,17 +480,16 @@ async function uploadPhoto(){
     // Generate crop thumbnail if bbox available
     let cropThumb = '';
     if (it.crop_url) {
-      // Use server-generated crop image (works for both normal and debug mode)
       cropThumb = `<img src="${it.crop_url}" alt="crop" class="zoomable" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
+    } else if (window._analysisBundleId && (it.position || it.position === 0) && (it.handwriting_bbox || it.line_bbox)) {
+      // Prefer server-side on-demand crop (handles EXIF rotation correctly, same as practice-view).
+      cropThumb = `<img src="/media/crops/on-demand/${encodeURIComponent(window._analysisBundleId)}/${encodeURIComponent(it.position)}.jpg" alt="crop" class="zoomable" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
     } else if (it.handwriting_bbox || it.line_bbox) {
-      // Prefer client-side crop in the grading page (works before confirm even if bundle files are disabled).
+      // Fallback: client-side crop when no bundle_id available.
       const bbox = it.handwriting_bbox || it.line_bbox;
       const pageIdx = it.page_index || 1;
       cropThumb = `<img class="crop-thumb" data-pos="${it.position}" data-page="${pageIdx}" data-bbox="${bbox.join(',')}"
                        src="" alt="crop" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
-    } else if (window._analysisBundleId && (it.position || it.position === 0) && (it.handwriting_bbox || it.line_bbox)) {
-      // Fallback: ask server to generate crop dynamically from stored bbox.
-      cropThumb = `<img src="/media/crops/on-demand/${encodeURIComponent(window._analysisBundleId)}/${encodeURIComponent(it.position)}.jpg" alt="crop" class="zoomable" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
     }
 
     // Add page link only if no crop available (unanswered items)
@@ -918,17 +917,16 @@ document.getElementById('debugBtn').addEventListener('click', async ()=>{
 
       let cropThumb = '';
       if (it.crop_url) {
-        // Use server-generated crop image (works for both normal and debug mode)
         cropThumb = `<img src="${it.crop_url}" alt="crop" class="zoomable" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
+      } else if (window._analysisBundleId && (it.position || it.position === 0) && (it.handwriting_bbox || it.line_bbox)) {
+        // Prefer server-side on-demand crop (handles EXIF rotation correctly, same as practice-view).
+        cropThumb = `<img src="/media/crops/on-demand/${encodeURIComponent(window._analysisBundleId)}/${encodeURIComponent(it.position)}.jpg" alt="crop" class="zoomable" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
       } else if (it.handwriting_bbox || it.line_bbox) {
-        // Prefer client-side crop in the grading page (works before confirm even if bundle files are disabled).
+        // Fallback: client-side crop when no bundle_id available.
         const bbox = it.handwriting_bbox || it.line_bbox;
         const pageIdx = it.page_index || 1;
         cropThumb = `<img class="crop-thumb" data-pos="${it.position}" data-page="${pageIdx}" data-bbox="${bbox.join(',')}"
                          src="" alt="crop" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
-      } else if (window._analysisBundleId && (it.position || it.position === 0) && (it.handwriting_bbox || it.line_bbox)) {
-        // Fallback: ask server to generate crop dynamically from stored bbox.
-        cropThumb = `<img src="/media/crops/on-demand/${encodeURIComponent(window._analysisBundleId)}/${encodeURIComponent(it.position)}.jpg" alt="crop" class="zoomable" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
       }
 
       // Add page link only if no crop available (unanswered items)
