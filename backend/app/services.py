@@ -3226,7 +3226,7 @@ def confirm_ai_extracted(
     if not use_items:
         raise ValueError("没有可入库的题目")
     if not bundle_id:
-        raise ValueError("缺少 bundle_id，无法关联并保留本次 AI 识别原始数据")
+        logger.warning("[confirm_ai_extracted] bundle_id missing; AI raw data will not be linked")
 
     # Find canonical session for this worksheet UUID first.
     # Prefer the originally generated worksheet record (non-AI_EXTRACT) when present.
