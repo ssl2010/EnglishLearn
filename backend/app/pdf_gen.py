@@ -92,6 +92,8 @@ def render_dictation_pdf(
             or 0x2B740 <= code <= 0x2B81F
             or 0x2B820 <= code <= 0x2CEAF
             or 0xF900 <= code <= 0xFAFF
+            or 0x3000 <= code <= 0x303F   # CJK punctuation (，。：；…)
+            or 0xFF00 <= code <= 0xFFEF   # Fullwidth forms (！？""''）
         )
 
     def _text_runs(text: str):
@@ -286,9 +288,9 @@ def render_dictation_pdf(
                 continue
             draw_section_title(label, len(rows))
             if key == "WORD":
-                draw_grid(rows, 3, 10)
+                draw_grid(rows, 3, 13)
             elif key == "PHRASE":
-                draw_grid(rows, 2, 11)
+                draw_grid(rows, 2, 14)
             else:
                 draw_sentence_answers(rows)
             y -= section_gap_mm * mm
