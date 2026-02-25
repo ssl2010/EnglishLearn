@@ -2306,8 +2306,10 @@ async def serve_on_demand_crop(bundle_id: str, item_position: int, request: Requ
     meta_path = os.path.join(bundle_dir, "meta.json")
 
     try:
-        meta: Dict[str, object] = {}
-        if os.path.exists(meta_path):
+        # Prefer DB-stored meta (always written); fall back to filesystem bundle.
+        from .services import _load_ai_bundle_meta
+        meta: Dict[str, object] = _load_ai_bundle_meta(bundle_id) or {}
+        if not meta and os.path.exists(meta_path):
             with open(meta_path, "r", encoding="utf-8") as f:
                 meta = json.load(f)
 
