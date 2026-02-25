@@ -24,6 +24,7 @@ Branch: `feat/ai-raw-db-migration`
    - AI source upload path -> DB (`practice_files`)
    - raw bundle writes -> DB-first artifacts
    - keep controlled compatibility mode during transition
+   - Status: **implemented in branch (DB-first default; filesystem compatibility flags retained)**
 
 5. **PR-5 (OCR/LLM DB->tempfile adaptation)**
    - engine adapters accept temp files from `practice_files`
@@ -32,6 +33,7 @@ Branch: `feat/ai-raw-db-migration`
 6. **PR-6 (ID convergence)**
    - practice_uuid-first APIs for detail/submit/correct/view
    - legacy `session_id` routes remain compatibility wrappers
+   - Status: **partially implemented** (key practice detail/submit/correct/delete/regenerate routes added)
 
 7. **PR-7 (historical migration + reports)**
    - `scripts/migrate_raw_to_db.py`
@@ -49,6 +51,9 @@ Branch: `feat/ai-raw-db-migration`
 
 - DB migration rollback is additive (new tables only); old paths remain available
 - Runtime rollout should initially be dual-write before disabling filesystem writes
+- Current branch defaults:
+  - `EL_AI_BUNDLE_SAVE=0` (filesystem AI raw bundle persistence disabled unless explicitly enabled)
+  - `EL_SAVE_AI_UPLOAD_FILES=0` (filesystem AI source uploads disabled unless explicitly enabled)
 - Merge back to `main` only after:
   - migration scripts dry-run + sample live migration
   - new API smoke tests

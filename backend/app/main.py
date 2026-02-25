@@ -63,6 +63,7 @@ from .services import (
     _bbox_to_abs,
 )
 from .practice_storage import (
+    extract_file_uuid_from_url,
     get_latest_ai_artifact,
     get_practice_file_by_uuid,
     list_ai_artifacts,
@@ -1646,6 +1647,22 @@ def api_delete_practice_session(session_id: int, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.delete("/api/practice/{practice_uuid}")
+def api_delete_practice_by_uuid(practice_uuid: str, request: Request):
+    account_id = _require_account_id(request)
+    with db() as conn:
+        session = _assert_practice_uuid_owned(conn, account_id, practice_uuid)
+    try:
+        data = delete_practice_session(int(session["id"]))
+        if isinstance(data, dict):
+            data["practice_uuid"] = practice_uuid
+        return data
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/practice-sessions/by-uuid/{practice_uuid}")
 def api_get_session_by_uuid(practice_uuid: str, request: Request):
     """Query practice session by UUID"""
@@ -1807,7 +1824,24 @@ def api_get_session_detail(session_id: int, request: Request):
     with db() as conn:
         _assert_session_owned(conn, account_id, session_id)
     try:
-        return get_practice_session_detail(session_id)
+        payload = get_practice_session_detail(session_id)
+        if isinstance(payload, dict):
+            payload["deprecated_route"] = True
+        return payload
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/api/practice/{practice_uuid}/detail")
+def api_get_practice_detail_by_uuid(practice_uuid: str, request: Request):
+    account_id = _require_account_id(request)
+    with db() as conn:
+        session = _assert_practice_uuid_owned(conn, account_id, practice_uuid)
+    try:
+        payload = get_practice_session_detail(int(session["id"]))
+        if isinstance(payload, dict):
+            payload["practice_uuid"] = practice_uuid
+        return payload
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -1820,6 +1854,20 @@ def api_regenerate_pdf(session_id: int, request: Request):
         _assert_session_owned(conn, account_id, session_id)
     try:
         return regenerate_practice_pdfs(session_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/api/practice/{practice_uuid}/regenerate-pdf")
+def api_regenerate_pdf_by_uuid(practice_uuid: str, request: Request):
+    account_id = _require_account_id(request)
+    with db() as conn:
+        session = _assert_practice_uuid_owned(conn, account_id, practice_uuid)
+    try:
+        data = regenerate_practice_pdfs(int(session["id"]))
+        if isinstance(data, dict):
+            data["practice_uuid"] = practice_uuid
+        return data
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -1903,7 +1951,21 @@ def api_submit_image(session_id: int, request: Request, file: UploadFile = File(
     account_id = _require_account_id(request)
     with db() as conn:
         _assert_session_owned(conn, account_id, session_id)
-    return upload_submission_image(session_id, file)
+    try:
+        return upload_submission_image(session_id, file)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/practice/{practice_uuid}/submit-image")
+def api_submit_image_by_uuid(practice_uuid: str, request: Request, file: UploadFile = File(...)):
+    account_id = _require_account_id(request)
+    with db() as conn:
+        session = _assert_practice_uuid_owned(conn, account_id, practice_uuid)
+    try:
+        return upload_submission_image(int(session["id"]), file)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 
@@ -1921,6 +1983,26 @@ def api_submit_marked_photo(
         _assert_session_owned(conn, account_id, session_id)
     return upload_marked_submission_image(
         session_id,
+        files,
+        account_id,
+        confirm_mismatch=confirm_mismatch,
+        allow_external=allow_external,
+    )
+
+
+@app.post("/api/practice/{practice_uuid}/submit-marked-photo")
+def api_submit_marked_photo_by_uuid(
+    practice_uuid: str,
+    request: Request,
+    files: List[UploadFile] = File(...),
+    confirm_mismatch: bool = False,
+    allow_external: bool = False,
+):
+    account_id = _require_account_id(request)
+    with db() as conn:
+        session = _assert_practice_uuid_owned(conn, account_id, practice_uuid)
+    return upload_marked_submission_image(
+        int(session["id"]),
         files,
         account_id,
         confirm_mismatch=confirm_mismatch,
@@ -1976,15 +2058,18 @@ def api_ai_confirm_extracted(req: AIConfirmReq, request: Request):
         _assert_student_owned(conn, account_id, req.student_id)
         _assert_base_access(conn, account_id, req.base_id)
     items = [it.model_dump() for it in req.items]
-    return confirm_ai_extracted(
-        req.student_id,
-        req.base_id,
-        items,
-        req.extracted_date,
-        req.worksheet_uuid,
-        req.force_duplicate,
-        req.bundle_id,
-    )
+    try:
+        return confirm_ai_extracted(
+            req.student_id,
+            req.base_id,
+            items,
+            req.extracted_date,
+            req.worksheet_uuid,
+            req.force_duplicate,
+            req.bundle_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 class ConfirmMarksReq(BaseModel):
@@ -2009,6 +2094,14 @@ def api_manual_correct(session_id: int, req: ManualCorrectReq, request: Request)
     with db() as conn:
         _assert_session_owned(conn, account_id, session_id)
     return manual_correct_session(session_id, req.answers)
+
+
+@app.post("/api/practice/{practice_uuid}/manual-correct")
+def api_manual_correct_by_uuid(practice_uuid: str, req: ManualCorrectReq, request: Request):
+    account_id = _require_account_id(request)
+    with db() as conn:
+        session = _assert_practice_uuid_owned(conn, account_id, practice_uuid)
+    return manual_correct_session(int(session["id"]), req.answers)
 
 
 @app.get("/api/dashboard")
@@ -2193,6 +2286,22 @@ async def serve_on_demand_crop(bundle_id: str, item_position: int, request: Requ
             return None
         return path
 
+    def _load_image_bytes_from_url(url: str) -> Optional[bytes]:
+        file_uuid = extract_file_uuid_from_url(url)
+        if file_uuid:
+            row = get_practice_file_by_uuid(file_uuid)
+            if not row:
+                return None
+            with db() as conn:
+                _assert_practice_uuid_owned(conn, account_id, str(row["practice_uuid"]))
+            blob = row.get("content_blob")
+            return bytes(blob) if blob is not None else None
+        img_path = _media_url_to_path(url)
+        if not img_path or not os.path.exists(img_path):
+            return None
+        with open(img_path, "rb") as f:
+            return f.read()
+
     bundle_dir = os.path.join(MEDIA_DIR, "uploads", "ai_bundles", bundle_id)
     meta_path = os.path.join(bundle_dir, "meta.json")
 
@@ -2293,22 +2402,21 @@ async def serve_on_demand_crop(bundle_id: str, item_position: int, request: Requ
                                 page_index = 1
                             page_idx0 = max(0, page_index - 1)
                             if page_idx0 < len(image_urls):
-                                img_path = _media_url_to_path(image_urls[page_idx0])
-                                if img_path and os.path.exists(img_path):
-                                    with open(img_path, "rb") as f:
-                                        img = Image.open(io.BytesIO(f.read()))
-                                        img = ImageOps.exif_transpose(img).convert("RGB")
-                                        abs_bbox = _bbox_to_abs(src_bbox, img.size[0], img.size[1])
-                                        if abs_bbox:
-                                            left, top, right, bottom = abs_bbox
-                                            crop_item = {
-                                                "position": item_position,
-                                                "page_index": page_index,
-                                                "left": left,
-                                                "top": top,
-                                                "right": right,
-                                                "bottom": bottom,
-                                            }
+                                img_bytes = _load_image_bytes_from_url(image_urls[page_idx0])
+                                if img_bytes:
+                                    img = Image.open(io.BytesIO(img_bytes))
+                                    img = ImageOps.exif_transpose(img).convert("RGB")
+                                    abs_bbox = _bbox_to_abs(src_bbox, img.size[0], img.size[1])
+                                    if abs_bbox:
+                                        left, top, right, bottom = abs_bbox
+                                        crop_item = {
+                                            "position": item_position,
+                                            "page_index": page_index,
+                                            "left": left,
+                                            "top": top,
+                                            "right": right,
+                                            "bottom": bottom,
+                                        }
 
         if crop_item is None:
             raise HTTPException(status_code=404, detail="Crop bbox not found")
@@ -2319,13 +2427,12 @@ async def serve_on_demand_crop(bundle_id: str, item_position: int, request: Requ
         page_idx0 = max(0, page_index - 1)
         if page_idx0 >= len(image_urls):
             raise HTTPException(status_code=404, detail="Source page index out of range")
-        img_path = _media_url_to_path(image_urls[page_idx0])
-        if not img_path or not os.path.exists(img_path):
+        img_bytes = _load_image_bytes_from_url(image_urls[page_idx0])
+        if not img_bytes:
             raise HTTPException(status_code=404, detail="Source image file not found")
 
-        with open(img_path, "rb") as f:
-            img = Image.open(io.BytesIO(f.read()))
-            img = ImageOps.exif_transpose(img).convert("RGB")
+        img = Image.open(io.BytesIO(img_bytes))
+        img = ImageOps.exif_transpose(img).convert("RGB")
 
         left = int(crop_item.get("left"))
         top = int(crop_item.get("top"))

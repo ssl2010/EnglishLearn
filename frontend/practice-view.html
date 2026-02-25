@@ -436,9 +436,10 @@ function findPreferredSubmission(submissionsHistory){
 async function loadDetail(){
   const params = new URLSearchParams(location.search);
   const sessionId = params.get('session_id');
+  const practiceUuid = params.get('practice_uuid');
   const previewEmpty = document.getElementById('previewEmpty');
-  if(!sessionId){
-    previewEmpty.textContent = '缺少 session_id 参数';
+  if(!sessionId && !practiceUuid){
+    previewEmpty.textContent = '缺少 practice_uuid 或 session_id 参数';
     return;
   }
 
@@ -446,7 +447,10 @@ async function loadDetail(){
   if(!cfg){ location.href = '/'; }
 
   previewEmpty.textContent = '加载中...';
-  const data = await api(`/api/practice-sessions/${sessionId}/detail`);
+  const detailUrl = practiceUuid
+    ? `/api/practice/${encodeURIComponent(practiceUuid)}/detail`
+    : `/api/practice-sessions/${sessionId}/detail`;
+  const data = await api(detailUrl);
 
   const session = data.session || {};
   document.getElementById('ctx').textContent = `孩子：${cfg.student_name || cfg.student_id}｜资料库：${session.base_display || session.base_name || session.base_id || '-'}`;
@@ -499,8 +503,11 @@ async function loadDetail(){
   regenBtn.addEventListener('click', async ()=>{
     regenBtn.disabled = true;
     try{
-      await api(`/api/practice-sessions/${sessionId}/regenerate-pdf`, {method:'POST'});
-      const refreshed = await api(`/api/practice-sessions/${sessionId}/detail`);
+      const regenUrl = practiceUuid
+        ? `/api/practice/${encodeURIComponent(practiceUuid)}/regenerate-pdf`
+        : `/api/practice-sessions/${sessionId}/regenerate-pdf`;
+      await api(regenUrl, {method:'POST'});
+      const refreshed = await api(detailUrl);
       session.pdf_url = refreshed.session.pdf_url;
       session.answer_pdf_url = refreshed.session.answer_pdf_url;
       loadDetail();

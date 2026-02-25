@@ -39,15 +39,22 @@ Generated on branch `feat/ai-raw-db-migration` for the DB raw/file storage refac
 - Debug overwrite path:
   - `MEDIA_DIR/uploads/debug_last/` via `_save_debug_bundle(...)`
 
-## 5. ID flow hotspots (to refactor)
+## 5. ID flow hotspots and necessity analysis
 
-- `session_id` still dominates route handlers and relational joins
-- `practice_uuid` already exists and is queryable (`/api/practice-sessions/by-uuid/{practice_uuid}`)
-- `bundle_id` is still required for:
-  - linking a specific AI analysis result (raw/meta/images) to a submission
-  - pre-confirm flows where `practice_uuid` may be missing or unresolved
+- `practice_uuid` (business-global ID)
+  - Should be the primary ID for frontend routes, APIs, logs, and migration scripts
+  - Stable across repeated submissions of the same worksheet
+  - Already present in `practice_sessions.practice_uuid`, but not yet unique-constrained in DB
+- `session_id` (internal relational PK)
+  - Still necessary internally because core tables (`exercise_items`, `submissions`, `practice_results`) are joined by `session_id`
+  - Removing it would require large schema rewrites and data backfill across multiple tables
+  - Refactor direction: keep as internal PK, expose `practice_uuid` in public APIs and use wrappers for legacy routes
+- `bundle_id` (AI analysis transaction ID)
+  - Necessary before confirm/in库阶段 to identify one specific AI analysis run (raw/meta/source images)
+  - One `practice_uuid` can have multiple AI analyses/submissions; `bundle_id` distinguishes each analysis snapshot
+  - Refactor direction: keep `bundle_id` as per-analysis ID, but persist artifacts/files under `practice_uuid` and map by `bundle_id`
 
-## 6. Initial refactor actions completed in this branch
+## 6. Refactor actions completed in this branch (current)
 
 - Added DB tables (schema + migration) for:
   - `practice_ai_artifacts`
@@ -55,10 +62,15 @@ Generated on branch `feat/ai-raw-db-migration` for the DB raw/file storage refac
 - Added DAO/service module `backend/app/practice_storage.py`
 - Added practice_uuid-driven APIs for files/artifacts in `backend/app/main.py`
 - Added best-effort dual-write of AI raw (`llm_raw`/`ocr_raw`) into DB in `analyze_ai_photos*()`
+- Added DB-first bundle meta lookup (`bundle_id -> practice_ai_artifacts`) with filesystem fallback
+- Switched AI source image persistence in `analyze_ai_photos()` to DB-first (`practice_files`) by default
+- Switched manual submit image upload (`upload_submission_image`) to DB blob storage (`practice_files`)
+- Added `practice_uuid` wrappers for detail / regenerate-pdf / submit-image / submit-marked-photo / manual-correct / delete
+- Updated frontend `practice-view`/`practice`/`dashboard` to prefer `practice_uuid`
 
 ## 7. Remaining major work (not yet complete)
 
-- Replace existing upload image filesystem writes with DB-first storage (`practice_files`)
-- Replace filesystem raw bundle dependency in all readers with DB-first artifacts retrieval
-- Full `practice_uuid` route convergence across legacy `session_id` flows
-- Historical migration execution and validation
+- Convert AI debug raw bundle persistence (`debug_last`) from persistent project directory to temp/retention-safe workflow (if strict debug-mode policy is required)
+- Decide whether to add a UNIQUE constraint for `practice_sessions.practice_uuid` after auditing historical duplicates
+- Extend DB-backed storage to more media types (e.g., graded images) if desired
+- Execute historical migration scripts and validate on production-like data

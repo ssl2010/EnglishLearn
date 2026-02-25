@@ -28,6 +28,29 @@ def _sha256_hex(content: Optional[str] = None, raw_bytes: Optional[bytes] = None
     return h.hexdigest()
 
 
+def build_practice_file_url(file_uuid: str) -> str:
+    return f"/api/files/{file_uuid}"
+
+
+def extract_file_uuid_from_url(url: Optional[str]) -> Optional[str]:
+    if not isinstance(url, str):
+        return None
+    prefix = "/api/files/"
+    if not url.startswith(prefix):
+        return None
+    file_uuid = url[len(prefix):].strip()
+    return file_uuid or None
+
+
+def _parse_json_maybe(value: Optional[str]) -> Optional[Any]:
+    if not value:
+        return None
+    try:
+        return json.loads(value)
+    except Exception:
+        return None
+
+
 def save_ai_artifact(
     practice_uuid: str,
     engine: str,
@@ -161,7 +184,7 @@ def list_practice_files(practice_uuid: str, kind: Optional[str] = None) -> List[
             item["meta_json"] = json.loads(item["meta_json"]) if item.get("meta_json") else None
         except Exception:
             pass
-        item["download_url"] = f"/api/files/{item['file_uuid']}"
+        item["download_url"] = build_practice_file_url(str(item["file_uuid"]))
         out.append(item)
     return out
 
@@ -185,6 +208,73 @@ def get_practice_file_by_uuid(file_uuid: str) -> Optional[Dict[str, Any]]:
     except Exception:
         pass
     return item
+
+
+def get_ai_artifact_by_source_path(
+    source_path: str,
+    *,
+    engine: Optional[str] = None,
+    stage: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    if not source_path:
+        return None
+    sql = """
+        SELECT id, practice_uuid, engine, stage, content_type,
+               content_text, content_json, meta_json, source_path, sha256,
+               created_at, updated_at
+        FROM practice_ai_artifacts
+        WHERE source_path = ?
+    """
+    args: List[Any] = [source_path]
+    if engine:
+        sql += " AND engine = ?"
+        args.append(engine)
+    if stage:
+        sql += " AND stage = ?"
+        args.append(stage)
+    sql += " ORDER BY created_at DESC, id DESC LIMIT 1"
+    with db() as conn:
+        row = conn.execute(sql, tuple(args)).fetchone()
+    if not row:
+        return None
+    item = dict(row)
+    item["content_json"] = _parse_json_maybe(item.get("content_json"))
+    item["meta_json"] = _parse_json_maybe(item.get("meta_json"))
+    return item
+
+
+def get_ai_bundle_meta_by_bundle_id(bundle_id: str) -> Optional[Dict[str, Any]]:
+    row = get_ai_artifact_by_source_path(
+        f"bundle:{bundle_id}:meta",
+        engine="fusion",
+        stage="final",
+    )
+    if not row:
+        return None
+    content_json = row.get("content_json")
+    return content_json if isinstance(content_json, dict) else None
+
+
+def save_ai_bundle_meta_to_db(
+    practice_uuid: str,
+    bundle_id: str,
+    meta_payload: Dict[str, Any],
+    *,
+    mode: str,
+    source_tag: Optional[str] = None,
+) -> int:
+    meta_info = {"bundle_id": bundle_id, "mode": mode}
+    if source_tag:
+        meta_info["source_tag"] = source_tag
+    return save_ai_artifact(
+        practice_uuid=practice_uuid,
+        engine="fusion",
+        stage="final",
+        content_type="application/json",
+        raw_json=meta_payload,
+        meta=meta_info,
+        source_path=f"bundle:{bundle_id}:meta",
+    )
 
 
 def list_ai_artifacts(
@@ -243,9 +333,11 @@ def save_ai_bundle_raw_to_db(
     ocr_raw: Optional[Dict[str, Any]],
     meta: Optional[Dict[str, Any]] = None,
     source_tag: Optional[str] = None,
+    bundle_id: Optional[str] = None,
 ) -> Dict[str, int]:
     """Best-effort helper to store LLM/OCR raw in DB while preserving existing pipeline."""
     inserted = 0
+    bundle_meta = {"source_tag": source_tag, **(meta or {})}
     if llm_raw is not None:
         save_ai_artifact(
             practice_uuid=practice_uuid,
@@ -253,7 +345,8 @@ def save_ai_bundle_raw_to_db(
             stage="response",
             content_type="application/json",
             raw_json=llm_raw,
-            meta={"source_tag": source_tag, **(meta or {})},
+            meta=bundle_meta,
+            source_path=(f"bundle:{bundle_id}:llm_raw.json" if bundle_id else None),
         )
         inserted += 1
     if ocr_raw is not None:
@@ -263,8 +356,25 @@ def save_ai_bundle_raw_to_db(
             stage="response",
             content_type="application/json",
             raw_json=ocr_raw,
-            meta={"source_tag": source_tag, **(meta or {})},
+            meta=bundle_meta,
+            source_path=(f"bundle:{bundle_id}:ocr_raw.json" if bundle_id else None),
         )
         inserted += 1
     return {"inserted": inserted}
 
+
+def delete_practice_storage(practice_uuid: str) -> Dict[str, int]:
+    if not practice_uuid:
+        return {"files_deleted": 0, "artifacts_deleted": 0}
+    with db() as conn:
+        files_deleted = int(
+            conn.execute("SELECT COUNT(1) AS c FROM practice_files WHERE practice_uuid = ?", (practice_uuid,)).fetchone()["c"]
+            or 0
+        )
+        artifacts_deleted = int(
+            conn.execute("SELECT COUNT(1) AS c FROM practice_ai_artifacts WHERE practice_uuid = ?", (practice_uuid,)).fetchone()["c"]
+            or 0
+        )
+        conn.execute("DELETE FROM practice_files WHERE practice_uuid = ?", (practice_uuid,))
+        conn.execute("DELETE FROM practice_ai_artifacts WHERE practice_uuid = ?", (practice_uuid,))
+    return {"files_deleted": files_deleted, "artifacts_deleted": artifacts_deleted}
