@@ -206,6 +206,7 @@ async function searchSessions(page){
   renderPager(total, pageNum);
   listHint.textContent = `共 ${total} 条结果`;
   currentPage = pageNum;
+  saveListState();
   return data;
 }
 
@@ -269,6 +270,17 @@ function renderSessionList(sessions){
   });
 }
 
+function saveListState(){
+  sessionStorage.setItem('practice_list_state', JSON.stringify({
+    filters: lastFilters,
+    page: currentPage,
+    start: document.getElementById('startDate').value,
+    end: document.getElementById('endDate').value,
+    uuid: document.getElementById('uuidInput').value,
+    keyword: document.getElementById('keywordInput').value,
+  }));
+}
+
 document.getElementById('searchBtn').addEventListener('click', ()=>{
   lastFilters = getFilters();
   searchSessions(1);
@@ -291,7 +303,25 @@ document.getElementById('resetBtn').addEventListener('click', ()=>{
   document.getElementById('pager').style.display = 'none';
   lastFilters = null;
   currentPage = 1;
+  sessionStorage.removeItem('practice_list_state');
 });
+
+// Restore previous search state when returning from practice-view
+(function(){
+  const saved = sessionStorage.getItem('practice_list_state');
+  if(!saved) return;
+  try{
+    const s = JSON.parse(saved);
+    if(s.start) document.getElementById('startDate').value = s.start;
+    if(s.end) document.getElementById('endDate').value = s.end;
+    if(s.uuid) document.getElementById('uuidInput').value = s.uuid;
+    if(s.keyword) document.getElementById('keywordInput').value = s.keyword;
+    if(s.filters){
+      lastFilters = s.filters;
+      searchSessions(s.page || 1);
+    }
+  }catch(e){}
+})();
 </script>
 </body>
 </html>
