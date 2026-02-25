@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import io
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -8,7 +9,7 @@ from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request, Form
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -60,6 +61,13 @@ from .services import (
     MEDIA_DIR,
     ensure_media_dir,
     _bbox_to_abs,
+)
+from .practice_storage import (
+    get_latest_ai_artifact,
+    get_practice_file_by_uuid,
+    list_ai_artifacts,
+    list_practice_files,
+    save_practice_file,
 )
 
 # Import backup router
@@ -155,6 +163,24 @@ def _assert_session_owned(conn, account_id: int, session_id: int) -> Dict:
         WHERE ps.id = ? AND s.account_id = ?
         """,
         (session_id, account_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Practice session not found")
+    return row_to_dict(row)
+
+
+def _assert_practice_uuid_owned(conn, account_id: int, practice_uuid: str) -> Dict:
+    row = qone(
+        conn,
+        """
+        SELECT ps.*
+        FROM practice_sessions ps
+        JOIN students s ON ps.student_id = s.id
+        WHERE ps.practice_uuid = ? AND s.account_id = ?
+        ORDER BY ps.id DESC
+        LIMIT 1
+        """,
+        (practice_uuid, account_id),
     )
     if not row:
         raise HTTPException(status_code=404, detail="Practice session not found")
@@ -1679,6 +1705,99 @@ def api_get_session_by_uuid(practice_uuid: str, request: Request):
         session_dict["items"] = [dict(item) for item in items]
 
     return session_dict
+
+
+@app.post("/api/practice/{practice_uuid}/files")
+async def api_practice_file_upload(
+    practice_uuid: str,
+    request: Request,
+    file: UploadFile = File(...),
+    kind: str = Form("upload_image"),
+):
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_practice_uuid_owned(conn, account_id, practice_uuid)
+    content = await file.read()
+    meta = {"source": "api_practice_uuid_upload"}
+    result = save_practice_file(
+        practice_uuid=practice_uuid,
+        file_bytes=content,
+        mime_type=file.content_type or "",
+        original_filename=file.filename,
+        kind=kind or "upload_image",
+        meta=meta,
+    )
+    return result
+
+
+@app.get("/api/practice/{practice_uuid}/files")
+def api_practice_files_list(
+    practice_uuid: str,
+    request: Request,
+    kind: Optional[str] = None,
+):
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_practice_uuid_owned(conn, account_id, practice_uuid)
+    return list_practice_files(practice_uuid, kind=kind)
+
+
+@app.get("/api/files/{file_uuid}")
+def api_practice_file_download(file_uuid: str, request: Request):
+    account_id = _require_account_id(request)
+    row = get_practice_file_by_uuid(file_uuid)
+    if not row:
+        raise HTTPException(status_code=404, detail="File not found")
+    with db() as conn:
+        _assert_practice_uuid_owned(conn, account_id, str(row["practice_uuid"]))
+    filename = row.get("original_filename") or f"{file_uuid}"
+    headers = {"Content-Disposition": f"inline; filename=\"{filename}\""}
+    return StreamingResponse(
+        io.BytesIO(row["content_blob"]),
+        media_type=row.get("mime_type") or "application/octet-stream",
+        headers=headers,
+    )
+
+
+@app.get("/api/practice/{practice_uuid}/artifacts")
+def api_practice_artifacts_list(
+    practice_uuid: str,
+    request: Request,
+    engine: Optional[str] = None,
+    stage: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+    include_content: bool = False,
+):
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_practice_uuid_owned(conn, account_id, practice_uuid)
+    rows = list_ai_artifacts(practice_uuid, engine=engine, stage=stage, limit=limit, offset=offset)
+    if not include_content:
+        for row in rows:
+            row.pop("content_text", None)
+            row.pop("content_json", None)
+    return rows
+
+
+@app.get("/api/practice/{practice_uuid}/artifacts/latest")
+def api_practice_artifact_latest(
+    practice_uuid: str,
+    request: Request,
+    engine: Optional[str] = None,
+    stage: Optional[str] = None,
+    include_content: bool = True,
+):
+    account_id = _require_account_id(request)
+    with db() as conn:
+        _assert_practice_uuid_owned(conn, account_id, practice_uuid)
+    row = get_latest_ai_artifact(practice_uuid, engine=engine, stage=stage)
+    if not row:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    if not include_content:
+        row.pop("content_text", None)
+        row.pop("content_json", None)
+    return row
 
 
 @app.get("/api/practice-sessions/{session_id}/detail")

@@ -16,6 +16,7 @@ from .pdf_gen import ExerciseRow, render_dictation_pdf
 from PIL import Image, ImageOps, ImageDraw, ImageFont, ImageStat
 from fastapi import UploadFile
 from .baidu_ocr import recognize_edu_test
+from .practice_storage import save_ai_bundle_raw_to_db
 import numpy as np
 
 
@@ -2181,6 +2182,17 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
         logger.info(f"[AI GRADING DEBUG] Extracted UUID: {uuid_info['uuid']} (conf={uuid_info['confidence']:.2f}, consistent={uuid_info['consistent']})")
 
     bundle_id = f"debug_{uuid.uuid4().hex}"
+    if uuid_info.get("uuid"):
+        try:
+            save_ai_bundle_raw_to_db(
+                practice_uuid=str(uuid_info["uuid"]),
+                llm_raw=llm_raw or {},
+                ocr_raw=ocr_raw or {},
+                meta={"bundle_id": bundle_id, "mode": "debug"},
+                source_tag="debug",
+            )
+        except Exception as e:
+            logger.warning(f"[AI GRADING DEBUG] Failed to save raw to DB: {e}")
     if os.environ.get("EL_AI_BUNDLE_SAVE", "1") == "1":
         _save_ai_bundle(bundle_id, llm_raw or {}, ocr_raw or {}, [], graded_image_urls, items)
     return {
@@ -3084,6 +3096,17 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
 
     image_urls = [f"/media/uploads/{os.path.basename(p)}" for p in saved_paths]
     bundle_id = f"ai_{uuid.uuid4().hex}"
+    if uuid_info.get("uuid"):
+        try:
+            save_ai_bundle_raw_to_db(
+                practice_uuid=str(uuid_info["uuid"]),
+                llm_raw=llm_raw or {},
+                ocr_raw=ocr_raw or {},
+                meta={"bundle_id": bundle_id, "mode": "normal", "image_count": len(image_urls)},
+                source_tag="analyze_ai_photos",
+            )
+        except Exception as e:
+            logger.warning(f"[AI GRADING] Failed to save raw to DB: {e}")
     if os.environ.get("EL_AI_BUNDLE_SAVE", "1") == "1":
         _save_ai_bundle(bundle_id, llm_raw or {}, ocr_raw or {}, image_urls, graded_image_urls, items)
     return {
