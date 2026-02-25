@@ -4481,7 +4481,11 @@ def search_practice_sessions(
              LEFT JOIN items it ON ei.item_id = it.id
              WHERE ei.session_id = ps.id) AS difficulty_tags
     """ + base_sql + """
-        ORDER BY COALESCE(ps.created_date, substr(ps.created_at, 1, 10)) DESC, ps.id DESC
+        ORDER BY
+            CASE WHEN ps.status != 'CORRECTED' THEN 0 ELSE 1 END,
+            COALESCE(ps.created_date, substr(ps.created_at, 1, 10)) DESC,
+            ps.corrected_at DESC,
+            ps.id DESC
         LIMIT ? OFFSET ?
     """
     params_with_limit = params + [int(limit), int(offset)]
