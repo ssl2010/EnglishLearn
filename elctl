@@ -429,7 +429,12 @@ upgrade_system() {
   if [[ "${SKIP_MIGRATION:-}" != "1" ]]; then
     log_info "执行数据库迁移..."
     if [[ -f "$APP_DIR/backend/migration_manager.py" ]]; then
-      DATABASE_URL="$DB_PATH" "$PYTHON_BIN" "$APP_DIR/backend/migration_manager.py" migrate || log_warn "迁移失败，继续..."
+      if ! DATABASE_URL="$DB_PATH" "$PYTHON_BIN" "$APP_DIR/backend/migration_manager.py" migrate; then
+        echo -e "\033[0;31m[ERROR] 数据库迁移失败，升级已中止。请检查数据库路径或手动执行迁移。\033[0m" >&2
+        log_info "启动服务..."
+        start_service
+        exit 1
+      fi
     fi
   fi
 
@@ -581,7 +586,7 @@ restore_data() {
   # 运行数据库迁移（支持从旧版本恢复）
   if [[ -f "$APP_DIR/backend/migration_manager.py" ]]; then
     log_info "检查数据库迁移..."
-    DATABASE_URL="$DB_PATH" "$PYTHON_BIN" "$APP_DIR/backend/migration_manager.py" migrate || log_warn "迁移失败"
+    DATABASE_URL="$DB_PATH" "$PYTHON_BIN" "$APP_DIR/backend/migration_manager.py" migrate || echo -e "\033[0;31m[WARN] 迁移失败，请手动检查数据库\033[0m" >&2
   fi
 
   start_service

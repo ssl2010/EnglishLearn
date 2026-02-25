@@ -270,8 +270,9 @@ class MigrationManager:
 
 def main():
     """命令行入口"""
-    # 默认数据库路径 - 修正路径
-    db_path = os.path.join(os.path.dirname(__file__), "el.db")
+    # 默认数据库路径：部署环境为 APP_DIR/data/el.db，调试环境为 backend/el.db
+    app_dir = os.path.dirname(os.path.dirname(__file__))
+    db_path = os.path.join(app_dir, "data", "el.db")
 
     # 从环境变量读取
     if 'DATABASE_URL' in os.environ:
@@ -280,12 +281,14 @@ def main():
             db_path = db_url.replace('sqlite:///', '')
         else:
             db_path = db_url
+    elif 'EL_DB_PATH' in os.environ:
+        db_path = os.environ['EL_DB_PATH']
 
-    # 如果数据库不存在，检查 data 目录
+    # 如果数据库不存在，回退到 backend/el.db（调试环境）
     if not os.path.exists(db_path):
-        data_db_path = os.path.join(os.path.dirname(__file__), "data", "el.db")
-        if os.path.exists(data_db_path):
-            db_path = data_db_path
+        debug_db_path = os.path.join(os.path.dirname(__file__), "el.db")
+        if os.path.exists(debug_db_path):
+            db_path = debug_db_path
 
     if not os.path.exists(db_path):
         print(f"❌ 数据库文件不存在: {db_path}")
