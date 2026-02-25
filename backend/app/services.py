@@ -16,6 +16,14 @@ from .pdf_gen import ExerciseRow, render_dictation_pdf
 from PIL import Image, ImageOps, ImageDraw, ImageFont, ImageStat
 from fastapi import UploadFile
 from .baidu_ocr import recognize_edu_test
+from .practice_storage import (
+    build_practice_file_url,
+    delete_practice_storage,
+    get_ai_bundle_meta_by_bundle_id,
+    save_ai_bundle_meta_to_db,
+    save_ai_bundle_raw_to_db,
+    save_practice_file,
+)
 import numpy as np
 
 
@@ -1109,42 +1117,53 @@ def _save_ai_bundle(
     with open(os.path.join(base_dir, "ocr_raw.json"), "w", encoding="utf-8") as f:
         json.dump(_extract_ocr_raw(ocr_result), f, ensure_ascii=False, indent=2)
     with open(os.path.join(base_dir, "meta.json"), "w", encoding="utf-8") as f:
-        crop_items: List[Dict[str, Any]] = []
-        for it in (items or []):
-            if not isinstance(it, dict):
-                continue
-            crop_bbox = it.get("crop_bbox")
-            if not isinstance(crop_bbox, dict):
-                continue
-            try:
-                crop_items.append(
-                    {
-                        "position": int(it.get("position")),
-                        "page_index": int(crop_bbox.get("page_index") or it.get("page_index") or 1),
-                        "left": int(crop_bbox.get("left")),
-                        "top": int(crop_bbox.get("top")),
-                        "right": int(crop_bbox.get("right")),
-                        "bottom": int(crop_bbox.get("bottom")),
-                    }
-                )
-            except Exception:
-                continue
         json.dump(
-            {
-                "saved_at": utcnow_iso(),
-                "image_urls": image_urls or [],
-                "graded_image_urls": graded_image_urls or [],
-                "crop_items": crop_items,
-            },
+            _build_ai_bundle_meta_payload(image_urls or [], graded_image_urls or [], items),
             f,
             ensure_ascii=False,
             indent=2,
         )
 
 
+def _build_ai_bundle_meta_payload(
+    image_urls: List[str],
+    graded_image_urls: List[str],
+    items: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    crop_items: List[Dict[str, Any]] = []
+    for it in (items or []):
+        if not isinstance(it, dict):
+            continue
+        crop_bbox = it.get("crop_bbox")
+        if not isinstance(crop_bbox, dict):
+            continue
+        try:
+            crop_items.append(
+                {
+                    "position": int(it.get("position")),
+                    "page_index": int(crop_bbox.get("page_index") or it.get("page_index") or 1),
+                    "left": int(crop_bbox.get("left")),
+                    "top": int(crop_bbox.get("top")),
+                    "right": int(crop_bbox.get("right")),
+                    "bottom": int(crop_bbox.get("bottom")),
+                }
+            )
+        except Exception:
+            continue
+    return {
+        "saved_at": utcnow_iso(),
+        "image_urls": image_urls or [],
+        "graded_image_urls": graded_image_urls or [],
+        "crop_items": crop_items,
+    }
+
+
 def _load_ai_bundle_meta(bundle_id: str) -> Optional[Dict[str, Any]]:
     if not bundle_id:
         return None
+    db_meta = get_ai_bundle_meta_by_bundle_id(str(bundle_id))
+    if isinstance(db_meta, dict):
+        return db_meta
     base_dir = os.path.join(MEDIA_DIR, "uploads", "ai_bundles", bundle_id)
     meta_path = os.path.join(base_dir, "meta.json")
     if not os.path.exists(meta_path):
@@ -2181,8 +2200,30 @@ def analyze_ai_photos_from_debug(account_id: int, student_id: int, base_id: int)
         logger.info(f"[AI GRADING DEBUG] Extracted UUID: {uuid_info['uuid']} (conf={uuid_info['confidence']:.2f}, consistent={uuid_info['consistent']})")
 
     bundle_id = f"debug_{uuid.uuid4().hex}"
-    if os.environ.get("EL_AI_BUNDLE_SAVE", "1") == "1":
-        _save_ai_bundle(bundle_id, llm_raw or {}, ocr_raw or {}, [], graded_image_urls, items)
+    if uuid_info.get("uuid"):
+        try:
+            save_ai_bundle_raw_to_db(
+                practice_uuid=str(uuid_info["uuid"]),
+                llm_raw=llm_raw or {},
+                ocr_raw=ocr_raw or {},
+                meta={"bundle_id": bundle_id, "mode": "debug"},
+                source_tag="debug",
+                bundle_id=bundle_id,
+            )
+        except Exception as e:
+            logger.warning(f"[AI GRADING DEBUG] Failed to save raw to DB: {e}")
+        try:
+            save_ai_bundle_meta_to_db(
+                practice_uuid=str(uuid_info["uuid"]),
+                bundle_id=bundle_id,
+                meta_payload=_build_ai_bundle_meta_payload(image_urls, graded_image_urls, items),
+                mode="debug",
+                source_tag="debug",
+            )
+        except Exception as e:
+            logger.warning(f"[AI GRADING DEBUG] Failed to save bundle meta to DB: {e}")
+    if os.environ.get("EL_AI_BUNDLE_SAVE", "0") == "1":
+        _save_ai_bundle(bundle_id, llm_raw or {}, ocr_raw or {}, image_urls, graded_image_urls, items)
     return {
         "items": items,
         "image_urls": image_urls,
@@ -2233,17 +2274,23 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
     resolved_session_by_uuid: Optional[Dict[str, Any]] = None
 
     img_bytes_list: List[bytes] = []
+    normalized_exts: List[str] = []
+    original_filenames: List[str] = []
     saved_paths: List[str] = []
     file_student_id = resolved_student_id or 0
+    legacy_save_uploads = os.environ.get("EL_SAVE_AI_UPLOAD_FILES", "0") == "1"
     for idx, upload in enumerate(uploads, start=1):
         raw_bytes = upload.file.read()
         img_bytes, ext = _normalize_upload_image(raw_bytes, upload.filename or "")
-        fname = f"ai_sheet_{file_student_id}_{idx}_{uuid.uuid4().hex}{ext}"
-        out_path = os.path.join(MEDIA_DIR, "uploads", fname)
         img_bytes_list.append(img_bytes)
-        saved_paths.append(out_path)
-        with open(out_path, "wb") as f:
-            f.write(img_bytes)
+        normalized_exts.append(ext)
+        original_filenames.append(upload.filename or f"page_{idx}{ext}")
+        if legacy_save_uploads:
+            fname = f"ai_sheet_{file_student_id}_{idx}_{uuid.uuid4().hex}{ext}"
+            out_path = os.path.join(MEDIA_DIR, "uploads", fname)
+            saved_paths.append(out_path)
+            with open(out_path, "wb") as f:
+                f.write(img_bytes)
 
     # Apply white balance for grading/cropping (LLM/OCR use original)
     logger.info("[AI GRADING] Applying white balance...")
@@ -3079,18 +3126,65 @@ def analyze_ai_photos(account_id: int, student_id: Optional[int], base_id: Optio
     if extracted_date:
         logger.info(f"[AI GRADING] Extracted date from OCR: {extracted_date}")
 
-    if os.environ.get("EL_AI_DEBUG_SAVE", "1") == "1":
+    if os.environ.get("EL_AI_DEBUG_SAVE", "0") == "1":
         _save_debug_bundle(img_bytes_list, llm_raw or {}, ocr_raw or {})
 
-    image_urls = [f"/media/uploads/{os.path.basename(p)}" for p in saved_paths]
     bundle_id = f"ai_{uuid.uuid4().hex}"
-    if os.environ.get("EL_AI_BUNDLE_SAVE", "1") == "1":
+    image_urls: List[str] = []
+    if uuid_info.get("uuid"):
+        practice_uuid = str(uuid_info["uuid"])
+        for idx, img_bytes in enumerate(img_bytes_list, start=1):
+            ext = normalized_exts[idx - 1] if idx - 1 < len(normalized_exts) else ".jpg"
+            mime_type = {
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".png": "image/png",
+                ".webp": "image/webp",
+            }.get(str(ext).lower(), "image/jpeg")
+            try:
+                file_row = save_practice_file(
+                    practice_uuid=practice_uuid,
+                    file_bytes=img_bytes,
+                    mime_type=mime_type,
+                    original_filename=original_filenames[idx - 1] if idx - 1 < len(original_filenames) else f"page_{idx}{ext}",
+                    kind="ai_upload_image",
+                    meta={"bundle_id": bundle_id, "page_index": idx, "source": "ai_grade_photos"},
+                )
+                image_urls.append(build_practice_file_url(str(file_row["file_uuid"])))
+            except Exception as e:
+                logger.warning(f"[AI GRADING] Failed to store upload image in DB: {e}")
+    elif saved_paths:
+        image_urls = [f"/media/uploads/{os.path.basename(p)}" for p in saved_paths]
+
+    if uuid_info.get("uuid"):
+        try:
+            save_ai_bundle_raw_to_db(
+                practice_uuid=str(uuid_info["uuid"]),
+                llm_raw=llm_raw or {},
+                ocr_raw=ocr_raw or {},
+                meta={"bundle_id": bundle_id, "mode": "normal", "image_count": len(image_urls)},
+                source_tag="analyze_ai_photos",
+                bundle_id=bundle_id,
+            )
+        except Exception as e:
+            logger.warning(f"[AI GRADING] Failed to save raw to DB: {e}")
+        try:
+            save_ai_bundle_meta_to_db(
+                practice_uuid=str(uuid_info["uuid"]),
+                bundle_id=bundle_id,
+                meta_payload=_build_ai_bundle_meta_payload(image_urls, graded_image_urls, items),
+                mode="normal",
+                source_tag="analyze_ai_photos",
+            )
+        except Exception as e:
+            logger.warning(f"[AI GRADING] Failed to save bundle meta to DB: {e}")
+    if os.environ.get("EL_AI_BUNDLE_SAVE", "0") == "1":
         _save_ai_bundle(bundle_id, llm_raw or {}, ocr_raw or {}, image_urls, graded_image_urls, items)
     return {
         "items": items,
         "image_urls": image_urls,
         "graded_image_urls": graded_image_urls,
-        "image_count": len(saved_paths),
+        "image_count": len(img_bytes_list),
         "page_order": page_order,
         "matched_session": matched_session,
         "extracted_date": extracted_date,
@@ -3131,6 +3225,8 @@ def confirm_ai_extracted(
     use_items = [it for it in items if bool(it.get("include", True))]
     if not use_items:
         raise ValueError("没有可入库的题目")
+    if not bundle_id:
+        logger.warning("[confirm_ai_extracted] bundle_id missing; AI raw data will not be linked")
 
     # Find canonical session for this worksheet UUID first.
     # Prefer the originally generated worksheet record (non-AI_EXTRACT) when present.
@@ -4665,12 +4761,18 @@ def get_practice_session_detail(session_id: int) -> Dict:
         sub_copy["raw_items"] = []
         sub_copy["bundle_id"] = None
         sub_copy["bundle_meta"] = None
+        sub_copy["image_file_uuid"] = None
         if sub_copy.get("text_raw"):
             try:
                 raw_payload = json.loads(sub_copy["text_raw"])
                 sub_copy["raw_items"] = raw_payload.get("items") or []
                 sub_copy["bundle_id"] = raw_payload.get("bundle_id")
                 sub_copy["bundle_meta"] = raw_payload.get("bundle_meta") or None
+                sub_copy["image_file_uuid"] = raw_payload.get("image_file_uuid")
+                if not sub_copy.get("image_url") and raw_payload.get("image_file_uuid"):
+                    sub_copy["image_url"] = build_practice_file_url(str(raw_payload["image_file_uuid"]))
+                elif not sub_copy.get("image_url") and raw_payload.get("image_url"):
+                    sub_copy["image_url"] = str(raw_payload.get("image_url"))
             except Exception:
                 pass
         if sub_copy.get("bundle_id") and not sub_copy.get("bundle_meta"):
@@ -4681,6 +4783,9 @@ def get_practice_session_detail(session_id: int) -> Dict:
         sub_correct = sum(1 for v in sub_results.values() if v.get("is_correct"))
         sub_copy["summary"] = {"total": sub_total, "correct": sub_correct}
         submissions_payloads.append(sub_copy)
+
+    if submissions_payloads:
+        submission_dict = submissions_payloads[0]
 
     if submission_dict and submission_dict.get("text_raw"):
         try:
@@ -4814,17 +4919,31 @@ def regenerate_practice_pdfs(session_id: int) -> Dict:
 
 def upload_submission_image(session_id: int, upload: UploadFile) -> Dict:
     """拍照上传：MVP 只保存原图，不做自动OCR。"""
-    ensure_media_dir()
-    import uuid
-
-    ext = os.path.splitext(upload.filename or "")[1].lower() or ".jpg"
-    fname = f"submission_{session_id}_{uuid.uuid4().hex}{ext}"
-    out_path = os.path.join(MEDIA_DIR, "uploads", fname)
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-
     content = upload.file.read()
-    with open(out_path, "wb") as f:
-        f.write(content)
+    if not content:
+        raise ValueError("empty upload")
+
+    with db() as conn:
+        sess = conn.execute(
+            "SELECT practice_uuid FROM practice_sessions WHERE id=?",
+            (session_id,),
+        ).fetchone()
+        if not sess:
+            raise ValueError("session not found")
+        practice_uuid = str(sess["practice_uuid"] or "").strip()
+        if not practice_uuid:
+            raise ValueError("practice_uuid is required for upload storage")
+
+    stored = save_practice_file(
+        practice_uuid=practice_uuid,
+        file_bytes=content,
+        mime_type=getattr(upload, "content_type", None),
+        original_filename=upload.filename,
+        kind="upload_image",
+        meta={"source": "submit-image", "session_id": session_id},
+    )
+    file_uuid = str(stored["file_uuid"])
+    payload = {"image_file_uuid": file_uuid, "image_url": build_practice_file_url(file_uuid)}
 
     with db() as conn:
         cur = conn.execute(
@@ -4832,11 +4951,16 @@ def upload_submission_image(session_id: int, upload: UploadFile) -> Dict:
             INSERT INTO submissions(session_id, item_id, position, submitted_at, image_path, text_raw, source)
             VALUES(?,?,?,?,?,?,?)
             """,
-            (session_id, None, None, utcnow_iso(), out_path, None, "PHOTO"),
+            (session_id, None, None, utcnow_iso(), None, json.dumps(payload, ensure_ascii=False), "PHOTO"),
         )
         submission_id = int(cur.lastrowid)
 
-    return {"submission_id": submission_id, "image_path": out_path, "note": "MVP 未自动OCR，请在页面中手工录入答案后批改。"}
+    return {
+        "submission_id": submission_id,
+        "image_url": build_practice_file_url(file_uuid),
+        "file_uuid": file_uuid,
+        "note": "MVP 未自动OCR，请在页面中手工录入答案后批改。",
+    }
 
 def upload_marked_submission_image(
     session_id: int,
@@ -5623,7 +5747,7 @@ def delete_practice_session(session_id: int) -> Dict[str, Any]:
 
     with db() as conn:
         session_row = conn.execute(
-            "SELECT id, pdf_path, answer_pdf_path FROM practice_sessions WHERE id=?",
+            "SELECT id, practice_uuid, pdf_path, answer_pdf_path FROM practice_sessions WHERE id=?",
             (session_id,),
         ).fetchone()
         if not session_row:
@@ -5635,11 +5759,20 @@ def delete_practice_session(session_id: int) -> Dict[str, Any]:
             (session_id,),
         ).fetchall()
         submissions = [dict(r) for r in submissions_rows]
+        practice_uuid = str(session.get("practice_uuid") or "")
+        remaining_same_uuid = 0
+        if practice_uuid:
+            row = conn.execute(
+                "SELECT COUNT(1) AS c FROM practice_sessions WHERE practice_uuid=? AND id<>?",
+                (practice_uuid, session_id),
+            ).fetchone()
+            remaining_same_uuid = int(row["c"] or 0) if row else 0
 
         conn.execute("DELETE FROM practice_sessions WHERE id=?", (session_id,))
 
     removed_files: List[str] = []
     removed_bundles: List[str] = []
+    storage_deleted = {"files_deleted": 0, "artifacts_deleted": 0}
 
     for key in ("pdf_path", "answer_pdf_path"):
         if _safe_remove_file(session.get(key)):
@@ -5683,9 +5816,19 @@ def delete_practice_session(session_id: int) -> Dict[str, Any]:
                 if path and _safe_remove_file(path):
                     removed_files.append(path)
 
+    if remaining_same_uuid <= 0:
+        try:
+            storage_deleted = delete_practice_storage(str(session.get("practice_uuid") or ""))
+        except Exception:
+            storage_deleted = {"files_deleted": 0, "artifacts_deleted": 0}
+
     return {
         "deleted": True,
         "session_id": session_id,
+        "practice_uuid": session.get("practice_uuid"),
+        "storage_retained_for_same_uuid": bool(remaining_same_uuid > 0),
         "removed_files": removed_files,
         "removed_bundles": removed_bundles,
+        "deleted_db_files": storage_deleted.get("files_deleted", 0),
+        "deleted_db_artifacts": storage_deleted.get("artifacts_deleted", 0),
     }

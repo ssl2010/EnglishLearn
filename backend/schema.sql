@@ -171,6 +171,40 @@ CREATE TABLE IF NOT EXISTS practice_results (
     FOREIGN KEY (exercise_item_id) REFERENCES exercise_items(id) ON DELETE CASCADE
 );
 
+-- AI 原始产物（LLM/OCR raw）
+CREATE TABLE IF NOT EXISTS practice_ai_artifacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    practice_uuid TEXT NOT NULL,
+    engine TEXT NOT NULL,
+    stage TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    content_text TEXT,
+    content_json TEXT,
+    meta_json TEXT,
+    source_path TEXT,
+    sha256 TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+-- 练习单文件（上传图片/后续可扩展）
+CREATE TABLE IF NOT EXISTS practice_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    practice_uuid TEXT NOT NULL,
+    file_uuid TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    original_filename TEXT,
+    byte_size INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    width INTEGER,
+    height INTEGER,
+    meta_json TEXT,
+    content_blob BLOB NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS student_item_stats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id INTEGER NOT NULL,
@@ -243,6 +277,10 @@ CREATE INDEX IF NOT EXISTS idx_practice_results_session ON practice_results(sess
 CREATE INDEX IF NOT EXISTS idx_practice_results_submission ON practice_results(submission_id);
 CREATE INDEX IF NOT EXISTS idx_submissions_session ON submissions(session_id);
 CREATE INDEX IF NOT EXISTS idx_submissions_item ON submissions(item_id);
+CREATE INDEX IF NOT EXISTS idx_ai_artifacts_practice ON practice_ai_artifacts(practice_uuid);
+CREATE INDEX IF NOT EXISTS idx_ai_artifacts_lookup ON practice_ai_artifacts(practice_uuid, engine, stage, created_at);
+CREATE INDEX IF NOT EXISTS idx_files_practice ON practice_files(practice_uuid);
+CREATE INDEX IF NOT EXISTS idx_files_sha ON practice_files(sha256);
 
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_account_id ON auth_sessions(account_id);
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at ON auth_sessions(expires_at);

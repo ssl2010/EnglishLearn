@@ -458,7 +458,9 @@
       rows.forEach(row => {
         const tr = document.createElement('tr');
         const created = row.created_at ? row.created_at.slice(0, 19).replace('T', ' ') : '-';
-        const links = `<a href="practice-view.html?session_id=${row.id}" target="_blank">默写单</a>`;
+        const links = row.practice_uuid
+          ? `<a href="practice-view.html?practice_uuid=${encodeURIComponent(row.practice_uuid)}" target="_blank">默写单</a>`
+          : `<a href="practice-view.html?session_id=${row.id}" target="_blank">默写单</a>`;
         tr.innerHTML = `
           <td>${created}</td>
           <td>${row.base_label || '-'}</td>

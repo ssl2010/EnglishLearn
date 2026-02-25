@@ -219,6 +219,9 @@ function renderSessionList(sessions){
     const accuracy = total ? `${correct}/${total}` : '-';
     const dateText = s.created_date_display || s.created_date || (s.created_at ? s.created_at.slice(0,10) : '-');
     const createdTime = formatDateOnly(s.created_time_display || s.created_at || '-');
+    const viewHref = s.practice_uuid
+      ? `practice-view.html?practice_uuid=${encodeURIComponent(s.practice_uuid)}`
+      : `practice-view.html?session_id=${s.id}`;
     tr.innerHTML = `
       <td>${dateText}</td>
       <td>${statusPill(s.status)}</td>
@@ -231,8 +234,8 @@ function renderSessionList(sessions){
       <td>${s.corrected_at ? formatDateOnly(s.corrected_at) : '-'}</td>
       <td class="action-col">
         <div class="action-buttons">
-          <a class="ghost" style="padding:6px 10px;border-radius:8px;border:1px solid #d1d5db;display:inline-block" href="practice-view.html?session_id=${s.id}">查看</a>
-          <button class="ghost danger delete-btn" data-id="${s.id}" style="padding:6px 10px;border-radius:8px">删除</button>
+          <a class="ghost" style="padding:6px 10px;border-radius:8px;border:1px solid #d1d5db;display:inline-block" href="${viewHref}">查看</a>
+          <button class="ghost danger delete-btn" data-id="${s.id}" data-uuid="${s.practice_uuid || ''}" style="padding:6px 10px;border-radius:8px">删除</button>
         </div>
       </td>
     `;
@@ -243,12 +246,16 @@ function renderSessionList(sessions){
     btn.addEventListener('click', async (e)=>{
       e.preventDefault();
       const sessionId = btn.getAttribute('data-id');
+      const practiceUuid = btn.getAttribute('data-uuid');
       if(!sessionId) return;
       const ok = confirm('确认删除该练习单？删除后无法恢复。');
       if(!ok) return;
       btn.disabled = true;
       try{
-        await api(`/api/practice-sessions/${sessionId}`, {method: 'DELETE'});
+        const deleteUrl = practiceUuid
+          ? `/api/practice/${encodeURIComponent(practiceUuid)}`
+          : `/api/practice-sessions/${sessionId}`;
+        await api(deleteUrl, {method: 'DELETE'});
         const data = await searchSessions(currentPage);
         if((data.sessions || []).length === 0 && currentPage > 1){
           await searchSessions(currentPage - 1);
