@@ -2214,6 +2214,10 @@ async def serve_media_file(filepath: str, request: Request):
     if m_crop:
         return await serve_on_demand_crop(m_crop.group(1), int(m_crop.group(2)), request)
 
+    m_batch = re.match(r"^crops/batch/([^/]+)/(\d+)$", filepath or "")
+    if m_batch:
+        return await serve_batch_crops(m_batch.group(1), int(m_batch.group(2)), request)
+
     file_path = os.path.join(MEDIA_DIR, filepath)
 
     if not os.path.exists(file_path):
