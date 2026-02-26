@@ -449,6 +449,12 @@ upgrade_system() {
     fi
   fi
 
+  # 自动修复 Nginx 动态抠图代理路径（如配置存在）
+  if [[ -f "/etc/nginx/sites-enabled/englishlearn" ]]; then
+    log_info "检查并修复 Nginx 配置..."
+    fix_nginx || log_warn "Nginx 配置自动修复失败，请手动执行: $0 fix-nginx"
+  fi
+
   # 重载 nginx（如果存在）
   if [[ -x /usr/sbin/nginx ]]; then
     $SUDO /usr/sbin/nginx -t 2>/dev/null && $SUDO systemctl reload nginx 2>/dev/null || true
@@ -933,6 +939,81 @@ update_nginx_timeout() {
 }
 
 # 修复 nginx 配置
+ensure_nginx_crop_proxy_rules() {
+  local nginx_conf="${1:-/etc/nginx/sites-enabled/englishlearn}"
+  local marker_begin="# BEGIN EnglishLearn dynamic crop proxy"
+
+  if [[ ! -f "$nginx_conf" ]]; then
+    return 1
+  fi
+
+  if grep -qF "$marker_begin" "$nginx_conf" 2>/dev/null; then
+    log_info "Nginx 动态抠图代理规则已存在（marker）"
+    return 0
+  fi
+
+  if grep -Eq 'location[[:space:]]+\^~[[:space:]]+/media/crops/batch/' "$nginx_conf" 2>/dev/null \
+     && grep -Eq 'location[[:space:]]+\^~[[:space:]]+/media/crops/on-demand/' "$nginx_conf" 2>/dev/null; then
+    log_info "Nginx 动态抠图代理规则已存在"
+    return 0
+  fi
+
+  local frag tmp backup ts
+  frag="$(mktemp)"
+  tmp="$(mktemp)"
+  ts="$(date +%Y%m%d_%H%M%S)"
+  backup="${nginx_conf}.bak.${ts}"
+
+  cat > "$frag" <<'EOF'
+    # BEGIN EnglishLearn dynamic crop proxy
+    location ^~ /media/crops/batch/ {
+        proxy_pass http://englishlearn_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    location ^~ /media/crops/on-demand/ {
+        proxy_pass http://englishlearn_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    # END EnglishLearn dynamic crop proxy
+EOF
+
+  if ! awk -v frag="$frag" '
+      BEGIN { inserted = 0 }
+      /location \/media\/[[:space:]]*\{/ && !inserted {
+        while ((getline line < frag) > 0) print line
+        close(frag)
+        inserted = 1
+      }
+      { print }
+      END { if (!inserted) exit 12 }
+    ' "$nginx_conf" > "$tmp"; then
+    rm -f "$frag" "$tmp"
+    log_error "未找到 location /media/ 块，无法自动插入动态抠图代理规则"
+    return 1
+  fi
+
+  $SUDO cp "$nginx_conf" "$backup"
+  $SUDO cp "$tmp" "$nginx_conf"
+  rm -f "$frag" "$tmp"
+  log_success "已插入 Nginx 动态抠图代理规则（备份: $backup）"
+  return 0
+}
+
 fix_nginx() {
   local nginx_conf="/etc/nginx/sites-enabled/englishlearn"
 
@@ -942,6 +1023,9 @@ fix_nginx() {
   fi
 
   log_info "检查 Nginx 配置..."
+
+  # 自动补齐动态抠图代理规则，避免 /media 静态 alias 拦截
+  ensure_nginx_crop_proxy_rules "$nginx_conf" || true
 
   # 检查是否有重复的 proxy_pass
   local dup_count
@@ -954,6 +1038,7 @@ fix_nginx() {
 
   # 测试配置
   if $SUDO /usr/sbin/nginx -t 2>/dev/null; then
+    $SUDO systemctl reload nginx 2>/dev/null || true
     log_success "Nginx 配置测试通过"
   else
     log_error "Nginx 配置测试失败"
