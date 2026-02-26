@@ -229,7 +229,7 @@ function renderSessionList(sessions){
       <td>${s.item_count || '-'}</td>
       <td>${accuracy}</td>
       <td>${s.practice_uuid || '-'}</td>
-      <td>${createdTime}</td>
+      <td>${formatDateOnly(s.created_at || '-')}</td>
       <td>${s.corrected_at ? formatDateOnly(s.corrected_at) : '-'}</td>
       <td class="action-col">
         <div class="action-buttons">
