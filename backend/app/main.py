@@ -5,7 +5,7 @@ import io
 import threading
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request, Form
@@ -2213,7 +2213,6 @@ async def serve_media_file(filepath: str, request: Request):
     m_crop = re.match(r"^crops/on-demand/([^/]+)/(\d+)\.jpg$", filepath or "")
     if m_crop:
         return await serve_on_demand_crop(m_crop.group(1), int(m_crop.group(2)), request)
-
     m_batch = re.match(r"^crops/batch/([^/]+)/(\d+)$", filepath or "")
     if m_batch:
         return await serve_batch_crops(m_batch.group(1), int(m_batch.group(2)), request)
@@ -2261,14 +2260,90 @@ async def serve_media_file(filepath: str, request: Request):
     # For other files, serve normally
     return FileResponse(file_path)
 
+# Crop render option helpers (batch/on-demand)
+def _parse_crop_render_options_from_request(request: Request, default_quality: int = 88) -> Dict[str, Any]:
+    qp = request.query_params
+    preset = str(qp.get("preset") or "full").strip().lower()
+    if preset not in ("thumb", "full"):
+        preset = "full"
+
+    def _int_opt(name: str) -> Optional[int]:
+        raw = qp.get(name)
+        if raw is None or str(raw).strip() == "":
+            return None
+        try:
+            return int(str(raw).strip())
+        except Exception:
+            return None
+
+    max_w = _int_opt("max_w")
+    jpeg_quality = _int_opt("jpeg_quality")
+
+    if preset == "thumb":
+        if not max_w or max_w <= 0:
+            max_w = 160
+        if not jpeg_quality or jpeg_quality <= 0:
+            jpeg_quality = 50
+
+    if max_w is not None:
+        max_w = max(24, min(4096, int(max_w)))
+
+    if jpeg_quality is None or jpeg_quality <= 0:
+        jpeg_quality = int(default_quality)
+    jpeg_quality = max(1, min(95, int(jpeg_quality)))
+
+    positions_set: Optional[set[int]] = None
+    positions_raw = str(qp.get("positions") or "").strip()
+    if positions_raw:
+        parsed: set[int] = set()
+        for part in positions_raw.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                parsed.add(int(part))
+            except Exception:
+                continue
+        if parsed:
+            positions_set = parsed
+
+    return {
+        "preset": preset,
+        "max_w": max_w,
+        "jpeg_quality": jpeg_quality,
+        "positions": positions_set,
+    }
+
+
+def _resize_crop_image_for_output(crop_img, max_w: Optional[int]):
+    if not max_w:
+        return crop_img
+    try:
+        w0, h0 = crop_img.size
+        if w0 <= 0 or h0 <= 0 or w0 <= max_w:
+            return crop_img
+        new_h = max(1, int(round(h0 * (float(max_w) / float(w0)))))
+        from PIL import Image as _PILImage
+        if hasattr(_PILImage, "Resampling"):
+            resample = _PILImage.Resampling.LANCZOS
+        else:
+            resample = _PILImage.LANCZOS
+        return crop_img.resize((int(max_w), new_h), resample)
+    except Exception:
+        return crop_img
+
+
 # Batch crop endpoint: load source image once, return all crops for a page as base64 JSON
 @app.get("/media/crops/batch/{bundle_id}/{page_index}")
 async def serve_batch_crops(bundle_id: str, page_index: int, request: Request):
     from fastapi.responses import JSONResponse
     from PIL import Image, ImageOps
-    import io, base64, json
+    import base64
+    import io
+    import json
 
     account_id = _require_account_id(request)
+    render_opts = _parse_crop_render_options_from_request(request, default_quality=88)
 
     def _load_image_bytes_from_url_local(url: str) -> Optional[bytes]:
         file_uuid = extract_file_uuid_from_url(url)
@@ -2280,11 +2355,15 @@ async def serve_batch_crops(bundle_id: str, page_index: int, request: Request):
                 _assert_practice_uuid_owned(conn, account_id, str(row["practice_uuid"]))
             blob = row.get("content_blob")
             return bytes(blob) if blob is not None else None
-        rel = url[len("/media/"):] if url.startswith("/media/") else None
+        rel = url[len("/media/"):] if isinstance(url, str) and url.startswith("/media/") else None
         if not rel:
             return None
         path = os.path.abspath(os.path.join(MEDIA_DIR, rel))
-        if os.path.commonpath([path, os.path.abspath(MEDIA_DIR)]) != os.path.abspath(MEDIA_DIR):
+        media_root = os.path.abspath(MEDIA_DIR)
+        try:
+            if os.path.commonpath([path, media_root]) != media_root:
+                return None
+        except Exception:
             return None
         if not os.path.exists(path):
             return None
@@ -2292,7 +2371,12 @@ async def serve_batch_crops(bundle_id: str, page_index: int, request: Request):
             return f.read()
 
     from .services import _load_ai_bundle_meta
+
     meta: Dict[str, object] = _load_ai_bundle_meta(bundle_id) or {}
+    if not isinstance(meta, dict):
+        meta = {}
+
+    # Legacy filesystem fallback if DB metadata is unavailable.
     if not meta:
         bundle_dir = os.path.join(MEDIA_DIR, "uploads", "ai_bundles", bundle_id)
         meta_path = os.path.join(bundle_dir, "meta.json")
@@ -2300,11 +2384,11 @@ async def serve_batch_crops(bundle_id: str, page_index: int, request: Request):
             with open(meta_path, "r", encoding="utf-8") as f:
                 meta = json.load(f)
 
-    if not isinstance(meta, dict):
+    if not isinstance(meta, dict) or not meta:
         raise HTTPException(status_code=404, detail="Bundle not found")
 
     image_urls = list(meta.get("image_urls") or [])
-    page_idx0 = max(0, page_index - 1)
+    page_idx0 = max(0, int(page_index) - 1)
     if page_idx0 >= len(image_urls):
         raise HTTPException(status_code=404, detail="Page index out of range")
 
@@ -2315,10 +2399,15 @@ async def serve_batch_crops(bundle_id: str, page_index: int, request: Request):
     img = ImageOps.exif_transpose(Image.open(io.BytesIO(img_bytes))).convert("RGB")
     w, h = img.size
 
-    crop_items = [it for it in (meta.get("crop_items") or [])
-                  if isinstance(it, dict) and int(it.get("page_index") or 1) == page_index]
+    crop_items = [
+        it for it in (meta.get("crop_items") or [])
+        if isinstance(it, dict) and int(it.get("page_index") or 1) == int(page_index)
+    ]
+    only_positions = render_opts.get("positions")
+    if isinstance(only_positions, set):
+        crop_items = [it for it in crop_items if int(it.get("position") or 0) in only_positions]
 
-    results = {}
+    results: Dict[str, str] = {}
     for it in crop_items:
         try:
             left = max(0, min(w, int(it["left"])))
@@ -2327,8 +2416,10 @@ async def serve_batch_crops(bundle_id: str, page_index: int, request: Request):
             bottom = max(0, min(h, int(it["bottom"])))
             if right <= left or bottom <= top:
                 continue
+            crop = img.crop((left, top, right, bottom))
+            crop = _resize_crop_image_for_output(crop, render_opts.get("max_w"))  # type: ignore[arg-type]
             out = io.BytesIO()
-            img.crop((left, top, right, bottom)).save(out, format="JPEG", quality=88)
+            crop.save(out, format="JPEG", quality=int(render_opts.get("jpeg_quality") or 88))
             results[str(it["position"])] = base64.b64encode(out.getvalue()).decode()
         except Exception:
             continue
@@ -2351,6 +2442,7 @@ async def serve_on_demand_crop(bundle_id: str, item_position: int, request: Requ
 
     # Require authentication
     account_id = _require_account_id(request)
+    render_opts = _parse_crop_render_options_from_request(request, default_quality=88)
 
     def _media_url_to_path(url: str) -> Optional[str]:
         if not isinstance(url, str) or not url.startswith("/media/"):
@@ -2385,10 +2477,10 @@ async def serve_on_demand_crop(bundle_id: str, item_position: int, request: Requ
     meta_path = os.path.join(bundle_dir, "meta.json")
 
     try:
-        # Prefer DB-stored meta (always written); fall back to filesystem bundle.
         from .services import _load_ai_bundle_meta
+
         meta: Dict[str, object] = _load_ai_bundle_meta(bundle_id) or {}
-        if not meta and os.path.exists(meta_path):
+        if (not isinstance(meta, dict) or not meta) and os.path.exists(meta_path):
             with open(meta_path, "r", encoding="utf-8") as f:
                 meta = json.load(f)
 
@@ -2528,8 +2620,9 @@ async def serve_on_demand_crop(bundle_id: str, item_position: int, request: Requ
             raise HTTPException(status_code=400, detail="Invalid crop bbox")
 
         crop = img.crop((left, top, right, bottom))
+        crop = _resize_crop_image_for_output(crop, render_opts.get("max_w"))  # type: ignore[arg-type]
         out = io.BytesIO()
-        crop.save(out, format="JPEG", quality=88)
+        crop.save(out, format="JPEG", quality=int(render_opts.get("jpeg_quality") or 88))
         return Response(content=out.getvalue(), media_type="image/jpeg")
     except HTTPException:
         raise
