@@ -166,8 +166,12 @@ function formatDateOnly(s){
   return s.slice(0, 10);
 }
 const {iconYes, iconNo, iconWarn} = ELGrading.getMarkIcons();
-
-ELGrading.initImageModal();
+const pvImageModal = ELGrading.initImageModal();
+window._pvRenderToken = 0;
+window._pvBatchThumbCache = window._pvBatchThumbCache || new Map();
+window._pvFullCropCache = window._pvFullCropCache || new Map();
+window._pvThumbObserver = window._pvThumbObserver || null;
+window._pvThumbGroupMap = window._pvThumbGroupMap || new Map();
 
 function buildPreview(items){
   const itemsGrid = document.getElementById('itemsGrid');
@@ -224,6 +228,12 @@ function buildPreview(items){
 function renderResults(items, resultsByItem, rawItems, bundleMeta, bundleId){
   const itemsBody = document.querySelector('#itemsTable tbody');
   itemsBody.innerHTML = '';
+  const renderToken = ++window._pvRenderToken;
+  if(window._pvThumbObserver){
+    try{ window._pvThumbObserver.disconnect(); }catch(_){}
+    window._pvThumbObserver = null;
+  }
+  window._pvThumbGroupMap = new Map();
   const rawByPos = {};
   (rawItems || []).forEach(it=>{
     if(it && (it.position || it.position === 0)){
@@ -255,19 +265,18 @@ function renderResults(items, resultsByItem, rawItems, bundleMeta, bundleId){
     );
     let imageCell = '';
     const hasRawBbox = !!(raw && (raw.handwriting_bbox || raw.line_bbox));
+    const pageIdx = raw?.page_index || 1;
+    const pageIdx0 = Math.max(0, pageIdx - 1);
+    const pageUrl = gradedUrls[pageIdx0] || gradedUrls[0] || '';
     if(raw && raw.crop_url){
       imageCell = `<img src="${raw.crop_url}" alt="crop" class="img-thumb zoomable" />`;
-    }else if(raw && hasRawBbox){
-      const bbox = raw.handwriting_bbox || raw.line_bbox;
-      const pageIdx = raw.page_index || 1;
-      imageCell = `<img class="img-thumb zoomable pv-crop-thumb" data-page="${pageIdx}" data-bbox="${bbox.join(',')}" src="" alt="crop" />`;
-    }else if(gradedUrls.length){
-      const pageIdx = raw?.page_index || 1;
-      const pageIdx0 = Math.max(0, pageIdx - 1);
-      const pageUrl = gradedUrls[pageIdx0] || gradedUrls[0];
-      if(pageUrl){
-        imageCell = `<a href="#" class="page-link" data-page-url="${pageUrl}" style="color:#0b5fff;text-decoration:none;font-size:13px">查看练习单</a>`;
-      }
+    }else if(raw && hasRawBbox && bundleId){
+      const pos = raw.position ?? it.position ?? '';
+      const fullUrl = `/media/crops/on-demand/${encodeURIComponent(bundleId)}/${encodeURIComponent(pos)}.jpg?preset=full`;
+      const fallbackAttr = pageUrl ? ` data-page-url="${pageUrl}"` : '';
+      imageCell = `<img class="img-thumb pv-crop-thumb" data-bundle="${bundleId}" data-position="${pos}" data-page="${pageIdx}" data-full-url="${fullUrl}"${fallbackAttr} src="" alt="crop" style="cursor:pointer" />`;
+    }else if(gradedUrls.length && pageUrl){
+      imageCell = `<a href="#" class="page-link" data-page-url="${pageUrl}" style="color:#0b5fff;text-decoration:none;font-size:13px">查看练习单</a>`;
     }
     const displayPos = (raw && (raw.q || raw.q === 0)) ? raw.q : (it.position || '-');
     const tr = document.createElement('tr');
@@ -283,54 +292,157 @@ function renderResults(items, resultsByItem, rawItems, bundleMeta, bundleId){
     `;
     itemsBody.appendChild(tr);
   });
-  generatePracticeViewCropThumbs(bundleMeta);
+  generatePracticeViewCropThumbs(bundleMeta, renderToken);
 }
 
-function loadPracticeViewImage(src){
-  return new Promise((resolve, reject)=>{
-    const img = new Image();
-    img.onload = ()=>resolve(img);
-    img.onerror = reject;
-    img.crossOrigin = 'anonymous';
-    img.src = src;
-  });
+function fallbackCropThumbToPageLink(img){
+  if(!img || !img.closest) return;
+  const pageUrl = img.getAttribute('data-page-url') || '';
+  if(!pageUrl) return;
+  const td = img.closest('td');
+  if(!td) return;
+  td.innerHTML = `<a href="#" class="page-link" data-page-url="${pageUrl}" style="color:#0b5fff;text-decoration:none;font-size:13px">查看练习单</a>`;
 }
 
-function generatePracticeViewCropThumbs(bundleMeta){
-  const imageUrls = (bundleMeta && Array.isArray(bundleMeta.image_urls)) ? bundleMeta.image_urls : [];
-  if(!imageUrls.length) return;
-  document.querySelectorAll('#itemsTable .pv-crop-thumb').forEach(async (thumb)=>{
-    const pageIdx = parseInt(thumb.getAttribute('data-page') || '1', 10);
-    const pageIdx0 = Math.max(0, pageIdx - 1);
-    const bboxStr = thumb.getAttribute('data-bbox') || '';
-    const imgUrl = imageUrls[pageIdx0];
-    if(!imgUrl || !bboxStr) return;
-    const bbox = bboxStr.split(',').map(v=>parseFloat(v));
-    if(bbox.length !== 4 || bbox.some(v=>Number.isNaN(v))) return;
-    try{
-      const img = await loadPracticeViewImage(imgUrl);
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if(!ctx) return;
-      const x = bbox[0] * img.width;
-      const y = bbox[1] * img.height;
-      const w = (bbox[2] - bbox[0]) * img.width;
-      const h = (bbox[3] - bbox[1]) * img.height;
-      const padding = 10;
-      const cropX = Math.max(0, x - padding);
-      const cropY = Math.max(0, y - padding);
-      const cropW = Math.min(img.width - cropX, w + padding * 2);
-      const cropH = Math.min(img.height - cropY, h + padding * 2);
-      if(cropW <= 0 || cropH <= 0) return;
-      canvas.width = cropW;
-      canvas.height = cropH;
-      ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-      thumb.src = canvas.toDataURL('image/jpeg', 0.8);
-    }catch(err){
-      console.warn('practice-view crop thumbnail generation failed', err);
+function applyBatchThumbResultToGroup(group, crops, renderToken){
+  if(renderToken !== window._pvRenderToken) return;
+  const cropMap = (crops && typeof crops === 'object') ? crops : {};
+  (group.imgs || []).forEach(img=>{
+    if(!img || !img.isConnected) return;
+    const posKey = String(img.getAttribute('data-position') || '');
+    const b64 = cropMap[posKey];
+    if(b64){
+      img.src = 'data:image/jpeg;base64,' + b64;
+    }else{
+      fallbackCropThumbToPageLink(img);
     }
   });
 }
+
+async function fetchBatchThumbGroup(group, renderToken){
+  if(!group || group.loaded || group.loading) return;
+  const cacheKey = `${group.bundle}:${group.page}:thumb`;
+  if(window._pvBatchThumbCache.has(cacheKey)){
+    group.loaded = true;
+    applyBatchThumbResultToGroup(group, window._pvBatchThumbCache.get(cacheKey), renderToken);
+    return;
+  }
+
+  group.loading = true;
+  const positions = Array.from(new Set((group.imgs || []).map(img => Number(img.getAttribute('data-position'))).filter(n => Number.isFinite(n))));
+  const qs = new URLSearchParams({ preset: 'thumb' });
+  if(positions.length) qs.set('positions', positions.join(','));
+
+  try{
+    const res = await fetch(`/media/crops/batch/${encodeURIComponent(group.bundle)}/${encodeURIComponent(group.page)}?${qs.toString()}`, {credentials: 'include'});
+    if(!res.ok){
+      console.warn('batch crop thumb request failed', group.bundle, group.page, res.status);
+      (group.imgs || []).forEach(fallbackCropThumbToPageLink);
+      return;
+    }
+    const data = await res.json();
+    const crops = (data && data.crops && typeof data.crops === 'object') ? data.crops : {};
+    window._pvBatchThumbCache.set(cacheKey, crops);
+    group.loaded = true;
+    applyBatchThumbResultToGroup(group, crops, renderToken);
+  }catch(err){
+    console.warn('batch crop thumb request error', group.bundle, group.page, err);
+    (group.imgs || []).forEach(fallbackCropThumbToPageLink);
+  }finally{
+    group.loading = false;
+  }
+}
+
+function generatePracticeViewCropThumbs(bundleMeta, renderToken){
+  const thumbs = Array.from(document.querySelectorAll('#itemsTable .pv-crop-thumb[src=""]'));
+  if(!thumbs.length) return;
+
+  const groups = new Map();
+  thumbs.forEach(img => {
+    const bundle = img.getAttribute('data-bundle') || '';
+    const page = parseInt(img.getAttribute('data-page') || '1', 10);
+    if(!bundle || !Number.isFinite(page) || page <= 0){
+      fallbackCropThumbToPageLink(img);
+      return;
+    }
+    const key = `${bundle}__${page}`;
+    if(!groups.has(key)){
+      groups.set(key, { key, bundle, page, imgs: [], loading: false, loaded: false, requested: false });
+    }
+    groups.get(key).imgs.push(img);
+    img.setAttribute('data-group-key', key);
+  });
+
+  window._pvThumbGroupMap = groups;
+  if(!groups.size) return;
+
+  // Lazy trigger: fetch a page batch when its first visible thumb enters viewport.
+  if('IntersectionObserver' in window){
+    const observer = new IntersectionObserver((entries)=>{
+      entries.forEach(entry=>{
+        if(!entry.isIntersecting) return;
+        const img = entry.target;
+        const key = img.getAttribute('data-group-key') || '';
+        const group = window._pvThumbGroupMap.get(key);
+        if(group && !group.requested){
+          group.requested = true;
+          fetchBatchThumbGroup(group, renderToken);
+        }
+        observer.unobserve(img);
+      });
+    }, { root: null, rootMargin: '80px 0px', threshold: 0.01 });
+    window._pvThumbObserver = observer;
+    thumbs.forEach(img => {
+      if(img.isConnected) observer.observe(img);
+    });
+  }else{
+    groups.forEach(group => {
+      group.requested = true;
+      fetchBatchThumbGroup(group, renderToken);
+    });
+  }
+}
+
+async function openFullCropPreview(img, evt){
+  const fullUrl = img.getAttribute('data-full-url') || '';
+  if(!fullUrl || !pvImageModal || typeof pvImageModal.openImage !== 'function'){
+    return;
+  }
+  const cacheKey = `${img.getAttribute('data-bundle') || ''}:${img.getAttribute('data-position') || ''}:full`;
+  let previewSrc = window._pvFullCropCache.get(cacheKey);
+  if(!previewSrc){
+    try{
+      img.style.opacity = '0.7';
+      const res = await fetch(fullUrl, {credentials: 'include'});
+      if(!res.ok){
+        console.warn('full crop request failed', fullUrl, res.status);
+        fallbackCropThumbToPageLink(img);
+        return;
+      }
+      const blob = await res.blob();
+      previewSrc = URL.createObjectURL(blob);
+      window._pvFullCropCache.set(cacheKey, previewSrc);
+    }catch(err){
+      console.warn('full crop request error', fullUrl, err);
+      const pageUrl = img.getAttribute('data-page-url') || '';
+      if(pageUrl){
+        pvImageModal.openImage(pageUrl, evt);
+      }
+      return;
+    }finally{
+      img.style.opacity = '';
+    }
+  }
+  pvImageModal.openImage(previewSrc, evt);
+}
+
+document.getElementById('itemsTable').addEventListener('click', (e)=>{
+  const img = e.target && e.target.closest ? e.target.closest('img.pv-crop-thumb') : null;
+  if(!img) return;
+  e.preventDefault();
+  e.stopPropagation();
+  openFullCropPreview(img, e);
+}, true);
 
 function renderGradedImages(bundleMeta){
   const gradedSection = document.getElementById('gradedSection');
