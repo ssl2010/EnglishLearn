@@ -482,8 +482,8 @@ async function uploadPhoto(){
     if (it.crop_url) {
       cropThumb = `<img src="${it.crop_url}" alt="crop" class="zoomable" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
     } else if (window._analysisBundleId && (it.position || it.position === 0) && (it.handwriting_bbox || it.line_bbox)) {
-      // Prefer server-side on-demand crop (handles EXIF rotation correctly, same as practice-view).
-      cropThumb = `<img src="/media/crops/on-demand/${encodeURIComponent(window._analysisBundleId)}/${encodeURIComponent(it.position)}.jpg" alt="crop" class="zoomable" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
+      const pageIdx = it.page_index || 1;
+      cropThumb = `<img class="batch-crop-thumb" data-bundle="${encodeURIComponent(window._analysisBundleId)}" data-position="${it.position}" data-page="${pageIdx}" src="" alt="crop" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
     } else if (it.handwriting_bbox || it.line_bbox) {
       // Fallback: client-side crop when no bundle_id available.
       const bbox = it.handwriting_bbox || it.line_bbox;
@@ -533,6 +533,7 @@ async function uploadPhoto(){
 
   // Generate crop thumbnails from original images
   generateCropThumbnails();
+  loadBatchCropThumbs();
 
   document.querySelectorAll('.markBtn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -605,6 +606,30 @@ function generateCropThumbnails(){
       console.error('Failed to generate crop thumbnail:', err);
     }
   });
+}
+
+async function loadBatchCropThumbs(container) {
+  const thumbs = (container || document).querySelectorAll('.batch-crop-thumb[src=""]');
+  if (!thumbs.length) return;
+  // Group by bundle+page
+  const groups = {};
+  thumbs.forEach(img => {
+    const key = `${img.dataset.bundle}__${img.dataset.page}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(img);
+  });
+  await Promise.all(Object.entries(groups).map(async ([key, imgs]) => {
+    const [bundle, page] = key.split('__');
+    try {
+      const res = await fetch(`/media/crops/batch/${bundle}/${page}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      imgs.forEach(img => {
+        const b64 = data.crops && data.crops[String(img.dataset.position)];
+        if (b64) img.src = 'data:image/jpeg;base64,' + b64;
+      });
+    } catch(e) { console.warn('batch crop failed', e); }
+  }));
 }
 
 function loadImage(source) {
@@ -919,8 +944,8 @@ document.getElementById('debugBtn').addEventListener('click', async ()=>{
       if (it.crop_url) {
         cropThumb = `<img src="${it.crop_url}" alt="crop" class="zoomable" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
       } else if (window._analysisBundleId && (it.position || it.position === 0) && (it.handwriting_bbox || it.line_bbox)) {
-        // Prefer server-side on-demand crop (handles EXIF rotation correctly, same as practice-view).
-        cropThumb = `<img src="/media/crops/on-demand/${encodeURIComponent(window._analysisBundleId)}/${encodeURIComponent(it.position)}.jpg" alt="crop" class="zoomable" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
+        const pageIdx2 = it.page_index || 1;
+        cropThumb = `<img class="batch-crop-thumb" data-bundle="${encodeURIComponent(window._analysisBundleId)}" data-position="${it.position}" data-page="${pageIdx2}" src="" alt="crop" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;cursor:pointer" />`;
       } else if (it.handwriting_bbox || it.line_bbox) {
         // Fallback: client-side crop when no bundle_id available.
         const bbox = it.handwriting_bbox || it.line_bbox;
@@ -967,6 +992,7 @@ document.getElementById('debugBtn').addEventListener('click', async ()=>{
     box.innerHTML = html;
     box.style.display='block';
     confirmBtn.style.display='inline-block';
+    loadBatchCropThumbs(box);
 
     // Add event handlers
     document.querySelectorAll('.markBtn').forEach(btn=>{

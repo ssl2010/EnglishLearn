@@ -4483,7 +4483,7 @@ def search_practice_sessions(
     """ + base_sql + """
         ORDER BY
             CASE WHEN ps.status != 'CORRECTED' THEN 0 ELSE 1 END,
-            COALESCE(ps.created_date, substr(ps.created_at, 1, 10)) DESC,
+            ps.created_at DESC,
             ps.corrected_at DESC,
             ps.id DESC
         LIMIT ? OFFSET ?

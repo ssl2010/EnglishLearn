@@ -69,7 +69,7 @@
       <table id="sessionTable">
         <thead>
           <tr>
-            <th>日期</th>
+            <th>#</th>
             <th>状态</th>
             <th>资料库</th>
             <th>要求项</th>
@@ -213,18 +213,16 @@ async function searchSessions(page){
 function renderSessionList(sessions){
   const tbody = document.querySelector('#sessionTable tbody');
   tbody.innerHTML = '';
-  sessions.forEach(s=>{
+  sessions.forEach((s, idx)=>{
     const tr = document.createElement('tr');
     const total = s.result_count || 0;
     const correct = s.correct_count || 0;
     const accuracy = total ? `${correct}/${total}` : '-';
-    const dateText = s.created_date_display || s.created_date || (s.created_at ? s.created_at.slice(0,10) : '-');
-    const createdTime = formatDateOnly(s.created_time_display || s.created_at || '-');
     const viewHref = s.practice_uuid
       ? `practice-view.html?practice_uuid=${encodeURIComponent(s.practice_uuid)}`
       : `practice-view.html?session_id=${s.id}`;
     tr.innerHTML = `
-      <td>${dateText}</td>
+      <td>${idx + 1}</td>
       <td>${statusPill(s.status)}</td>
       <td>${s.base_display || s.base_name || s.base_id || '-'}</td>
       <td>${formatRequirement(s.difficulty_filter)}</td>

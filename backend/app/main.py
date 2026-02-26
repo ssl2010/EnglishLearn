@@ -2257,6 +2257,81 @@ async def serve_media_file(filepath: str, request: Request):
     # For other files, serve normally
     return FileResponse(file_path)
 
+# Batch crop endpoint: load source image once, return all crops for a page as base64 JSON
+@app.get("/media/crops/batch/{bundle_id}/{page_index}")
+async def serve_batch_crops(bundle_id: str, page_index: int, request: Request):
+    from fastapi.responses import JSONResponse
+    from PIL import Image, ImageOps
+    import io, base64, json
+
+    account_id = _require_account_id(request)
+
+    def _load_image_bytes_from_url_local(url: str) -> Optional[bytes]:
+        file_uuid = extract_file_uuid_from_url(url)
+        if file_uuid:
+            row = get_practice_file_by_uuid(file_uuid)
+            if not row:
+                return None
+            with db() as conn:
+                _assert_practice_uuid_owned(conn, account_id, str(row["practice_uuid"]))
+            blob = row.get("content_blob")
+            return bytes(blob) if blob is not None else None
+        rel = url[len("/media/"):] if url.startswith("/media/") else None
+        if not rel:
+            return None
+        path = os.path.abspath(os.path.join(MEDIA_DIR, rel))
+        if os.path.commonpath([path, os.path.abspath(MEDIA_DIR)]) != os.path.abspath(MEDIA_DIR):
+            return None
+        if not os.path.exists(path):
+            return None
+        with open(path, "rb") as f:
+            return f.read()
+
+    from .services import _load_ai_bundle_meta
+    meta: Dict[str, object] = _load_ai_bundle_meta(bundle_id) or {}
+    if not meta:
+        bundle_dir = os.path.join(MEDIA_DIR, "uploads", "ai_bundles", bundle_id)
+        meta_path = os.path.join(bundle_dir, "meta.json")
+        if os.path.exists(meta_path):
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+
+    if not isinstance(meta, dict):
+        raise HTTPException(status_code=404, detail="Bundle not found")
+
+    image_urls = list(meta.get("image_urls") or [])
+    page_idx0 = max(0, page_index - 1)
+    if page_idx0 >= len(image_urls):
+        raise HTTPException(status_code=404, detail="Page index out of range")
+
+    img_bytes = _load_image_bytes_from_url_local(image_urls[page_idx0])
+    if not img_bytes:
+        raise HTTPException(status_code=404, detail="Source image not found")
+
+    img = ImageOps.exif_transpose(Image.open(io.BytesIO(img_bytes))).convert("RGB")
+    w, h = img.size
+
+    crop_items = [it for it in (meta.get("crop_items") or [])
+                  if isinstance(it, dict) and int(it.get("page_index") or 1) == page_index]
+
+    results = {}
+    for it in crop_items:
+        try:
+            left = max(0, min(w, int(it["left"])))
+            top = max(0, min(h, int(it["top"])))
+            right = max(0, min(w, int(it["right"])))
+            bottom = max(0, min(h, int(it["bottom"])))
+            if right <= left or bottom <= top:
+                continue
+            out = io.BytesIO()
+            img.crop((left, top, right, bottom)).save(out, format="JPEG", quality=88)
+            results[str(it["position"])] = base64.b64encode(out.getvalue()).decode()
+        except Exception:
+            continue
+
+    return JSONResponse({"crops": results})
+
+
 # On-demand crop generation endpoint
 @app.get("/media/crops/on-demand/{bundle_id}/{item_position}.jpg")
 async def serve_on_demand_crop(bundle_id: str, item_position: int, request: Request):
