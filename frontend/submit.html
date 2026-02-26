@@ -621,7 +621,7 @@ async function loadBatchCropThumbs(container) {
   await Promise.all(Object.entries(groups).map(async ([key, imgs]) => {
     const [bundle, page] = key.split('__');
     try {
-      const res = await fetch(`/media/crops/batch/${bundle}/${page}`);
+      const res = await fetch(`/media/crops/batch/${bundle}/${page}`, {credentials: 'include'});
       if (!res.ok) return;
       const data = await res.json();
       imgs.forEach(img => {

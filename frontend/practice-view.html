@@ -298,7 +298,7 @@ function generatePracticeViewCropThumbs(bundleMeta){
     const [bundle, page] = key.split('__');
     if(!bundle || bundle === 'undefined') return;
     try {
-      const res = await fetch(`/media/crops/batch/${bundle}/${page}`);
+      const res = await fetch(`/media/crops/batch/${bundle}/${page}`, {credentials: 'include'});
       if(!res.ok) return;
       const data = await res.json();
       imgs.forEach(img => {
