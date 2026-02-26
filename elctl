@@ -963,11 +963,12 @@ ensure_nginx_crop_proxy_rules() {
     return 0
   fi
 
-  local frag tmp backup ts
+  local frag tmp backup ts backup_dir
   frag="$(mktemp)"
   tmp="$(mktemp)"
   ts="$(date +%Y%m%d_%H%M%S)"
-  backup="${nginx_conf}.bak.${ts}"
+  backup_dir="/etc/nginx/backup"
+  backup="${backup_dir}/$(basename "$nginx_conf").bak.${ts}"
 
   cat > "$frag" <<'EOF'
     # BEGIN EnglishLearn dynamic crop proxy
@@ -1012,6 +1013,7 @@ EOF
     return 1
   fi
 
+  $SUDO mkdir -p "$backup_dir"
   $SUDO cp "$nginx_conf" "$backup"
   $SUDO cp "$tmp" "$nginx_conf"
   rm -f "$frag" "$tmp"
