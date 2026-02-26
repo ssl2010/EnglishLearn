@@ -170,6 +170,7 @@ const pvImageModal = ELGrading.initImageModal();
 window._pvRenderToken = 0;
 window._pvBatchThumbCache = window._pvBatchThumbCache || new Map();
 window._pvFullCropCache = window._pvFullCropCache || new Map();
+window._pvSourceImageCache = window._pvSourceImageCache || new Map();
 window._pvThumbObserver = window._pvThumbObserver || null;
 window._pvThumbGroupMap = window._pvThumbGroupMap || new Map();
 
@@ -241,6 +242,7 @@ function renderResults(items, resultsByItem, rawItems, bundleMeta, bundleId){
     }
   });
   const gradedUrls = (bundleMeta && bundleMeta.graded_image_urls) ? bundleMeta.graded_image_urls : [];
+  const sourceUrls = (bundleMeta && bundleMeta.image_urls) ? bundleMeta.image_urls : [];
   (items || []).forEach(it=>{
     const result = resultsByItem[String(it.id)] || resultsByItem[it.id] || null;
     const isCorrect = result ? (result.is_correct === 1 || result.is_correct === true) : null;
@@ -272,9 +274,15 @@ function renderResults(items, resultsByItem, rawItems, bundleMeta, bundleId){
       imageCell = `<img src="${raw.crop_url}" alt="crop" class="img-thumb zoomable" />`;
     }else if(raw && hasRawBbox && bundleId){
       const pos = raw.position ?? it.position ?? '';
+      const bbox = raw.handwriting_bbox || raw.line_bbox || null;
+      const bboxAttr = (Array.isArray(bbox) && bbox.length === 4)
+        ? ` data-bbox="${bbox.join(',')}"`
+        : '';
+      const sourceUrl = sourceUrls[pageIdx0] || sourceUrls[0] || '';
+      const sourceAttr = sourceUrl ? ` data-source-url="${sourceUrl}"` : '';
       const fullUrl = `/media/crops/on-demand/${encodeURIComponent(bundleId)}/${encodeURIComponent(pos)}.jpg?preset=full`;
       const fallbackAttr = pageUrl ? ` data-page-url="${pageUrl}"` : '';
-      imageCell = `<img class="img-thumb pv-crop-thumb" data-bundle="${bundleId}" data-position="${pos}" data-page="${pageIdx}" data-full-url="${fullUrl}"${fallbackAttr} src="" alt="crop" style="cursor:pointer" />`;
+      imageCell = `<img class="img-thumb pv-crop-thumb" data-bundle="${bundleId}" data-position="${pos}" data-page="${pageIdx}" data-full-url="${fullUrl}"${fallbackAttr}${bboxAttr}${sourceAttr} src="" alt="crop" style="cursor:pointer" />`;
     }else if(gradedUrls.length && pageUrl){
       imageCell = `<a href="#" class="page-link" data-page-url="${pageUrl}" style="color:#0b5fff;text-decoration:none;font-size:13px">查看练习单</a>`;
     }
@@ -304,19 +312,83 @@ function fallbackCropThumbToPageLink(img){
   td.innerHTML = `<a href="#" class="page-link" data-page-url="${pageUrl}" style="color:#0b5fff;text-decoration:none;font-size:13px">查看练习单</a>`;
 }
 
-function applyBatchThumbResultToGroup(group, crops, renderToken){
+function loadPracticeViewImage(url){
+  if(!url) return Promise.reject(new Error('missing image url'));
+  if(window._pvSourceImageCache.has(url)){
+    return window._pvSourceImageCache.get(url);
+  }
+  const p = new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=> resolve(img);
+    img.onerror = (e)=> reject(e || new Error('image load failed'));
+    img.crossOrigin = 'anonymous';
+    img.src = url;
+  }).catch((err)=>{
+    window._pvSourceImageCache.delete(url);
+    throw err;
+  });
+  window._pvSourceImageCache.set(url, p);
+  return p;
+}
+
+async function tryClientCropThumbFallback(img, renderToken){
+  if(!img || !img.isConnected) return false;
+  if(renderToken !== window._pvRenderToken) return false;
+  if(img.getAttribute('src')) return true;
+
+  const bboxStr = img.getAttribute('data-bbox') || '';
+  const sourceUrl = img.getAttribute('data-source-url') || '';
+  if(!bboxStr || !sourceUrl) return false;
+
+  const bbox = bboxStr.split(',').map(v => parseFloat(v));
+  if(bbox.length !== 4 || bbox.some(v => !Number.isFinite(v))) return false;
+
+  try{
+    const srcImg = await loadPracticeViewImage(sourceUrl);
+    if(renderToken !== window._pvRenderToken) return false;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if(!ctx) return false;
+
+    const x = bbox[0] * srcImg.width;
+    const y = bbox[1] * srcImg.height;
+    const w = (bbox[2] - bbox[0]) * srcImg.width;
+    const h = (bbox[3] - bbox[1]) * srcImg.height;
+    if(!(w > 0 && h > 0)) return false;
+
+    const padding = 10;
+    const cropX = Math.max(0, x - padding);
+    const cropY = Math.max(0, y - padding);
+    const cropW = Math.min(srcImg.width - cropX, w + padding * 2);
+    const cropH = Math.min(srcImg.height - cropY, h + padding * 2);
+    if(!(cropW > 0 && cropH > 0)) return false;
+
+    canvas.width = Math.max(1, Math.round(cropW));
+    canvas.height = Math.max(1, Math.round(cropH));
+    ctx.drawImage(srcImg, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+    img.src = canvas.toDataURL('image/jpeg', 0.75);
+    return true;
+  }catch(err){
+    console.warn('client crop fallback failed', err);
+    return false;
+  }
+}
+
+async function applyBatchThumbResultToGroup(group, crops, renderToken){
   if(renderToken !== window._pvRenderToken) return;
   const cropMap = (crops && typeof crops === 'object') ? crops : {};
-  (group.imgs || []).forEach(img=>{
-    if(!img || !img.isConnected) return;
+  for(const img of (group.imgs || [])){
+    if(!img || !img.isConnected) continue;
+    if(renderToken !== window._pvRenderToken) return;
     const posKey = String(img.getAttribute('data-position') || '');
     const b64 = cropMap[posKey];
     if(b64){
       img.src = 'data:image/jpeg;base64,' + b64;
     }else{
-      fallbackCropThumbToPageLink(img);
+      const ok = await tryClientCropThumbFallback(img, renderToken);
+      if(!ok) fallbackCropThumbToPageLink(img);
     }
-  });
+  }
 }
 
 async function fetchBatchThumbGroup(group, renderToken){
@@ -324,7 +396,7 @@ async function fetchBatchThumbGroup(group, renderToken){
   const cacheKey = `${group.bundle}:${group.page}:thumb`;
   if(window._pvBatchThumbCache.has(cacheKey)){
     group.loaded = true;
-    applyBatchThumbResultToGroup(group, window._pvBatchThumbCache.get(cacheKey), renderToken);
+    await applyBatchThumbResultToGroup(group, window._pvBatchThumbCache.get(cacheKey), renderToken);
     return;
   }
 
@@ -337,17 +409,23 @@ async function fetchBatchThumbGroup(group, renderToken){
     const res = await fetch(`/media/crops/batch/${encodeURIComponent(group.bundle)}/${encodeURIComponent(group.page)}?${qs.toString()}`, {credentials: 'include'});
     if(!res.ok){
       console.warn('batch crop thumb request failed', group.bundle, group.page, res.status);
-      (group.imgs || []).forEach(fallbackCropThumbToPageLink);
+      for(const img of (group.imgs || [])){
+        const ok = await tryClientCropThumbFallback(img, renderToken);
+        if(!ok) fallbackCropThumbToPageLink(img);
+      }
       return;
     }
     const data = await res.json();
     const crops = (data && data.crops && typeof data.crops === 'object') ? data.crops : {};
     window._pvBatchThumbCache.set(cacheKey, crops);
     group.loaded = true;
-    applyBatchThumbResultToGroup(group, crops, renderToken);
+    await applyBatchThumbResultToGroup(group, crops, renderToken);
   }catch(err){
     console.warn('batch crop thumb request error', group.bundle, group.page, err);
-    (group.imgs || []).forEach(fallbackCropThumbToPageLink);
+    for(const img of (group.imgs || [])){
+      const ok = await tryClientCropThumbFallback(img, renderToken);
+      if(!ok) fallbackCropThumbToPageLink(img);
+    }
   }finally{
     group.loading = false;
   }
